@@ -1,0 +1,917 @@
+"""
+Admin Dashboard API — Full control over users, payments, monitoring, settings.
+"""
+
+from datetime import datetime, timedelta, timezone
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from sqlalchemy import select, func, and_, update, text
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from app.database import get_db
+from app.models import (
+    User, Plan, Subscription, Branch, Payment, CheckResult,
+    NotificationLog, ServiceAccount, SystemSetting, ActivityLog,
+    UserBranchMonitor,
+    PlanType, SubscriptionStatus, PaymentStatus, ServiceType,
+    NotificationLogStatus,
+)
+from app.auth import get_current_admin, decode_token
+from app.config import settings
+from app.schemas import (
+    DashboardStats, PaymentPublic, PaymentApproveRequest,
+    PaymentRejectRequest, PlanUpdate, ServiceAccountCreate,
+    ServiceAccountPublic, AdminUserUpdate, SystemSettingUpdate,
+    MessageResponse,
+)
+from app.websocket import ws_manager
+
+router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+# ── Dashboard Stats ──────────────────────────────────────────────────
+
+@router.get("/dashboard", response_model=DashboardStats)
+async def dashboard_stats(
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    total_users = (await db.execute(select(func.count(User.id)))).scalar() or 0
+    active_subs = (await db.execute(
+        select(func.count(Subscription.id))
+        .where(Subscription.status == SubscriptionStatus.ACTIVE)
+    )).scalar() or 0
+    pending_payments = (await db.execute(
+        select(func.count(Payment.id))
+        .where(Payment.status == PaymentStatus.PENDING)
+    )).scalar() or 0
+    total_revenue = (await db.execute(
+        select(func.coalesce(func.sum(Payment.amount), 0))
+        .where(Payment.status == PaymentStatus.APPROVED)
+    )).scalar() or 0
+    checks_today = (await db.execute(
+        select(func.count(CheckResult.id))
+        .where(CheckResult.checked_at >= today)
+    )).scalar() or 0
+    slots_found = (await db.execute(
+        select(func.count(CheckResult.id))
+        .where(CheckResult.checked_at >= today, CheckResult.slots_available == True)
+    )).scalar() or 0
+    active_branches = (await db.execute(
+        select(func.count(Branch.id)).where(Branch.is_active == True)
+    )).scalar() or 0
+    notifs_today = (await db.execute(
+        select(func.count(NotificationLog.id))
+        .where(NotificationLog.sent_at >= today)
+    )).scalar() or 0
+
+    return DashboardStats(
+        total_users=total_users,
+        active_subscriptions=active_subs,
+        pending_payments=pending_payments,
+        total_revenue=total_revenue,
+        checks_today=checks_today,
+        slots_found_today=slots_found,
+        active_branches=active_branches,
+        notifications_sent_today=notifs_today,
+    )
+
+
+# ── User Management ─────────────────────────────────────────────────
+
+@router.get("/users")
+async def list_users(
+    page: int = 1,
+    per_page: int = 20,
+    search: str = "",
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    query = (
+        select(User)
+        .options(
+            selectinload(User.subscriptions).selectinload(Subscription.plan),
+            selectinload(User.branch_monitors),
+        )
+        .order_by(User.created_at.desc())
+    )
+    if search:
+        query = query.where(
+            User.email.ilike(f"%{search}%") | User.full_name.ilike(f"%{search}%")
+        )
+
+    # Count total
+    count_query = select(func.count(User.id))
+    if search:
+        count_query = count_query.where(
+            User.email.ilike(f"%{search}%") | User.full_name.ilike(f"%{search}%")
+        )
+    total = (await db.execute(count_query)).scalar() or 0
+
+    # Paginate
+    result = await db.execute(
+        query.offset((page - 1) * per_page).limit(per_page)
+    )
+    users = result.scalars().all()
+
+    items = []
+    for u in users:
+        # Find best subscription: prefer ACTIVE, then PENDING_PAYMENT
+        active_sub = None
+        pending_sub = None
+        for s in (u.subscriptions or []):
+            if s.status == SubscriptionStatus.ACTIVE:
+                active_sub = s
+            elif s.status == SubscriptionStatus.PENDING_PAYMENT:
+                pending_sub = s
+
+        sub = active_sub or pending_sub
+        if active_sub:
+            sub_status = "active"
+        elif pending_sub:
+            sub_status = "pending_payment"
+        else:
+            sub_status = "none"
+
+        items.append({
+            "id": u.id,
+            "email": u.email,
+            "full_name": u.full_name,
+            "phone": u.phone,
+            "is_active": u.is_active,
+            "is_admin": u.is_admin,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+            "last_login": u.last_login.isoformat() if u.last_login else None,
+            "subscription_status": sub_status,
+            "plan_name": sub.plan.display_name if sub and sub.plan else None,
+            "subscription_expires": active_sub.expires_at.isoformat() if active_sub and active_sub.expires_at else None,
+            "monitored_branches": len([m for m in (u.branch_monitors or []) if m.is_active]),
+        })
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": (total + per_page - 1) // per_page,
+    }
+
+
+@router.patch("/users/{user_id}", response_model=MessageResponse)
+async def update_user(
+    user_id: int,
+    body: AdminUserUpdate,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    if body.is_active is not None:
+        user.is_active = body.is_active
+        # When deactivating, cancel all active subscriptions and disable branch monitors
+        if not body.is_active:
+            await db.execute(
+                text(
+                    "UPDATE subscriptions SET status = 'cancelled' "
+                    "WHERE user_id = :uid AND status IN ('active', 'pending_payment')"
+                ),
+                {"uid": user_id},
+            )
+            await db.execute(
+                text("UPDATE user_branch_monitors SET is_active = 0 WHERE user_id = :uid"),
+                {"uid": user_id},
+            )
+    if body.is_admin is not None:
+        user.is_admin = body.is_admin
+
+    db.add(ActivityLog(
+        actor_id=admin.id,
+        action="user_updated",
+        details={"user_id": user_id, "changes": body.model_dump(exclude_none=True)},
+    ))
+    await db.commit()
+    return MessageResponse(message=f"User {user.email} updated")
+
+
+@router.delete("/users/{user_id}", response_model=MessageResponse)
+async def delete_user(
+    user_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.is_admin:
+        raise HTTPException(400, "Cannot delete an admin account")
+    email = user.email
+    # Delete all child records explicitly before deleting the user
+    # to avoid FK / NOT NULL constraint errors from ORM nullification
+    await db.execute(text("DELETE FROM notification_logs WHERE user_id = :uid"), {"uid": user_id})
+    await db.execute(text("DELETE FROM user_branch_monitors WHERE user_id = :uid"), {"uid": user_id})
+    await db.execute(text("DELETE FROM payments WHERE user_id = :uid"), {"uid": user_id})
+    await db.execute(text("DELETE FROM subscriptions WHERE user_id = :uid"), {"uid": user_id})
+    await db.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})
+    db.add(ActivityLog(
+        actor_id=admin.id,
+        action="user_deleted",
+        details={"user_id": user_id, "email": email},
+    ))
+    await db.commit()
+    return MessageResponse(message=f"User {email} deleted")
+
+
+@router.post("/users/{user_id}/assign-branch/{branch_id}", response_model=MessageResponse)
+async def assign_branch_to_user(
+    user_id: int,
+    branch_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually assign a branch monitor to a user (for existing subscribers)."""
+    existing = await db.execute(
+        select(UserBranchMonitor).where(
+            UserBranchMonitor.user_id == user_id,
+            UserBranchMonitor.branch_id == branch_id,
+        )
+    )
+    monitor = existing.scalar_one_or_none()
+    if monitor:
+        monitor.is_active = True
+    else:
+        db.add(UserBranchMonitor(user_id=user_id, branch_id=branch_id, is_active=True))
+    await db.commit()
+    return MessageResponse(message="Branch assigned to user")
+
+
+# ── Payment Management ───────────────────────────────────────────────
+
+@router.get("/payments")
+async def list_payments(
+    page: int = 1,
+    per_page: int = 20,
+    status: str = "",
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    query = (
+        select(Payment, User)
+        .join(User, Payment.user_id == User.id)
+        .order_by(Payment.created_at.desc())
+    )
+    if status:
+        query = query.where(Payment.status == status)
+
+    count_q = select(func.count(Payment.id))
+    if status:
+        count_q = count_q.where(Payment.status == status)
+    total = (await db.execute(count_q)).scalar() or 0
+
+    result = await db.execute(query.offset((page - 1) * per_page).limit(per_page))
+
+    # Load branch names
+    branch_ids = [p.branch_id for p, u in result.all() if p.branch_id]
+    result = await db.execute(query.offset((page - 1) * per_page).limit(per_page))
+    branch_map: dict = {}
+    if branch_ids:
+        branches_result = await db.execute(select(Branch).where(Branch.id.in_(branch_ids)))
+        branch_map = {b.id: b.name for b in branches_result.scalars().all()}
+
+    result = await db.execute(query.offset((page - 1) * per_page).limit(per_page))
+    items = [
+        PaymentPublic(
+            id=p.id,
+            user_id=p.user_id,
+            user_email=u.email,
+            user_name=u.full_name,
+            amount=p.amount,
+            currency=p.currency,
+            method=p.method,
+            reference=p.reference,
+            status=p.status,
+            admin_notes=p.admin_notes,
+            branch_id=p.branch_id,
+            branch_name=branch_map.get(p.branch_id, "") if p.branch_id else "",
+            created_at=p.created_at,
+            processed_at=p.processed_at,
+        )
+        for p, u in result.all()
+    ]
+
+    return {
+        "items": [i.model_dump() for i in items],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": (total + per_page - 1) // per_page,
+    }
+
+
+@router.post("/payments/{payment_id}/approve", response_model=MessageResponse)
+async def approve_payment(
+    payment_id: int,
+    body: PaymentApproveRequest,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Payment)
+        .options(selectinload(Payment.subscription))
+        .where(Payment.id == payment_id)
+    )
+    payment = result.scalar_one_or_none()
+    if not payment:
+        raise HTTPException(404, "Payment not found")
+    if payment.status != PaymentStatus.PENDING:
+        raise HTTPException(400, "Payment already processed")
+
+    now = datetime.now(timezone.utc)
+    payment.status = PaymentStatus.APPROVED
+    payment.admin_notes = body.admin_notes
+    payment.processed_at = now
+
+    # Activate or extend subscription
+    sub = payment.subscription
+    if sub:
+        # Handle timezone-naive datetimes from SQLite
+        sub_expires = sub.expires_at
+        if sub_expires and sub_expires.tzinfo is None:
+            sub_expires = sub_expires.replace(tzinfo=timezone.utc)
+        if sub.status == SubscriptionStatus.ACTIVE and sub_expires and sub_expires > now:
+            # Extend existing
+            sub.expires_at = sub_expires + timedelta(days=30 * body.months)
+        else:
+            sub.status = SubscriptionStatus.ACTIVE
+            sub.starts_at = now
+            sub.expires_at = now + timedelta(days=30 * body.months)
+
+    # Auto-assign branch monitoring based on what user selected during payment
+    if payment.branch_id:
+        existing = await db.execute(
+            select(UserBranchMonitor).where(
+                UserBranchMonitor.user_id == payment.user_id,
+                UserBranchMonitor.branch_id == payment.branch_id,
+            )
+        )
+        monitor = existing.scalar_one_or_none()
+        if monitor:
+            monitor.is_active = True
+        else:
+            db.add(UserBranchMonitor(
+                user_id=payment.user_id,
+                branch_id=payment.branch_id,
+                is_active=True,
+            ))
+
+    db.add(ActivityLog(
+        actor_id=admin.id,
+        action="payment_approved",
+        details={"payment_id": payment_id, "months": body.months, "branch_id": payment.branch_id},
+    ))
+    await db.commit()
+
+    # Notify user via WebSocket
+    await ws_manager.send_to_user(payment.user_id, {
+        "type": "subscription_activated",
+        "message": f"Your subscription has been activated for {body.months} month(s)!",
+        "expires_at": sub.expires_at.isoformat() if sub else None,
+    })
+
+    return MessageResponse(message=f"Payment approved. Subscription activated for {body.months} month(s).")
+
+
+@router.post("/payments/{payment_id}/reject", response_model=MessageResponse)
+async def reject_payment(
+    payment_id: int,
+    body: PaymentRejectRequest,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Payment).where(Payment.id == payment_id))
+    payment = result.scalar_one_or_none()
+    if not payment:
+        raise HTTPException(404, "Payment not found")
+    if payment.status != PaymentStatus.PENDING:
+        raise HTTPException(400, "Payment already processed")
+
+    payment.status = PaymentStatus.REJECTED
+    payment.admin_notes = body.admin_notes
+    payment.processed_at = datetime.now(timezone.utc)
+
+    if payment.subscription_id:
+        sub_result = await db.execute(
+            select(Subscription).where(Subscription.id == payment.subscription_id)
+        )
+        sub = sub_result.scalar_one_or_none()
+        if sub:
+            sub.status = SubscriptionStatus.CANCELLED
+
+    db.add(ActivityLog(
+        actor_id=admin.id,
+        action="payment_rejected",
+        details={"payment_id": payment_id, "notes": body.admin_notes},
+    ))
+    await db.commit()
+
+    await ws_manager.send_to_user(payment.user_id, {
+        "type": "payment_rejected",
+        "message": f"Payment rejected. {body.admin_notes}",
+    })
+    return MessageResponse(message="Payment rejected")
+
+
+@router.delete("/payments/{payment_id}", response_model=MessageResponse)
+async def delete_payment(
+    payment_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete a payment record (for removing test/fake payments)."""
+    result = await db.execute(select(Payment).where(Payment.id == payment_id))
+    payment = result.scalar_one_or_none()
+    if not payment:
+        raise HTTPException(404, "Payment not found")
+
+    # If it had a pending subscription, cancel it first
+    if payment.subscription_id and payment.status == PaymentStatus.PENDING:
+        sub_result = await db.execute(
+            select(Subscription).where(Subscription.id == payment.subscription_id)
+        )
+        sub = sub_result.scalar_one_or_none()
+        if sub and sub.status == SubscriptionStatus.PENDING_PAYMENT:
+            sub.status = SubscriptionStatus.CANCELLED
+
+    await db.delete(payment)
+    db.add(ActivityLog(
+        actor_id=admin.id,
+        action="payment_deleted",
+        details={"payment_id": payment_id},
+    ))
+    await db.commit()
+    return MessageResponse(message=f"Payment #{payment_id} deleted")
+
+
+# ── Plan Management ──────────────────────────────────────────────────
+
+@router.get("/plans")
+async def list_all_plans(admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Plan).order_by(Plan.sort_order))
+    return [
+        {
+            "id": p.id,
+            "plan_type": p.plan_type.value,
+            "display_name": p.display_name,
+            "description": p.description,
+            "price_monthly": p.price_monthly,
+            "currency": p.currency,
+            "features": p.features,
+            "is_active": p.is_active,
+            "sort_order": p.sort_order,
+        }
+        for p in result.scalars().all()
+    ]
+
+
+@router.patch("/plans/{plan_id}", response_model=MessageResponse)
+async def update_plan(
+    plan_id: int,
+    body: PlanUpdate,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Plan).where(Plan.id == plan_id))
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise HTTPException(404, "Plan not found")
+
+    for field, val in body.model_dump(exclude_none=True).items():
+        setattr(plan, field, val)
+
+    await db.commit()
+    return MessageResponse(message=f"Plan '{plan.display_name}' updated")
+
+
+# ── Branch Management ────────────────────────────────────────────────
+
+@router.get("/branches")
+async def admin_list_branches(admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Branch))
+    branches = result.scalars().all()
+    out = []
+    for b in branches:
+        sub_count = (await db.execute(
+            select(func.count(UserBranchMonitor.id))
+            .where(UserBranchMonitor.branch_id == b.id, UserBranchMonitor.is_active == True)
+        )).scalar() or 0
+
+        # Service account status
+        sa_result = await db.execute(
+            select(ServiceAccount).where(ServiceAccount.branch_id == b.id, ServiceAccount.is_active == True)
+        )
+        sas = sa_result.scalars().all()
+
+        out.append({
+            "id": b.id,
+            "name": b.name,
+            "url": b.url,
+            "service_type": b.service_type.value,
+            "is_active": b.is_active,
+            "subscriber_count": sub_count,
+            "service_accounts": len(sas),
+            "has_primary_account": any(s.is_primary for s in sas),
+        })
+    return out
+
+
+@router.patch("/branches/{branch_id}", response_model=MessageResponse)
+async def toggle_branch(
+    branch_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Branch).where(Branch.id == branch_id))
+    branch = result.scalar_one_or_none()
+    if not branch:
+        raise HTTPException(404, "Branch not found")
+    branch.is_active = not branch.is_active
+    await db.commit()
+    status = "activated" if branch.is_active else "deactivated"
+    return MessageResponse(message=f"Branch '{branch.name}' {status}")
+
+
+# ── Service Account Management ───────────────────────────────────────
+
+@router.get("/service-accounts")
+async def list_service_accounts(
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(ServiceAccount, Branch)
+        .join(Branch, ServiceAccount.branch_id == Branch.id)
+    )
+    return [
+        ServiceAccountPublic(
+            id=sa.id,
+            branch_id=sa.branch_id,
+            branch_name=b.name,
+            email_masked=sa.email_encrypted[:3] + "***" if len(sa.email_encrypted) > 3 else "***",
+            is_primary=sa.is_primary,
+            is_active=sa.is_active,
+            last_used_at=sa.last_used_at,
+            last_error=sa.last_error or "",
+        ).model_dump()
+        for sa, b in result.all()
+    ]
+
+
+@router.post("/service-accounts", response_model=MessageResponse)
+async def create_service_account(
+    body: ServiceAccountCreate,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.checker import encrypt_credential
+    sa = ServiceAccount(
+        branch_id=body.branch_id,
+        email_encrypted=encrypt_credential(body.email),
+        password_encrypted=encrypt_credential(body.password),
+        is_primary=body.is_primary,
+        is_active=True,
+    )
+    db.add(sa)
+    await db.commit()
+    return MessageResponse(message="Service account created")
+
+
+@router.delete("/service-accounts/{account_id}", response_model=MessageResponse)
+async def delete_service_account(
+    account_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(ServiceAccount).where(ServiceAccount.id == account_id))
+    sa = result.scalar_one_or_none()
+    if not sa:
+        raise HTTPException(404, "Service account not found")
+    await db.delete(sa)
+    await db.commit()
+    return MessageResponse(message="Service account deleted")
+
+
+# ── Check Results (Admin view) ───────────────────────────────────────
+
+@router.get("/check-results")
+async def admin_check_results(
+    branch_id: int | None = None,
+    limit: int = 50,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    query = (
+        select(CheckResult, Branch)
+        .join(Branch, CheckResult.branch_id == Branch.id)
+    )
+    if branch_id:
+        query = query.where(CheckResult.branch_id == branch_id)
+    query = query.order_by(CheckResult.checked_at.desc()).limit(limit)
+
+    result = await db.execute(query)
+    return [
+        {
+            "id": cr.id,
+            "branch_name": b.name,
+            "service_type": b.service_type.value,
+            "checked_at": cr.checked_at.isoformat(),
+            "slots_available": cr.slots_available,
+            "slot_details": cr.slot_details,
+            "error": cr.error,
+            "duration_seconds": cr.duration_seconds,
+        }
+        for cr, b in result.all()
+    ]
+
+
+@router.delete("/check-results", response_model=MessageResponse)
+async def delete_all_check_results(
+    branch_id: int | None = None,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete all check results, or only those for a specific branch."""
+    from sqlalchemy import delete as sa_delete
+    stmt = sa_delete(CheckResult)
+    if branch_id:
+        stmt = stmt.where(CheckResult.branch_id == branch_id)
+    result = await db.execute(stmt)
+    await db.commit()
+    label = f"branch #{branch_id}" if branch_id else "all branches"
+    return MessageResponse(message=f"Deleted {result.rowcount} check result(s) for {label}")
+
+
+@router.delete("/check-results/{result_id}", response_model=MessageResponse)
+async def delete_check_result(
+    result_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a single check result by ID."""
+    res = await db.execute(select(CheckResult).where(CheckResult.id == result_id))
+    cr = res.scalar_one_or_none()
+    if not cr:
+        raise HTTPException(404, "Check result not found")
+    await db.delete(cr)
+    await db.commit()
+    return MessageResponse(message=f"Check result #{result_id} deleted")
+
+
+# ── System Settings ──────────────────────────────────────────────────
+
+@router.get("/settings")
+async def get_settings(admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(SystemSetting))
+    return {s.key: s.value for s in result.scalars().all()}
+
+
+@router.post("/settings", response_model=MessageResponse)
+async def update_setting(
+    body: SystemSettingUpdate,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(SystemSetting).where(SystemSetting.key == body.key))
+    setting = result.scalar_one_or_none()
+    if setting:
+        setting.value = body.value
+    else:
+        db.add(SystemSetting(key=body.key, value=body.value))
+    await db.commit()
+    return MessageResponse(message=f"Setting '{body.key}' updated")
+
+
+@router.post("/settings/bulk", response_model=MessageResponse)
+async def update_settings_bulk(
+    body: dict,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    for key, value in body.items():
+        result = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
+        setting = result.scalar_one_or_none()
+        if setting:
+            setting.value = str(value)
+        else:
+            db.add(SystemSetting(key=key, value=str(value)))
+    await db.commit()
+    return MessageResponse(message=f"{len(body)} settings updated")
+
+
+# ── Activity Log ─────────────────────────────────────────────────────
+
+@router.get("/activity-log")
+async def activity_log(
+    limit: int = 50,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(ActivityLog).order_by(ActivityLog.created_at.desc()).limit(limit)
+    )
+    return [
+        {
+            "id": a.id,
+            "actor_id": a.actor_id,
+            "action": a.action,
+            "details": a.details,
+            "created_at": a.created_at.isoformat(),
+        }
+        for a in result.scalars().all()
+    ]
+
+
+# ── Scheduler Control ───────────────────────────────────────────────
+
+@router.post("/checker/start", response_model=MessageResponse)
+async def start_checker(admin=Depends(get_current_admin)):
+    from app.services.scheduler import scheduler_service
+    scheduler_service.start()
+    return MessageResponse(message="Checker scheduler started")
+
+
+@router.post("/checker/stop", response_model=MessageResponse)
+async def stop_checker(admin=Depends(get_current_admin)):
+    from app.services.scheduler import scheduler_service
+    scheduler_service.stop()
+    return MessageResponse(message="Checker scheduler stopped")
+
+
+@router.get("/checker/status")
+async def checker_status(admin=Depends(get_current_admin)):
+    from app.services.scheduler import scheduler_service
+    return {
+        "running": scheduler_service.is_running,
+        "next_run": scheduler_service.next_run_time,
+        "last_run": scheduler_service.last_run_time,
+        "connected_users_ws": ws_manager.connected_users_count,
+        "connected_admins_ws": ws_manager.connected_admins_count,
+    }
+
+
+# ── Manual Check Trigger ────────────────────────────────────────────
+
+@router.post("/checker/run-now/{branch_id}", response_model=MessageResponse)
+async def run_check_now(
+    branch_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Branch).where(Branch.id == branch_id))
+    branch = result.scalar_one_or_none()
+    if not branch:
+        raise HTTPException(404, "Branch not found")
+
+    from app.services.scheduler import scheduler_service
+    import asyncio
+    asyncio.create_task(scheduler_service.check_branch(branch_id))
+    return MessageResponse(message=f"Check triggered for '{branch.name}'")
+
+
+# ── Headless Mode Toggle ─────────────────────────────────────────────
+
+@router.get("/checker/headless")
+async def get_headless_mode(admin=Depends(get_current_admin)):
+    """Get the current headless mode setting."""
+    return {"headless": settings.BROWSER_HEADLESS}
+
+
+@router.post("/checker/headless", response_model=MessageResponse)
+async def toggle_headless_mode(
+    body: dict,
+    admin=Depends(get_current_admin),
+):
+    """Toggle headless mode. When False, browser window will be visible for debugging."""
+    headless = body.get("headless", True)
+    settings.BROWSER_HEADLESS = headless
+
+    # Close existing browser so it relaunches with the new setting
+    from app.services.checker import tls_checker
+    try:
+        # The checker runs in a thread, so just flag it — next check will pick up the setting
+        if tls_checker._browser:
+            import asyncio
+            try:
+                await tls_checker.close()
+            except Exception:
+                tls_checker._browser = None
+                tls_checker._playwright = None
+    except Exception:
+        pass
+
+    mode = "headless" if headless else "visible (non-headless)"
+    return MessageResponse(message=f"Browser mode set to {mode}. Takes effect on next check.")
+
+
+# ── Test Notifications ───────────────────────────────────────────────
+
+@router.post("/test-notification", response_model=MessageResponse)
+async def test_notification(
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send a test notification via all configured channels to the admin user."""
+    from app.services.email_service import email_service
+
+    admin_user = admin
+    results = []
+
+    # Test email
+    if settings.SMTP_USERNAME and settings.SMTP_PASSWORD:
+        ok = email_service.send(
+            admin_user.email,
+            "Test Notification — TLS Appointment Checker",
+            "<h2>✅ Test Notification</h2><p>If you're reading this, email notifications are working!</p>"
+        )
+        results.append(f"Email: {'✅ sent' if ok else '❌ failed'}")
+    else:
+        results.append("Email: ⚠️ SMTP not configured")
+
+    # Test Web Push
+    if settings.VAPID_PRIVATE_KEY and admin_user.push_subscription:
+        try:
+            from pywebpush import webpush
+            import json
+            webpush(
+                subscription_info=admin_user.push_subscription,
+                data=json.dumps({"title": "Test Notification", "body": "Push notifications are working!"}),
+                vapid_private_key=settings.VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": f"mailto:{settings.VAPID_CLAIMS_EMAIL}"},
+            )
+            results.append("Web Push: ✅ sent")
+        except Exception as e:
+            results.append(f"Web Push: ❌ {str(e)[:80]}")
+    elif not settings.VAPID_PRIVATE_KEY:
+        results.append("Web Push: ⚠️ VAPID keys not configured")
+    else:
+        results.append("Web Push: ⚠️ No push subscription for admin")
+
+    return MessageResponse(message=" | ".join(results))
+
+
+@router.post("/test-appointment-email", response_model=MessageResponse)
+async def test_appointment_email(
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send a fake appointment-found email to the admin so you can preview the template."""
+    from app.services.email_service import email_service
+    ok = email_service.send_appointment_alert(
+        to_email=admin.email,
+        branch_name="Sheikh Zayed (Legalization)",
+        service_type="legalization",
+        slot_details={"message": "Appointment slots are available — book now before they're gone!"},
+        user_name=admin.full_name or "Admin",
+    )
+    if ok:
+        return MessageResponse(message=f"Test appointment alert sent to {admin.email} ✅")
+    raise HTTPException(500, "Failed to send — check SMTP settings")
+
+@router.get("/checker/logs")
+async def checker_logs(limit: int = 100, admin=Depends(get_current_admin)):
+    """Return recent monitoring log entries from the in-memory buffer."""
+    from app.services.scheduler import get_recent_logs
+    return get_recent_logs(min(limit, 200))
+
+
+# ── Admin WebSocket ──────────────────────────────────────────────────
+
+@router.websocket("/ws")
+async def admin_websocket(websocket: WebSocket):
+    from app.database import async_session
+    # Validate admin token from query params
+    token = websocket.query_params.get("token", "")
+    try:
+        payload = decode_token(token)
+        user_id = int(payload.get("sub", 0))
+    except Exception:
+        await websocket.close(code=4001)
+        return
+
+    async with async_session() as db:
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user or not user.is_admin:
+            await websocket.close(code=4003)
+            return
+
+    await ws_manager.connect_admin(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            # Admin can send commands via WS if needed
+    except WebSocketDisconnect:
+        await ws_manager.disconnect_admin(websocket)

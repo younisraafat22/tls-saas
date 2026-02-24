@@ -1,0 +1,190 @@
+"""
+Monitoring Routes — Check results, live status for user dashboard
+"""
+
+from datetime import datetime, timedelta, timezone
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select, func, and_
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.database import get_db
+from app.models import (
+    User, Branch, CheckResult, UserBranchMonitor,
+    NotificationLog, SubscriptionStatus, Subscription, Payment, PaymentStatus,
+    SystemSetting,
+)
+from app.auth import get_current_user
+from app.schemas import CheckResultPublic, NotificationLogPublic
+
+router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
+
+
+@router.get("/status")
+async def monitoring_status(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get user's monitoring overview — is monitoring active, what branches, latest results."""
+    # Check subscription
+    sub_result = await db.execute(
+        select(Subscription)
+        .where(
+            Subscription.user_id == user.id,
+            Subscription.status == SubscriptionStatus.ACTIVE,
+        )
+        .order_by(Subscription.expires_at.desc())
+        .limit(1)
+    )
+    sub = sub_result.scalar_one_or_none()
+    # Handle timezone-naive datetimes returned by SQLite
+    if sub and sub.expires_at:
+        exp = sub.expires_at
+        if exp.tzinfo is None:
+            from datetime import timezone as _tz
+            exp = exp.replace(tzinfo=_tz.utc)
+        is_active = exp > datetime.now(timezone.utc)
+    else:
+        is_active = False
+
+    # Get monitored branches with latest results
+    monitors = await db.execute(
+        select(UserBranchMonitor, Branch)
+        .join(Branch, UserBranchMonitor.branch_id == Branch.id)
+        .where(UserBranchMonitor.user_id == user.id, UserBranchMonitor.is_active == True)
+    )
+
+    branches = []
+    for monitor, branch in monitors.all():
+        # Latest check for this branch
+        latest = await db.execute(
+            select(CheckResult)
+            .where(CheckResult.branch_id == branch.id)
+            .order_by(CheckResult.checked_at.desc())
+            .limit(1)
+        )
+        check = latest.scalar_one_or_none()
+
+        # Checks today
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        checks_today_result = await db.execute(
+            select(func.count(CheckResult.id))
+            .where(CheckResult.branch_id == branch.id, CheckResult.checked_at >= today_start)
+        )
+        checks_today = checks_today_result.scalar() or 0
+
+        branches.append({
+            "branch_id": branch.id,
+            "branch_name": branch.name,
+            "service_type": branch.service_type.value,
+            "is_active": branch.is_active,
+            "last_check": check.checked_at.isoformat() if check else None,
+            "last_slots_available": check.slots_available if check else None,
+            "last_slot_details": check.slot_details if check else None,
+            "checks_today": checks_today,
+        })
+
+    # Check for pending payment (user submitted but admin hasn't approved yet)
+    pending_payment_result = await db.execute(
+        select(Payment, Branch)
+        .outerjoin(Branch, Payment.branch_id == Branch.id)
+        .where(Payment.user_id == user.id, Payment.status == PaymentStatus.PENDING)
+        .order_by(Payment.created_at.desc())
+        .limit(1)
+    )
+    pending_row = pending_payment_result.first()
+    pending_payment = None
+    if pending_row:
+        pmt, br = pending_row
+        pending_payment = {
+            "payment_id": pmt.id,
+            "branch_name": br.name if br else None,
+            "amount": pmt.amount,
+            "submitted_at": pmt.created_at.isoformat(),
+        }
+
+    # Check maintenance mode
+    maint_result = await db.execute(
+        select(SystemSetting).where(SystemSetting.key == "maintenance_mode")
+    )
+    maint_setting = maint_result.scalar_one_or_none()
+    maintenance_mode = maint_setting and maint_setting.value == "true"
+
+    return {
+        "subscription_active": is_active,
+        "payment_pending": pending_payment,
+        "maintenance_mode": maintenance_mode,
+        "expires_at": sub.expires_at.isoformat() if sub and sub.expires_at else None,
+        "monitored_branches": branches,
+        "total_branches_monitored": len(branches),
+    }
+
+
+@router.get("/results")
+async def check_results(
+    branch_id: int | None = None,
+    limit: int = 20,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get recent check results for monitored branches."""
+    # Get user's monitored branch IDs
+    monitors = await db.execute(
+        select(UserBranchMonitor.branch_id)
+        .where(UserBranchMonitor.user_id == user.id, UserBranchMonitor.is_active == True)
+    )
+    my_branch_ids = [m[0] for m in monitors.all()]
+
+    if not my_branch_ids:
+        return []
+
+    query = select(CheckResult, Branch).join(Branch, CheckResult.branch_id == Branch.id)
+
+    if branch_id and branch_id in my_branch_ids:
+        query = query.where(CheckResult.branch_id == branch_id)
+    else:
+        query = query.where(CheckResult.branch_id.in_(my_branch_ids))
+
+    query = query.order_by(CheckResult.checked_at.desc()).limit(min(limit, 100))
+    result = await db.execute(query)
+
+    return [
+        CheckResultPublic(
+            id=cr.id,
+            branch_name=b.name,
+            branch_service_type=b.service_type,
+            checked_at=cr.checked_at,
+            slots_available=cr.slots_available,
+            slot_details=cr.slot_details,
+            duration_seconds=cr.duration_seconds,
+            error=cr.error or "",
+        )
+        for cr, b in result.all()
+    ]
+
+
+@router.get("/notifications")
+async def my_notifications(
+    limit: int = 30,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get recent notifications sent to the user."""
+    result = await db.execute(
+        select(NotificationLog, CheckResult, Branch)
+        .join(CheckResult, NotificationLog.check_result_id == CheckResult.id)
+        .join(Branch, CheckResult.branch_id == Branch.id)
+        .where(NotificationLog.user_id == user.id)
+        .order_by(NotificationLog.sent_at.desc())
+        .limit(min(limit, 100))
+    )
+
+    return [
+        NotificationLogPublic(
+            id=nl.id,
+            channel=nl.channel,
+            destination=nl.destination,
+            sent_at=nl.sent_at,
+            status=nl.status.value,
+            branch_name=b.name,
+        )
+        for nl, cr, b in result.all()
+    ]

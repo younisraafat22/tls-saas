@@ -1,0 +1,35 @@
+# fly.toml — Fly.io configuration for TLS Appointment Backend
+# Change the app name below to something unique (e.g. tls-monitor-yourname)
+app = "tls-appointment-backend"
+primary_region = "ams"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8000"
+  BROWSER_HEADLESS = "true"
+
+# Persistent volume for SQLite database
+[mounts]
+  source = "tls_data"
+  destination = "/app/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "15s"
+    method = "GET"
+    path = "/api/health"
+    timeout = "10s"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
