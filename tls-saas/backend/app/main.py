@@ -102,6 +102,14 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass  # Column already exists
 
+    async with async_session() as db:
+        try:
+            await db.execute(text("ALTER TABLE payments ADD COLUMN screenshot_data TEXT"))
+            await db.commit()
+            logger.info("Migration: added screenshot_data to payments table")
+        except Exception:
+            pass  # Column already exists
+
     # Rename legalization branches to include service label
     async with async_session() as db:
         try:

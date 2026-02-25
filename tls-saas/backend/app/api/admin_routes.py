@@ -293,6 +293,7 @@ async def list_payments(
             currency=p.currency,
             method=p.method,
             reference=p.reference,
+            screenshot_data=p.screenshot_data,
             status=p.status,
             admin_notes=p.admin_notes,
             branch_id=p.branch_id,

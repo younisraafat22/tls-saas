@@ -229,6 +229,7 @@ class Payment(Base):
     processed_at = Column(DateTime(timezone=True), nullable=True)
 
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)  # Branch user wants to monitor
+    screenshot_data = Column(Text, nullable=True)  # Base64-encoded payment screenshot
 
     user = relationship("User", back_populates="payments")
     subscription = relationship("Subscription", foreign_keys=[subscription_id])

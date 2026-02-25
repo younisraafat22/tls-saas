@@ -210,8 +210,15 @@ export default function AdminPaymentsPage() {
                           <span>{new Date(p.created_at).toLocaleDateString()}</span>
                         </div>
                         <div className="text-xs text-gray-400 mt-0.5">
-                          Ref: <span className="font-mono">{p.reference}</span>
+                          {p.reference ? <span>Ref: <span className="font-mono">{p.reference}</span></span> : <span className="italic text-gray-500">No reference — screenshot provided</span>}
                           {p.branch_name && <span> &middot; Branch: <span className="text-gray-300">{p.branch_name}</span></span>}
+                          {p.screenshot_data && (
+                            <span className="ml-2">
+                              <a href={p.screenshot_data} target="_blank" rel="noreferrer" className="text-primary-400 hover:underline">
+                                📎 View screenshot
+                              </a>
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>

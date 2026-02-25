@@ -33,6 +33,8 @@ export default function PaymentsPage() {
   const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState("vodafone_cash");
   const [reference, setReference] = useState("");
+  const [screenshotData, setScreenshotData] = useState<string | null>(null);
+  const [screenshotName, setScreenshotName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
@@ -59,9 +61,23 @@ export default function PaymentsPage() {
     }
   };
 
+  const handleScreenshotChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setScreenshotName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => setScreenshotData(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmitPayment = async () => {
-    if (!selectedPlan || !selectedBranch || !reference.trim()) {
-      setToast({ type: "error", msg: "Please select a plan, a TLS branch, and enter payment reference" });
+    if (!selectedPlan || !selectedBranch) {
+      setToast({ type: "error", msg: "Please select a plan and a TLS branch" });
+      setTimeout(() => setToast(null), 4000);
+      return;
+    }
+    if (!reference.trim() && !screenshotData) {
+      setToast({ type: "error", msg: "Please enter a transaction reference number or upload a payment screenshot" });
       setTimeout(() => setToast(null), 4000);
       return;
     }
@@ -75,9 +91,12 @@ export default function PaymentsPage() {
         amount: plan?.price_monthly || 0,
         method: paymentMethod,
         reference: reference.trim(),
+        screenshot_data: screenshotData || undefined,
       });
       setToast({ type: "success", msg: "Payment submitted! Awaiting admin approval." });
       setReference("");
+      setScreenshotData(null);
+      setScreenshotName("");
       setSelectedPlan(null);
       setSelectedBranch(null);
       loadData();
@@ -303,24 +322,64 @@ export default function PaymentsPage() {
                 )}
               </div>
 
-              {/* Reference input */}
-              <div>
-                <label className="text-sm text-gray-400 mb-2 block">Transaction Reference / Screenshot Description</label>
-                <input
-                  type="text"
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                  placeholder="Enter the transaction ID or reference number"
-                  className="input-field"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Enter the reference number from your payment confirmation
-                </p>
+              {/* Reference + Screenshot */}
+              <div className="space-y-3">
+                <p className="text-sm text-gray-400">Provide <span className="text-white font-medium">at least one</span> of the following as proof of payment:</p>
+
+                {/* Reference number */}
+                <div>
+                  <label className="text-xs text-gray-500 mb-1.5 block">Transaction Reference Number</label>
+                  <input
+                    type="text"
+                    value={reference}
+                    onChange={(e) => setReference(e.target.value)}
+                    placeholder="e.g. 1234567890"
+                    className="input-field"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-white/5" />
+                  <span className="text-xs text-gray-500">OR</span>
+                  <div className="flex-1 h-px bg-white/5" />
+                </div>
+
+                {/* Screenshot upload */}
+                <div>
+                  <label className="text-xs text-gray-500 mb-1.5 block">Payment Screenshot</label>
+                  <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                    screenshotData
+                      ? "border-primary-500/40 bg-primary-500/5"
+                      : "border-white/10 hover:border-white/20 bg-dark-700/50"
+                  }`}>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleScreenshotChange}
+                    />
+                    <Upload className="w-4 h-4 text-gray-400 shrink-0" />
+                    <span className="text-sm text-gray-400 truncate">
+                      {screenshotName || "Click to upload screenshot"}
+                    </span>
+                    {screenshotData && <CheckCircle2 className="w-4 h-4 text-primary-400 ml-auto shrink-0" />}
+                  </label>
+                  {/* Preview */}
+                  {screenshotData && (
+                    <div className="mt-2 relative">
+                      <img src={screenshotData} alt="Payment proof" className="w-full max-h-48 object-contain rounded-lg border border-white/10" />
+                      <button
+                        onClick={() => { setScreenshotData(null); setScreenshotName(""); }}
+                        className="absolute top-2 right-2 w-6 h-6 bg-red-500/80 rounded-full flex items-center justify-center text-white text-xs hover:bg-red-500 transition-colors"
+                      >✕</button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <button
                 onClick={handleSubmitPayment}
-                disabled={submitting || !reference.trim() || !selectedBranch}
+                disabled={submitting || (!reference.trim() && !screenshotData) || !selectedBranch}
                 className="btn-gradient w-full flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {submitting ? (

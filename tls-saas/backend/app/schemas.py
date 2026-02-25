@@ -156,7 +156,8 @@ class PaymentSubmitRequest(BaseModel):
     plan_type: PlanType
     branch_id: int
     method: PaymentMethod
-    reference: str = Field(min_length=1, max_length=255, description="Transaction ID / reference")
+    reference: str = Field(default="", max_length=255, description="Transaction ID / reference")
+    screenshot_data: Optional[str] = Field(default=None, description="Base64-encoded screenshot")
     amount: float
 
 
@@ -169,6 +170,7 @@ class PaymentPublic(BaseModel):
     currency: str
     method: PaymentMethod
     reference: str
+    screenshot_data: Optional[str] = None
     status: PaymentStatus
     admin_notes: str
     branch_id: Optional[int] = None

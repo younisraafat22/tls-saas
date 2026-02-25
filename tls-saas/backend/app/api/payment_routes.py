@@ -44,12 +44,17 @@ async def submit_payment(
     if not branch:
         raise HTTPException(400, "Invalid or inactive branch")
 
-    # Check for duplicate reference
-    dup = await db.execute(
-        select(Payment).where(Payment.reference == body.reference)
-    )
-    if dup.scalar_one_or_none():
-        raise HTTPException(400, "This payment reference has already been submitted")
+    # Require at least a reference number or a screenshot
+    if not body.reference.strip() and not body.screenshot_data:
+        raise HTTPException(400, "Please provide a transaction reference number or a payment screenshot")
+
+    # Check for duplicate reference (only if a reference was given)
+    if body.reference.strip():
+        dup = await db.execute(
+            select(Payment).where(Payment.reference == body.reference.strip())
+        )
+        if dup.scalar_one_or_none():
+            raise HTTPException(400, "This payment reference has already been submitted")
 
     # Create pending subscription
     subscription = Subscription(
@@ -69,6 +74,7 @@ async def submit_payment(
         currency=plan.currency,
         method=body.method,
         reference=body.reference.strip(),
+        screenshot_data=body.screenshot_data,
         status=PaymentStatus.PENDING,
     )
     db.add(payment)
@@ -111,6 +117,7 @@ async def my_payments(
             currency=p.currency,
             method=p.method,
             reference=p.reference,
+            screenshot_data=p.screenshot_data,
             status=p.status,
             admin_notes=p.admin_notes,
             created_at=p.created_at,
