@@ -8,6 +8,7 @@ import { useLanguage } from "@/lib/i18n";
 
 export default function BranchStatusPage() {
   const { t } = useLanguage();
+  const getBranchName = (name: string) => t.branchNames[name] ?? name;
   const tb = t.branches;
   const serviceLabel: Record<string, string> = {
     legalization: t.serviceTypes.legalization,
@@ -63,7 +64,7 @@ export default function BranchStatusPage() {
             >
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <h2 className="text-lg font-semibold">{branch.branch_name}</h2>
+                  <h2 className="text-lg font-semibold">{getBranchName(branch.branch_name)}</h2>
                   <p className="text-sm text-gray-400">{serviceLabel[branch.service_type] ?? branch.service_type} {tb.service}</p>
                 </div>
                 {branch.last_slots_available ? (

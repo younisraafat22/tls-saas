@@ -93,7 +93,7 @@ export default function NotificationsPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
-        {(["email", "telegram", "web_push"] as const).map((ch) => {
+        {(["email", "web_push"] as const).map((ch) => {
           const count = notifications.filter((n) => n.channel === ch).length;
           return (
             <motion.div
@@ -104,7 +104,7 @@ export default function NotificationsPage() {
             >
               <div className={`flex items-center gap-2 text-sm mb-1 ${channelColors[ch]}`}>
                 {channelIcons[ch]}
-                {ch === "web_push" ? tn.push : ch === "telegram" ? "Telegram" : "Email"}
+                {ch === "web_push" ? tn.push : "Email"}
               </div>
               <div className="text-2xl font-bold">{count}</div>
             </motion.div>

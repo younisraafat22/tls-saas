@@ -29,6 +29,9 @@ export default function PaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"subscribe" | "history">("subscribe");
   const { t } = useLanguage();
+  const getBranchName = (name: string) => t.branchNames[name] ?? name;
+  const getPlanName = (planType: string, fallback: string) => t.planNames[planType] ?? fallback;
+  const getPlanDesc = (planType: string, fallback: string) => t.planDesc[planType] ?? fallback;
 
   // Payment form
   const [selectedPlan, setSelectedPlan] = useState<number | null>(null);
@@ -158,7 +161,7 @@ export default function PaymentsPage() {
               <div>
                 <div className="font-semibold text-accent-green">{t.payment.activeSubLabel}</div>
                 <div className="text-sm text-gray-400">
-                  {activeSub.plan?.display_name} &middot; Expires {new Date(activeSub.expires_at).toLocaleDateString()}
+                  {getPlanName(activeSub.plan?.plan_type ?? "", activeSub.plan?.display_name ?? "")} &middot; Expires {new Date(activeSub.expires_at).toLocaleDateString()}
                 </div>
               </div>
             </div>
@@ -210,8 +213,8 @@ export default function PaymentsPage() {
                   }`}
                   whileTap={{ scale: 0.98 }}
                 >
-                  <h3 className="font-semibold mb-1">{plan.display_name}</h3>
-                  <p className="text-sm text-gray-400 mb-3">{plan.description}</p>
+                  <h3 className="font-semibold mb-1">{getPlanName(plan.plan_type, plan.display_name)}</h3>
+                  <p className="text-sm text-gray-400 mb-3">{getPlanDesc(plan.plan_type, plan.description)}</p>
                   <div className="text-2xl font-bold text-primary-400">
                     {plan.price_monthly} <span className="text-sm font-normal text-gray-400">EGP/mo</span>
                   </div>
@@ -247,7 +250,7 @@ export default function PaymentsPage() {
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <div className="font-medium text-sm">{branch.name}</div>
+                          <div className="font-medium text-sm">{getBranchName(branch.name)}</div>
                           <div className={`text-xs mt-1 px-2 py-0.5 rounded-full inline-block ${
                             isStudents
                               ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"

@@ -5,10 +5,13 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/i18n";
 import { Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const { t } = useLanguage();
+  const tl = t.login;
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -24,7 +27,7 @@ export default function LoginPage() {
       await login(email, password);
       router.push("/dashboard");
     } catch (err: any) {
-      setError(err.message || "Login failed");
+      setError(err.message || tl.errorDefault);
     } finally {
       setLoading(false);
     }
@@ -49,8 +52,8 @@ export default function LoginPage() {
         </Link>
 
         <div className="glass-card p-8">
-          <h1 className="text-2xl font-display font-bold mb-2 text-center">Welcome Back</h1>
-          <p className="text-gray-400 text-sm text-center mb-8">Log in to your monitoring dashboard</p>
+          <h1 className="text-2xl font-display font-bold mb-2 text-center">{tl.title}</h1>
+          <p className="text-gray-400 text-sm text-center mb-8">{tl.sub}</p>
 
           {error && (
             <motion.div
@@ -64,7 +67,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Email</label>
+              <label className="text-sm text-gray-400 mb-1 block">{tl.emailLabel}</label>
               <input
                 type="email"
                 value={email}
@@ -77,7 +80,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Password</label>
+              <label className="text-sm text-gray-400 mb-1 block">{tl.passwordLabel}</label>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
@@ -105,15 +108,15 @@ export default function LoginPage() {
               {loading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
-                <>Log In <ArrowRight className="w-4 h-4" /></>
+                <>{tl.submit} <ArrowRight className="w-4 h-4" /></>
               )}
             </button>
           </form>
 
           <p className="text-center text-gray-500 text-sm mt-6">
-            Don&apos;t have an account?{" "}
+            {tl.noAccount}{" "}
             <Link href="/register" className="text-primary-400 hover:text-primary-300 font-medium">
-              Sign Up
+              {tl.signUp}
             </Link>
           </p>
         </div>

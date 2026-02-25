@@ -5,10 +5,13 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/i18n";
 import { Eye, EyeOff, ArrowRight, Loader2, Check, CheckCircle2, Mail } from "lucide-react";
 
 export default function RegisterPage() {
   const { register } = useAuth();
+  const { t } = useLanguage();
+  const tr = t.register;
   const router = useRouter();
   const [form, setForm] = useState({ fullName: "", email: "", phone: "", password: "", confirmPassword: "" });
   const [showPassword, setShowPassword] = useState(false);
@@ -24,11 +27,11 @@ export default function RegisterPage() {
     setError("");
 
     if (form.password !== form.confirmPassword) {
-      setError("Passwords don't match");
+      setError(tr.errPassMatch);
       return;
     }
     if (form.password.length < 6) {
-      setError("Password must be at least 6 characters");
+      setError(tr.errPassLength);
       return;
     }
 
@@ -37,7 +40,7 @@ export default function RegisterPage() {
       await register(form.email, form.password, form.fullName, form.phone);
       setSuccess(true);
     } catch (err: any) {
-      setError(err.message || "Registration failed");
+      setError(err.message || tr.errDefault);
     } finally {
       setLoading(false);
     }
@@ -58,26 +61,26 @@ export default function RegisterPage() {
             <div className="w-16 h-16 rounded-full bg-accent-green/10 flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-8 h-8 text-accent-green" />
             </div>
-            <h1 className="text-2xl font-display font-bold">Account Created!</h1>
+            <h1 className="text-2xl font-display font-bold">{tr.successTitle}</h1>
             <p className="text-gray-400 text-sm leading-relaxed">
-              Welcome, <strong className="text-white">{form.fullName}</strong>! Your account is ready.
+              {tr.successWelcome}
             </p>
             <div className="flex items-start gap-3 bg-dark-800 rounded-xl p-4 text-left">
               <Mail className="w-5 h-5 text-primary-400 shrink-0 mt-0.5" />
               <p className="text-sm text-gray-400">
-                A confirmation email has been sent to <strong className="text-white">{form.email}</strong>.
+                {tr.successEmail} <strong className="text-white">{form.email}</strong>.
               </p>
             </div>
             <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-left">
               <p className="text-xs text-amber-300 leading-relaxed">
-                <strong>Next step:</strong> Go to the dashboard, choose your subscription plan, and send payment via InstaPay or Vodafone Cash. Your subscription will be activated after manual confirmation.
+                {tr.successNextStep}
               </p>
             </div>
             <button
               onClick={() => router.push("/dashboard")}
               className="btn-gradient w-full flex items-center justify-center gap-2 !py-3.5"
             >
-              Go to Dashboard <ArrowRight className="w-4 h-4" />
+              {tr.goDashboard} <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </motion.div>
@@ -102,8 +105,8 @@ export default function RegisterPage() {
         </Link>
 
         <div className="glass-card p-8">
-          <h1 className="text-2xl font-display font-bold mb-2 text-center">Create Account</h1>
-          <p className="text-gray-400 text-sm text-center mb-8">Start monitoring TLS appointments today</p>
+          <h1 className="text-2xl font-display font-bold mb-2 text-center">{tr.title}</h1>
+          <p className="text-gray-400 text-sm text-center mb-8">{tr.sub}</p>
 
           {error && (
             <motion.div
@@ -117,50 +120,50 @@ export default function RegisterPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Full Name</label>
+              <label className="text-sm text-gray-400 mb-1 block">{tr.fullNameLabel}</label>
               <input
                 type="text"
                 value={form.fullName}
                 onChange={update("fullName")}
                 className="input-field"
-                placeholder="Ahmed Mohamed"
+                placeholder={tr.fullNamePlaceholder}
                 required
                 autoFocus
               />
             </div>
 
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Email</label>
+              <label className="text-sm text-gray-400 mb-1 block">{tr.emailLabel}</label>
               <input
                 type="email"
                 value={form.email}
                 onChange={update("email")}
                 className="input-field"
-                placeholder="you@example.com"
+                placeholder={tr.emailPlaceholder}
                 required
               />
             </div>
 
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Phone <span className="text-gray-600">(optional)</span></label>
+              <label className="text-sm text-gray-400 mb-1 block">{tr.phoneLabel} <span className="text-gray-600">{tr.phoneOptional}</span></label>
               <input
                 type="tel"
                 value={form.phone}
                 onChange={update("phone")}
                 className="input-field"
-                placeholder="+20 1X XXXX XXXX"
+                placeholder={tr.phonePlaceholder}
               />
             </div>
 
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Password</label>
+              <label className="text-sm text-gray-400 mb-1 block">{tr.passwordLabel}</label>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
                   value={form.password}
                   onChange={update("password")}
                   className="input-field pr-12"
-                  placeholder="At least 6 characters"
+                  placeholder={tr.passwordPlaceholder}
                   required
                   minLength={6}
                 />
@@ -175,7 +178,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Confirm Password</label>
+              <label className="text-sm text-gray-400 mb-1 block">{tr.confirmPasswordLabel}</label>
               <input
                 type="password"
                 value={form.confirmPassword}
@@ -194,19 +197,19 @@ export default function RegisterPage() {
               {loading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
-                <>Create Account <ArrowRight className="w-4 h-4" /></>
+                <>{tr.submit} <ArrowRight className="w-4 h-4" /></>
               )}
             </button>
           </form>
 
           <div className="mt-4 text-xs text-gray-500 text-center">
-            By signing up, you agree to our Terms of Service.
+            {tr.termsText}
           </div>
 
           <p className="text-center text-gray-500 text-sm mt-6">
-            Already have an account?{" "}
+            {tr.hasAccount}{" "}
             <Link href="/login" className="text-primary-400 hover:text-primary-300 font-medium">
-              Log In
+              {tr.logIn}
             </Link>
           </p>
         </div>
@@ -218,11 +221,7 @@ export default function RegisterPage() {
           transition={{ delay: 0.3 }}
           className="mt-6 space-y-3"
         >
-          {[
-            "24/7 automated monitoring",
-            "Instant email & push alerts",
-            "No software to install — works on phone",
-          ].map((b) => (
+          {tr.benefits.map((b) => (
             <div key={b} className="flex items-center gap-2 text-sm text-gray-400">
               <Check className="w-4 h-4 text-accent-green" />
               <span>{b}</span>
