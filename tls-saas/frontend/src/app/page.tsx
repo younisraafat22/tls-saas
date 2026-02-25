@@ -458,7 +458,7 @@ function Pricing() {
           </motion.p>
         </AnimatedSection>
 
-        <AnimatedSection className="grid md:grid-cols-1 gap-8 max-w-lg mx-auto">
+        <AnimatedSection className="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
           {plans.sort((a, b) => a.sort_order - b.sort_order).map((plan) => {
             return (
               <motion.div
