@@ -194,14 +194,16 @@ export default function PaymentsPage() {
 
           {/* Branch / Embassy selection */}
           {selectedPlan && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
               <h3 className="font-semibold mb-3 flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-primary-500/20 text-primary-400 text-xs flex items-center justify-center font-bold">2</span>
                 Select Your TLS Branch
               </h3>
+              <p className="text-sm text-gray-400">Choose the branch and legalization type that matches your TLS application.</p>
               <div className="grid sm:grid-cols-2 gap-3">
                 {branches.filter((b: any) => b.is_active && b.service_type !== "visa").map((branch: any) => {
                   const isSelected = selectedBranch === branch.id;
+                  const isStudents = branch.name.toLowerCase().includes("students");
                   return (
                     <button
                       key={branch.id}
@@ -213,7 +215,13 @@ export default function PaymentsPage() {
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="font-medium text-sm">{branch.name}</div>
-                          <div className="text-xs text-gray-500 capitalize mt-0.5">{branch.service_type} service</div>
+                          <div className={`text-xs mt-1 px-2 py-0.5 rounded-full inline-block ${
+                            isStudents
+                              ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                              : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                          }`}>
+                            {isStudents ? "🎓 Students" : "📋 Normal"}
+                          </div>
                         </div>
                         {isSelected && <CheckCircle2 className="w-5 h-5 text-primary-400" />}
                       </div>

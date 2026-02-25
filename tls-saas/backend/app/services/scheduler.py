@@ -214,6 +214,26 @@ class SchedulerService:
             service_account.last_used_at = datetime.now(timezone.utc)
             if check_result["error"]:
                 service_account.last_error = check_result["error"]
+                # If login credentials failed, notify admin via email
+                if "invalid credentials" in check_result["error"].lower() or "login failed" in check_result["error"].lower():
+                    try:
+                        email_service.send(
+                            to_email=settings.ADMIN_EMAIL,
+                            subject=f"⚠️ TLS Login Failed — {branch.name}",
+                            html_body=f"""
+                            <div style="font-family: 'Segoe UI', Arial; max-width: 600px; margin: 0 auto; background: #141832; color: #fff; padding: 30px; border-radius: 16px;">
+                                <h2 style="color: #ff4444;">⚠️ TLS Login Credentials Failed</h2>
+                                <p>The TLS account used for <strong>{branch.name}</strong> could not log in.</p>
+                                <p><strong>Error:</strong> {check_result['error']}</p>
+                                <p><strong>Time:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
+                                <p style="color: #ffaa00;">The TLS account may have expired. Please recreate the application on the TLS website and update the service account credentials.</p>
+                                <p style="color: #8892b0; font-size: 12px; margin-top: 30px;">TLS Appointment Checker — Admin Alert</p>
+                            </div>
+                            """,
+                        )
+                        logger.info(f"Admin notified about login failure for {branch.name}")
+                    except Exception as e:
+                        logger.error(f"Failed to send login failure email to admin: {e}")
 
             # Save screenshot to disk if present
             screenshot_path = ""

@@ -293,7 +293,7 @@ function Hero() {
         {/* Stats bar */}
         <AnimatedSection className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-20 pt-10 border-t border-white/5">
           {[
-            { value: 2, suffix: "", label: "Branches Monitored" },
+            { value: 4, suffix: "", label: "Branches Monitored" },
             { value: 24, suffix: "/7", label: "Monitoring" },
             { value: 30, suffix: "min", label: "Check Interval" },
             { value: 3, suffix: "", label: "Alert Channels" },

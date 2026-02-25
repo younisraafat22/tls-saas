@@ -67,10 +67,12 @@ async def seed_data():
             if not exists.scalar_one_or_none():
                 db.add(Plan(**pd))
 
-        # Create branches — legalization only
+        # Create branches — Normal + Students legalization for each location
         branches_data = [
-            {"name": "Sheikh Zayed (Legalization)", "url": "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home", "service_type": ServiceType.LEGALIZATION},
-            {"name": "Hurghada (Legalization)", "url": "https://legalization-de.tlscontact.com/service/eg/egHRG2de/home", "service_type": ServiceType.LEGALIZATION},
+            {"name": "Sheikh Zayed - Normal Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home", "service_type": ServiceType.LEGALIZATION},
+            {"name": "Sheikh Zayed - Students Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home", "service_type": ServiceType.LEGALIZATION},
+            {"name": "Hurghada - Normal Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egHRG2de/home", "service_type": ServiceType.LEGALIZATION},
+            {"name": "Hurghada - Students Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egHRG2de/home", "service_type": ServiceType.LEGALIZATION},
         ]
         for bd in branches_data:
             exists = await db.execute(
