@@ -575,8 +575,28 @@ export default function AdminMonitoringPage() {
                     </div>
                     {r.error && <div className="text-xs text-amber-400 mt-0.5 truncate max-w-md">{r.error}</div>}
                     {r.slot_details && (
-                      <div className="text-xs text-accent-green mt-0.5">
-                        {typeof r.slot_details === "string" ? r.slot_details : JSON.stringify(r.slot_details)}
+                      <div className="text-xs mt-1 space-y-1">
+                        {(() => {
+                          const details = typeof r.slot_details === "string" ? (() => { try { return JSON.parse(r.slot_details); } catch { return null; } })() : r.slot_details;
+                          if (!details || !details.slots) return <span className="text-accent-green">{typeof r.slot_details === "string" ? r.slot_details : JSON.stringify(r.slot_details)}</span>;
+                          return (
+                            <div>
+                              <div className="text-accent-green font-semibold mb-1">
+                                {details.slots.length} day{details.slots.length !== 1 ? 's' : ''} with appointments found
+                                {details.months_checked && <span className="text-gray-500 font-normal"> (checked {details.months_checked} months)</span>}
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1">
+                                {details.slots.slice(0, 12).map((s: { day: string; times: string[] }, i: number) => (
+                                  <div key={i} className="bg-accent-green/10 border border-accent-green/20 rounded px-2 py-1">
+                                    <div className="text-accent-green font-medium">{s.day}</div>
+                                    <div className="text-gray-400 text-[10px]">{s.times?.map((t: string) => t.replace(/\n/g, ' ')).join(', ')}</div>
+                                  </div>
+                                ))}
+                                {details.slots.length > 12 && <div className="text-gray-500 text-[10px] flex items-center">+{details.slots.length - 12} more days</div>}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>

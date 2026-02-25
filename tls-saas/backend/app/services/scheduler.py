@@ -6,9 +6,10 @@ Coordinates checker, notifications, and WebSocket broadcasts.
 import asyncio
 import logging
 from collections import deque
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.date import DateTrigger
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -271,9 +272,9 @@ class SchedulerService:
 
     async def _notify_user(self, db, user: User, check_result: CheckResult,
                            branch: Branch, slot_details: dict | None):
-        """Send notifications to a user across all their enabled channels."""
+        """Send 2 emails to a user: immediate alert + 12-hour reminder."""
 
-        # Email notification
+        # Email 1: Immediate appointment alert
         try:
             success = email_service.send_appointment_alert(
                 to_email=user.email,
@@ -289,41 +290,39 @@ class SchedulerService:
                 destination=user.email,
                 status=NotificationLogStatus.SENT if success else NotificationLogStatus.FAILED,
             ))
+            # Email 2: Schedule 12-hour reminder
+            if success and self._scheduler and self._scheduler.running:
+                reminder_time = datetime.now(timezone.utc) + timedelta(hours=12)
+                job_id = f"reminder_{user.id}_{branch.id}_{check_result.id}"
+                # Remove any existing reminder for same user+branch to avoid spam
+                try:
+                    self._scheduler.remove_job(f"reminder_{user.id}_{branch.id}", jobstore="default")
+                except Exception:
+                    pass
+                self._scheduler.add_job(
+                    self._send_reminder_email,
+                    trigger=DateTrigger(run_date=reminder_time),
+                    id=f"reminder_{user.id}_{branch.id}",
+                    args=[user.email, user.full_name, branch.name, branch.service_type.value],
+                    replace_existing=True,
+                )
+                logger.info(f"Scheduled 12h reminder for {user.email} at {reminder_time}")
         except Exception as e:
             logger.error(f"Email notification failed for {user.email}: {e}")
 
-        # Web Push notification
-        if user.push_subscription:
-            try:
-                from pywebpush import webpush
-                import json
-                webpush(
-                    subscription_info=user.push_subscription,
-                    data=json.dumps({
-                        "title": f"🎉 Appointment Available — {branch.name}",
-                        "body": f"{branch.service_type.value.title()} slots detected! Book now.",
-                        "url": "/dashboard",
-                    }),
-                    vapid_private_key=settings.VAPID_PRIVATE_KEY,
-                    vapid_claims={"sub": f"mailto:{settings.VAPID_CLAIMS_EMAIL}"},
-                )
-                db.add(NotificationLog(
-                    user_id=user.id,
-                    check_result_id=check_result.id,
-                    channel=NotificationChannel.WEB_PUSH,
-                    destination="browser",
-                    status=NotificationLogStatus.SENT,
-                ))
-            except Exception as e:
-                logger.error(f"Web push failed for {user.email}: {e}")
-                db.add(NotificationLog(
-                    user_id=user.id,
-                    check_result_id=check_result.id,
-                    channel=NotificationChannel.WEB_PUSH,
-                    destination="browser",
-                    status=NotificationLogStatus.FAILED,
-                    error=str(e),
-                ))
+    @staticmethod
+    async def _send_reminder_email(to_email: str, user_name: str, branch_name: str, service_type: str):
+        """Send the 12-hour follow-up reminder email."""
+        try:
+            email_service.send_appointment_reminder(
+                to_email=to_email,
+                branch_name=branch_name,
+                service_type=service_type,
+                user_name=user_name,
+            )
+            logger.info(f"12h reminder sent to {to_email} for {branch_name}")
+        except Exception as e:
+            logger.error(f"12h reminder failed for {to_email}: {e}")
 
 
 # Singleton
