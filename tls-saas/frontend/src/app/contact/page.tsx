@@ -81,7 +81,7 @@ export default function ContactPage() {
             <form onSubmit={handleSubmit} className="glass-card p-6 sm:p-8 space-y-5">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1.5">{tr.nameLabel} {tr.required}</label>
+                  <label className="block text-sm text-gray-400 mb-1.5">{tr.nameLabel} <span className="text-red-400">*</span></label>
                   <input
                     type="text"
                     value={form.name}
@@ -92,7 +92,7 @@ export default function ContactPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1.5">{tr.emailLabel} {tr.required}</label>
+                  <label className="block text-sm text-gray-400 mb-1.5">{tr.emailLabel} <span className="text-red-400">*</span></label>
                   <input
                     type="email"
                     value={form.email}
@@ -114,7 +114,7 @@ export default function ContactPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1.5">{tr.messageLabel} {tr.required}</label>
+                <label className="block text-sm text-gray-400 mb-1.5">{tr.messageLabel} <span className="text-red-400">*</span></label>
                 <textarea
                   value={form.message}
                   onChange={(e) => setForm({ ...form, message: e.target.value })}
