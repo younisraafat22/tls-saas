@@ -178,10 +178,19 @@ export const subscriptionApi = {
 // ── Payment API ───────────────────────────────────────
 
 export const paymentApi = {
-  submit: (data: { plan_type: string; branch_id: number; method: string; reference: string; screenshot_data?: string; amount: number }) =>
+  submit: (data: { plan_type: string; branch_id: number; method: string; reference: string; screenshot_data?: string; amount: number; tls_email: string; tls_password: string }) =>
     api.post("/api/payments/submit", data),
   getMyPayments: () => api.get("/api/payments/my"),
   getStatus: (id: number) => api.get(`/api/payments/status/${id}`),
+};
+
+// ── Credential API ────────────────────────────────────
+
+export const credentialApi = {
+  getAll: () => api.get("/api/credentials/"),
+  save: (data: { service_type: string; tls_email: string; tls_password: string }) =>
+    api.post("/api/credentials/", data),
+  remove: (service_type: string) => api.delete(`/api/credentials/${service_type}`),
 };
 
 // ── Monitoring API ────────────────────────────────────

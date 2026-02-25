@@ -54,7 +54,8 @@ class Settings(BaseSettings):
     CREDENTIAL_ENCRYPTION_KEY: str = "credential-encryption-key-change-this"
 
     # ── Pricing (EGP) ───────────────────────────────────
-    PRICE_LEGALIZATION_MONTHLY: float = 500.0
+    PRICE_LEGALIZATION_MONTHLY: float = 300.0
+    PRICE_VISA_MONTHLY: float = 500.0
     CURRENCY: str = "EGP"
 
     @property

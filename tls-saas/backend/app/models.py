@@ -244,6 +244,30 @@ class SystemSetting(Base):
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class UserCredential(Base):
+    """
+    Stores a user's own TLS website credentials for a given service type.
+    Used by the scheduler to run checks on behalf of the user.
+    """
+    __tablename__ = "user_credentials"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    service_type = Column(SAEnum(ServiceType), nullable=False)
+    email_encrypted = Column(Text, nullable=False)
+    password_encrypted = Column(Text, nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(Text, default="")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "service_type", name="uq_user_credential_service"),
+    )
+
+    user = relationship("User", foreign_keys=[user_id])
+
+
 class ActivityLog(Base):
     """Admin activity / audit trail."""
     __tablename__ = "activity_logs"

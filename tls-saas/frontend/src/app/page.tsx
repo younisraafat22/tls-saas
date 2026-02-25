@@ -303,8 +303,8 @@ function Hero() {
 
                 {/* Branch cards */}
                 {[
-                  { name: "Sheikh Zayed", type: t.serviceTypes.legalization, status: t.hero.checking, color: "text-primary-400" },
-                  { name: "Hurghada", type: t.serviceTypes.legalization, status: t.hero.noSlots, color: "text-gray-400" },
+                  { name: t.branchNames["Sheikh Zayed"], type: t.serviceTypes.legalization, status: t.hero.checking, color: "text-primary-400" },
+                  { name: t.branchNames["Hurghada"], type: t.serviceTypes.legalization, status: t.hero.noSlots, color: "text-gray-400" },
                 ].map((branch, i) => (
                   <motion.div
                     key={branch.name}

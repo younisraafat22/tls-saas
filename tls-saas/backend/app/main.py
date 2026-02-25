@@ -15,7 +15,7 @@ from sqlalchemy import select, text
 from app.config import settings
 from app.database import create_tables, async_session
 from app.models import (
-    User, Plan, Branch, PlanType, ServiceType,
+    User, Plan, Branch, PlanType, ServiceType, UserCredential,
 )
 from app.auth import hash_password, decode_token, get_current_user
 from app.websocket import ws_manager
@@ -45,7 +45,7 @@ async def seed_data():
             db.add(admin)
             logger.info(f"Admin user created: {settings.ADMIN_EMAIL}")
 
-        # Create plans if not exist — legalization only
+        # Create plans if not exist — legalization + visa
         plans_data = [
             {
                 "plan_type": PlanType.LEGALIZATION,
@@ -61,18 +61,35 @@ async def seed_data():
                 ],
                 "sort_order": 1,
             },
+            {
+                "plan_type": PlanType.VISA,
+                "display_name": "Visa Monitor",
+                "description": "Monitor your personal TLS visa appointment — individual per-user check",
+                "price_monthly": settings.PRICE_VISA_MONTHLY,
+                "features": [
+                    "Your personal TLS visa appointment",
+                    "Individual check using your TLS credentials",
+                    "Email notifications",
+                    "Web push notifications",
+                    "Real-time dashboard",
+                    "30-minute sequential checks",
+                ],
+                "sort_order": 2,
+            },
         ]
         for pd in plans_data:
             exists = await db.execute(select(Plan).where(Plan.plan_type == pd["plan_type"]))
             if not exists.scalar_one_or_none():
                 db.add(Plan(**pd))
 
-        # Create branches — Normal + Students legalization for each location
+        # Create branches — Normal + Students legalization + visa for each location
         branches_data = [
             {"name": "Sheikh Zayed - Normal Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home", "service_type": ServiceType.LEGALIZATION},
             {"name": "Sheikh Zayed - Students Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home", "service_type": ServiceType.LEGALIZATION},
             {"name": "Hurghada - Normal Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egHRG2de/home", "service_type": ServiceType.LEGALIZATION},
             {"name": "Hurghada - Students Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egHRG2de/home", "service_type": ServiceType.LEGALIZATION},
+            {"name": "Sheikh Zayed - Visa", "url": "https://visas-de.tlscontact.com/visa/gb/egCAI2gb/home", "service_type": ServiceType.VISA},
+            {"name": "Hurghada - Visa", "url": "https://visas-de.tlscontact.com/visa/gb/egHRG2gb/home", "service_type": ServiceType.VISA},
         ]
         for bd in branches_data:
             exists = await db.execute(
@@ -109,6 +126,28 @@ async def lifespan(app: FastAPI):
             logger.info("Migration: added screenshot_data to payments table")
         except Exception:
             pass  # Column already exists
+
+    # Create user_credentials table if not exists (handled by create_tables, but add migration safety)
+    async with async_session() as db:
+        try:
+            await db.execute(text("""
+                CREATE TABLE IF NOT EXISTS user_credentials (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    service_type VARCHAR NOT NULL,
+                    email_encrypted TEXT NOT NULL,
+                    password_encrypted TEXT NOT NULL,
+                    is_active BOOLEAN DEFAULT 1,
+                    created_at DATETIME,
+                    last_used_at DATETIME,
+                    last_error TEXT DEFAULT '',
+                    UNIQUE(user_id, service_type)
+                )
+            """))
+            await db.commit()
+            logger.info("Migration: ensured user_credentials table exists")
+        except Exception:
+            pass
 
     # Rename legalization branches to include service label
     async with async_session() as db:
@@ -174,11 +213,22 @@ async def lifespan(app: FastAPI):
                     "p": settings.PRICE_LEGALIZATION_MONTHLY,
                 },
             )
-            # Remove visa plan and branches (no longer offered)
-            await db.execute(text("DELETE FROM plans WHERE UPPER(plan_type) = 'VISA'"))
-            await db.execute(text("DELETE FROM branches WHERE UPPER(service_type) = 'VISA'"))
             # Remove all-in-one plan (no longer offered)
             await db.execute(text("DELETE FROM plans WHERE UPPER(plan_type) = 'ALL_IN_ONE'"))
+            # Update legalization price to 300
+            await db.execute(
+                text("UPDATE plans SET price_monthly = :p WHERE UPPER(plan_type) = 'LEGALIZATION'"),
+                {"p": settings.PRICE_LEGALIZATION_MONTHLY},
+            )
+            # Restore visa plan if it was deleted — seed_data will add it back; just ensure price is correct
+            await db.execute(
+                text("UPDATE plans SET price_monthly = :p WHERE UPPER(plan_type) = 'VISA'"),
+                {"p": settings.PRICE_VISA_MONTHLY},
+            )
+            # Restore visa branches if deactivated
+            await db.execute(
+                text("UPDATE branches SET is_active = 1 WHERE UPPER(service_type) = 'VISA'")
+            )
             await db.commit()
             logger.info("Migration: updated legalization plan name/features/price, removed visa plans/branches")
         except Exception as e:
@@ -242,6 +292,7 @@ from app.api.payment_routes import router as payment_router
 from app.api.monitoring_routes import router as monitoring_router
 from app.api.admin_routes import router as admin_router
 from app.api.contact_routes import router as contact_router
+from app.api.credential_routes import router as credential_router
 
 app.include_router(auth_router)
 app.include_router(sub_router)
@@ -249,6 +300,7 @@ app.include_router(payment_router)
 app.include_router(monitoring_router)
 app.include_router(admin_router)
 app.include_router(contact_router)
+app.include_router(credential_router)
 
 
 # ── Health Check ─────────────────────────────────────────────────────

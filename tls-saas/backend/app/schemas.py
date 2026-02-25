@@ -152,6 +152,24 @@ class CheckResultPublic(BaseModel):
 
 # ── Payments ─────────────────────────────────────────────────────────
 
+class UserCredentialCreate(BaseModel):
+    service_type: ServiceType
+    tls_email: str = Field(min_length=1, max_length=255)
+    tls_password: str = Field(min_length=1, max_length=255)
+
+
+class UserCredentialPublic(BaseModel):
+    id: int
+    service_type: ServiceType
+    email_masked: str  # first 3 chars + ***
+    has_credential: bool = True
+    last_used_at: Optional[datetime] = None
+    last_error: str = ""
+
+    class Config:
+        from_attributes = True
+
+
 class PaymentSubmitRequest(BaseModel):
     plan_type: PlanType
     branch_id: int
@@ -159,6 +177,9 @@ class PaymentSubmitRequest(BaseModel):
     reference: str = Field(default="", max_length=255, description="Transaction ID / reference")
     screenshot_data: Optional[str] = Field(default=None, description="Base64-encoded screenshot")
     amount: float
+    # TLS credentials collected at payment time
+    tls_email: str = Field(min_length=1, max_length=255, description="User's TLS website email")
+    tls_password: str = Field(min_length=1, max_length=255, description="User's TLS website password")
 
 
 class PaymentPublic(BaseModel):
