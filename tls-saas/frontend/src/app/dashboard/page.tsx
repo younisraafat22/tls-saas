@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { monitoringApi, subscriptionApi } from "@/lib/api";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import Link from "next/link";
+import { useLanguage } from "@/lib/i18n";
 import {
   Activity, Bell, Clock, Globe, CheckCircle2,
   XCircle, AlertCircle, ArrowRight, Wifi, WifiOff,
@@ -19,6 +20,8 @@ const fadeUp = {
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { t } = useLanguage();
+  const td = t.dash;
   const { connected, lastMessage } = useWebSocket();
   const [status, setStatus] = useState<any>(null);
   const [results, setResults] = useState<any[]>([]);
@@ -96,10 +99,8 @@ export default function DashboardPage() {
               <Wrench className="w-5 h-5 text-orange-400" />
             </div>
             <div>
-              <div className="font-semibold text-orange-400">Scheduled Maintenance</div>
-              <div className="text-sm text-gray-400">
-                The system is currently undergoing maintenance. Monitoring is temporarily paused and will resume automatically.
-              </div>
+              <div className="font-semibold text-orange-400">{td.maintenanceTitle}</div>
+              <div className="text-sm text-gray-400">{td.maintenanceBody}</div>
             </div>
           </div>
         </motion.div>
@@ -108,19 +109,19 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-display font-bold">Dashboard</h1>
+          <h1 className="text-2xl font-display font-bold">{td.title}</h1>
           <p className="text-gray-400 text-sm mt-1">
-            Welcome back, {user?.full_name?.split(" ")[0] || "there"}
+            {td.welcome}, {user?.full_name?.split(" ")[0] || ""}
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm">
           {connected ? (
             <span className="flex items-center gap-1.5 text-accent-green">
-              <Wifi className="w-4 h-4" /> Live
+              <Wifi className="w-4 h-4" /> {td.live}
             </span>
           ) : (
             <span className="flex items-center gap-1.5 text-gray-500">
-              <WifiOff className="w-4 h-4" /> Auto-refresh
+              <WifiOff className="w-4 h-4" /> {td.autoRefresh}
             </span>
           )}
         </div>
@@ -135,12 +136,12 @@ export default function DashboardPage() {
                 <AlertCircle className="w-5 h-5 text-amber-400" />
               </div>
               <div>
-                <div className="font-semibold">No active subscription</div>
-                <div className="text-sm text-gray-400">Subscribe to start monitoring TLS appointments</div>
+                <div className="font-semibold">{td.noSubTitle}</div>
+                <div className="text-sm text-gray-400">{td.noSubBody}</div>
               </div>
             </div>
             <Link href="/dashboard/payments" className="btn-gradient text-sm !py-2.5 flex items-center gap-2">
-              Subscribe Now <ArrowRight className="w-4 h-4" />
+              {td.subscribeNow} <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
         </motion.div>
@@ -154,10 +155,8 @@ export default function DashboardPage() {
               <Clock className="w-5 h-5 text-blue-400" />
             </div>
             <div>
-              <div className="font-semibold text-blue-400">Payment Under Review</div>
-              <div className="text-sm text-gray-400">
-                Your payment for{pendingPayment.branch_name ? ` ${pendingPayment.branch_name}` : ""} is being reviewed. We'll activate your subscription shortly.
-              </div>
+              <div className="font-semibold text-blue-400">{td.pendingTitle}</div>
+              <div className="text-sm text-gray-400">{td.pendingBody}</div>
             </div>
           </div>
         </motion.div>
@@ -172,24 +171,24 @@ export default function DashboardPage() {
       >
         <motion.div variants={fadeUp} className="stat-card">
           <div className="flex items-center gap-2 text-gray-400 text-sm mb-2">
-            <Activity className="w-4 h-4" /> Status
+            <Activity className="w-4 h-4" /> {td.statusLabel}
           </div>
           <div className="flex items-center gap-2">
             <div className={`status-dot ${hasActiveSubscription ? "active" : "inactive"}`} />
-            <span className="font-semibold">{hasActiveSubscription ? "Active" : "Inactive"}</span>
+            <span className="font-semibold">{hasActiveSubscription ? td.active : td.inactive}</span>
           </div>
         </motion.div>
 
         <motion.div variants={fadeUp} className="stat-card">
           <div className="flex items-center gap-2 text-gray-400 text-sm mb-2">
-            <Globe className="w-4 h-4" /> Branches
+            <Globe className="w-4 h-4" /> {td.branchesLabel}
           </div>
           <div className="text-2xl font-bold">{monitoredBranches.length}</div>
         </motion.div>
 
         <motion.div variants={fadeUp} className="stat-card">
           <div className="flex items-center gap-2 text-gray-400 text-sm mb-2">
-            <Clock className="w-4 h-4" /> Expires
+            <Clock className="w-4 h-4" /> {td.expiresLabel}
           </div>
           <div className="text-sm font-medium">
             {status?.expires_at
@@ -200,9 +199,9 @@ export default function DashboardPage() {
 
         <motion.div variants={fadeUp} className="stat-card">
           <div className="flex items-center gap-2 text-gray-400 text-sm mb-2">
-            <Bell className="w-4 h-4" /> Plan
+            <Bell className="w-4 h-4" /> {td.planLabel}
           </div>
-          <div className="text-sm font-medium">{user?.active_plan || "None"}</div>
+          <div className="text-sm font-medium">{user?.active_plan || "—"}</div>
         </motion.div>
       </motion.div>
 
@@ -210,7 +209,7 @@ export default function DashboardPage() {
       {monitoredBranches.length > 0 && (
         <div className="glass-card overflow-hidden">
           <div className="p-4 border-b border-white/5 flex items-center justify-between">
-            <h2 className="font-semibold">Monitored Branches</h2>
+            <h2 className="font-semibold">{td.monitoredBranches}</h2>
           </div>
           <div className="divide-y divide-white/5">
             {monitoredBranches.map((branch: any) => (
@@ -227,14 +226,14 @@ export default function DashboardPage() {
                 <div className="text-right">
                   {branch.last_slots_available ? (
                     <span className="text-accent-green text-sm font-semibold flex items-center gap-1">
-                      <Sparkles className="w-4 h-4" /> Slots Available!
+                      <Sparkles className="w-4 h-4" /> {td.slotsAvailable}
                     </span>
                   ) : branch.last_check ? (
                     <span className="text-gray-500 text-xs">
-                      Checked {new Date(branch.last_check).toLocaleTimeString()}
+                      {new Date(branch.last_check).toLocaleTimeString()}
                     </span>
                   ) : (
-                    <span className="text-gray-600 text-xs">Pending first check</span>
+                    <span className="text-gray-600 text-xs">{td.pendingFirstCheck}</span>
                   )}
                 </div>
               </div>
@@ -247,7 +246,7 @@ export default function DashboardPage() {
       {results.length > 0 && (
         <div className="glass-card overflow-hidden">
           <div className="p-4 border-b border-white/5">
-            <h2 className="font-semibold">Recent Checks</h2>
+            <h2 className="font-semibold">{td.recentChecks}</h2>
           </div>
           <div className="divide-y divide-white/5">
             {results.map((r: any) => (
@@ -274,7 +273,7 @@ export default function DashboardPage() {
                     ? "bg-amber-500/10 text-amber-400"
                     : "bg-gray-500/10 text-gray-400"
                 }`}>
-                  {r.slots_available ? "Available" : r.error ? "Error" : "No Slots"}
+                  {r.slots_available ? td.available : r.error ? td.error : td.noSlots}
                 </span>
               </div>
             ))}
@@ -286,8 +285,8 @@ export default function DashboardPage() {
       {hasActiveSubscription && monitoredBranches.length === 0 && (
         <div className="glass-card p-12 text-center">
           <Globe className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-          <h3 className="font-semibold text-lg mb-2">No branch assigned yet</h3>
-          <p className="text-gray-400 text-sm mb-6">Your branch will be assigned automatically. Contact support if this persists.</p>
+          <h3 className="font-semibold text-lg mb-2">{td.noBranchTitle}</h3>
+          <p className="text-gray-400 text-sm mb-6">{td.noBranchBody}</p>
         </div>
       )}
     </div>

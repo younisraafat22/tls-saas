@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { monitoringApi } from "@/lib/api";
+import { useLanguage } from "@/lib/i18n";
 import {
   Bell, Mail, Smartphone, CheckCircle2,
   XCircle, AlertCircle, Filter, ChevronDown,
@@ -19,6 +20,8 @@ const channelColors: Record<string, string> = {
 };
 
 export default function NotificationsPage() {
+  const { t } = useLanguage();
+  const tn = t.notifs;
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
@@ -53,10 +56,8 @@ export default function NotificationsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-display font-bold">Notifications</h1>
-          <p className="text-gray-400 text-sm mt-1">
-            History of all alerts sent to you
-          </p>
+          <h1 className="text-2xl font-display font-bold">{tn.title}</h1>
+          <p className="text-gray-400 text-sm mt-1">{tn.sub}</p>
         </div>
         <div className="relative">
           <button
@@ -64,7 +65,7 @@ export default function NotificationsPage() {
             className="flex items-center gap-2 px-3 py-2 bg-dark-700 border border-white/10 rounded-xl text-sm hover:bg-dark-600 transition-colors"
           >
             <Filter className="w-4 h-4 text-gray-400" />
-            {filter === "all" ? "All Channels" : filter.charAt(0).toUpperCase() + filter.slice(1)}
+            {filter === "all" ? tn.allChannels : filter === "web_push" ? tn.push : filter.charAt(0).toUpperCase() + filter.slice(1)}
             <ChevronDown className="w-3 h-3 text-gray-400" />
           </button>
           {showFilter && (
@@ -82,7 +83,7 @@ export default function NotificationsPage() {
                   }`}
                 >
                   {ch !== "all" && <span className={channelColors[ch]}>{channelIcons[ch]}</span>}
-                  {ch === "all" ? "All Channels" : ch === "web_push" ? "Push" : "Email"}
+                  {ch === "all" ? tn.allChannels : ch === "web_push" ? tn.push : "Email"}
                 </button>
               ))}
             </motion.div>
@@ -103,7 +104,7 @@ export default function NotificationsPage() {
             >
               <div className={`flex items-center gap-2 text-sm mb-1 ${channelColors[ch]}`}>
                 {channelIcons[ch]}
-                {ch === "web_push" ? "Push" : ch.charAt(0).toUpperCase() + ch.slice(1)}
+                {ch === "web_push" ? tn.push : ch === "telegram" ? "Telegram" : "Email"}
               </div>
               <div className="text-2xl font-bold">{count}</div>
             </motion.div>
@@ -115,10 +116,8 @@ export default function NotificationsPage() {
       {filtered.length === 0 ? (
         <div className="glass-card p-12 text-center">
           <Bell className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-          <h3 className="font-semibold text-lg mb-2">No notifications yet</h3>
-          <p className="text-gray-400 text-sm">
-            When appointments are found, you&apos;ll see notification history here.
-          </p>
+          <h3 className="font-semibold text-lg mb-2">{tn.emptyTitle}</h3>
+          <p className="text-gray-400 text-sm">{tn.emptyBody}</p>
         </div>
       ) : (
         <div className="glass-card overflow-hidden">
@@ -147,11 +146,11 @@ export default function NotificationsPage() {
                 <div className="flex items-center gap-2">
                   {n.status === "sent" ? (
                     <span className="text-accent-green flex items-center gap-1 text-xs">
-                      <CheckCircle2 className="w-3 h-3" /> Sent
+                      <CheckCircle2 className="w-3 h-3" /> {tn.sent}
                     </span>
                   ) : (
                     <span className="text-red-400 flex items-center gap-1 text-xs">
-                      <XCircle className="w-3 h-3" /> Failed
+                      <XCircle className="w-3 h-3" /> {tn.failed}
                     </span>
                   )}
                 </div>

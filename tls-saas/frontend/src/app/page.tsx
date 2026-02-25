@@ -477,7 +477,7 @@ function Pricing() {
                 </div>
 
                 <ul className="space-y-3 mb-8">
-                  {(plan.features || []).map((feat: string) => (
+                  {t.planFeatures.map((feat) => (
                     <li key={feat} className="flex items-start gap-2 text-sm">
                       <Check className="w-4 h-4 text-accent-green mt-0.5 shrink-0" />
                       <span className="text-gray-300">{feat}</span>

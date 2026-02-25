@@ -9,9 +9,12 @@ import {
   User, Lock, Bell, Save,
   Eye, EyeOff, Loader2,
 } from "lucide-react";
+import { useLanguage } from "@/lib/i18n";
 
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth();
+  const { t } = useLanguage();
+  const ts = t.settings;
   const [activeTab, setActiveTab] = useState("profile");
 
   // Profile form
@@ -46,7 +49,7 @@ export default function SettingsPage() {
     try {
       await authApi.updateProfile({ full_name: fullName, phone: phone || undefined });
       await refreshUser();
-      showToast("success", "Profile updated!");
+      showToast("success", ts.profileSaved);
     } catch (err: any) {
       showToast("error", err?.detail || "Failed to update profile");
     } finally {
@@ -56,7 +59,7 @@ export default function SettingsPage() {
 
   const handlePasswordChange = async () => {
     if (newPassword !== confirmPassword) {
-      showToast("error", "Passwords don't match");
+      showToast("error", ts.passwordsDontMatch);
       return;
     }
     if (newPassword.length < 8) {
@@ -69,7 +72,7 @@ export default function SettingsPage() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      showToast("success", "Password changed successfully!");
+      showToast("success", ts.passwordChanged);
     } catch (err: any) {
       showToast("error", err?.detail || "Failed to change password");
     } finally {
@@ -78,9 +81,9 @@ export default function SettingsPage() {
   };
 
   const tabs = [
-    { id: "profile", label: "Profile", icon: <User className="w-4 h-4" /> },
-    { id: "password", label: "Password", icon: <Lock className="w-4 h-4" /> },
-    { id: "notifications", label: "Notifications", icon: <Bell className="w-4 h-4" /> },
+    { id: "profile", label: ts.tabProfile, icon: <User className="w-4 h-4" /> },
+    { id: "password", label: ts.tabPassword, icon: <Lock className="w-4 h-4" /> },
+    { id: "notifications", label: ts.tabNotifications, icon: <Bell className="w-4 h-4" /> },
   ];
 
   return (
@@ -102,8 +105,8 @@ export default function SettingsPage() {
       </AnimatePresence>
 
       <div>
-        <h1 className="text-2xl font-display font-bold">Settings</h1>
-        <p className="text-gray-400 text-sm mt-1">Manage your account and notification preferences</p>
+        <h1 className="text-2xl font-display font-bold">{ts.title}</h1>
+        <p className="text-gray-400 text-sm mt-1">{ts.sub}</p>
       </div>
 
       {/* Tab navigation */}
@@ -125,16 +128,16 @@ export default function SettingsPage() {
       {activeTab === "profile" && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-card p-6 space-y-5">
           <h2 className="font-semibold flex items-center gap-2">
-            <User className="w-5 h-5 text-primary-400" /> Profile Information
+            <User className="w-5 h-5 text-primary-400" /> {ts.profileTitle}
           </h2>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-gray-400 mb-1.5 block">Email</label>
+              <label className="text-sm text-gray-400 mb-1.5 block">{ts.emailLabel}</label>
               <input type="email" value={user?.email || ""} disabled className="input-field opacity-50 cursor-not-allowed" />
-              <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
+              <p className="text-xs text-gray-500 mt-1">{ts.emailNote}</p>
             </div>
             <div>
-              <label className="text-sm text-gray-400 mb-1.5 block">Full Name</label>
+              <label className="text-sm text-gray-400 mb-1.5 block">{ts.fullName}</label>
               <input
                 type="text"
                 value={fullName}
@@ -143,7 +146,7 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <label className="text-sm text-gray-400 mb-1.5 block">Phone (Optional)</label>
+              <label className="text-sm text-gray-400 mb-1.5 block">{ts.phone}</label>
               <input
                 type="tel"
                 value={phone}
@@ -159,7 +162,7 @@ export default function SettingsPage() {
             className="btn-gradient flex items-center gap-2 disabled:opacity-50"
           >
             {profileSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Save Changes
+            {ts.saveChanges}
           </button>
         </motion.div>
       )}
@@ -168,11 +171,11 @@ export default function SettingsPage() {
       {activeTab === "password" && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-card p-6 space-y-5">
           <h2 className="font-semibold flex items-center gap-2">
-            <Lock className="w-5 h-5 text-primary-400" /> Change Password
+            <Lock className="w-5 h-5 text-primary-400" /> {ts.passwordTitle}
           </h2>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-gray-400 mb-1.5 block">Current Password</label>
+              <label className="text-sm text-gray-400 mb-1.5 block">{ts.currentPassword}</label>
               <div className="relative">
                 <input
                   type={showPasswords ? "text" : "password"}
@@ -189,7 +192,7 @@ export default function SettingsPage() {
               </div>
             </div>
             <div>
-              <label className="text-sm text-gray-400 mb-1.5 block">New Password</label>
+              <label className="text-sm text-gray-400 mb-1.5 block">{ts.newPassword}</label>
               <input
                 type={showPasswords ? "text" : "password"}
                 value={newPassword}
@@ -198,7 +201,7 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <label className="text-sm text-gray-400 mb-1.5 block">Confirm New Password</label>
+              <label className="text-sm text-gray-400 mb-1.5 block">{ts.confirmPassword}</label>
               <input
                 type={showPasswords ? "text" : "password"}
                 value={confirmPassword}
@@ -206,7 +209,7 @@ export default function SettingsPage() {
                 className="input-field"
               />
               {confirmPassword && newPassword !== confirmPassword && (
-                <p className="text-xs text-red-400 mt-1">Passwords don&apos;t match</p>
+                <p className="text-xs text-red-400 mt-1">{ts.passwordsDontMatch}</p>
               )}
             </div>
           </div>
@@ -216,7 +219,7 @@ export default function SettingsPage() {
             className="btn-gradient flex items-center gap-2 disabled:opacity-50"
           >
             {passwordSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
-            Change Password
+            {ts.changePassword}
           </button>
         </motion.div>
       )}
@@ -225,15 +228,13 @@ export default function SettingsPage() {
       {activeTab === "notifications" && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-card p-6 space-y-5">
           <h2 className="font-semibold flex items-center gap-2">
-            <Bell className="w-5 h-5 text-primary-400" /> Notification Preferences
+            <Bell className="w-5 h-5 text-primary-400" /> {ts.notifTitle}
           </h2>
           <div className="space-y-3">
-            <NotifToggle icon={<Bell className="w-4 h-4" />} label="Email Notifications" description="Receive alerts via email" defaultOn={true} />
+            <NotifToggle icon={<Bell className="w-4 h-4" />} label={ts.emailNotifLabel} description={ts.emailNotifDesc} defaultOn={true} />
             <PushNotifToggle />
           </div>
-          <p className="text-xs text-gray-500">
-            All enabled channels will receive appointment alerts simultaneously for maximum speed.
-          </p>
+          <p className="text-xs text-gray-500">{ts.notifFooter}</p>
         </motion.div>
       )}
 
