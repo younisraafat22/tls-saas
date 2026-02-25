@@ -10,6 +10,41 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { subscriptionApi } from "@/lib/api";
+import { useLanguage, localeLabels, type Locale } from "@/lib/i18n";
+
+// ── Language Switcher ───────────────────────────────────
+
+function LangSwitcher() {
+  const { locale, setLocale } = useLanguage();
+  const [lsOpen, setLsOpen] = useState(false);
+  const locales: Locale[] = ["en", "ar", "de"];
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setLsOpen(!lsOpen)}
+        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-gray-300 hover:text-white hover:bg-white/10 transition-all border border-white/10"
+      >
+        {localeLabels[locale]}
+        <ChevronDown className="w-3 h-3" />
+      </button>
+      {lsOpen && (
+        <div className="absolute right-0 top-full mt-1 bg-dark-900 border border-white/10 rounded-xl shadow-xl overflow-hidden z-50 min-w-[80px]">
+          {locales.map((l) => (
+            <button
+              key={l}
+              onClick={() => { setLocale(l); setLsOpen(false); }}
+              className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 transition-colors ${
+                locale === l ? "text-primary-400 font-semibold" : "text-gray-300"
+              }`}
+            >
+              {localeLabels[l]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Animation Variants ─────────────────────────────────
 
@@ -113,6 +148,7 @@ function Counter({ target, suffix = "" }: { target: number; suffix?: string }) {
 
 function Navbar() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -128,7 +164,11 @@ function Navbar() {
       animate={{ y: 0 }}
       transition={{ duration: 0.6, ease: "easeOut" }}
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled || mobileOpen ? "bg-dark-800/95 backdrop-blur-xl shadow-lg shadow-black/20 border-b border-white/5" : ""
+        mobileOpen
+          ? "bg-dark-900 shadow-lg shadow-black/30 border-b border-white/5"
+          : scrolled
+          ? "bg-dark-800/95 backdrop-blur-xl shadow-lg shadow-black/20 border-b border-white/5"
+          : ""
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -139,24 +179,25 @@ function Navbar() {
           </Link>
 
           <div className="hidden md:flex items-center gap-8">
-            <a href="#features" className="text-gray-400 hover:text-white transition-colors text-sm">Features</a>
-            <a href="#how-it-works" className="text-gray-400 hover:text-white transition-colors text-sm">How It Works</a>
-            <a href="#pricing" className="text-gray-400 hover:text-white transition-colors text-sm">Pricing</a>
-            <a href="#faq" className="text-gray-400 hover:text-white transition-colors text-sm">FAQ</a>
+            <a href="#features" className="text-gray-400 hover:text-white transition-colors text-sm">{t.nav.features}</a>
+            <a href="#how-it-works" className="text-gray-400 hover:text-white transition-colors text-sm">{t.nav.howItWorks}</a>
+            <a href="#pricing" className="text-gray-400 hover:text-white transition-colors text-sm">{t.nav.pricing}</a>
+            <a href="#faq" className="text-gray-400 hover:text-white transition-colors text-sm">{t.nav.faq}</a>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <LangSwitcher />
             {user ? (
               <Link href={user.is_admin ? "/admin" : "/dashboard"} className="btn-gradient text-sm !py-2 !px-5">
-                Dashboard
+                {t.nav.dashboard}
               </Link>
             ) : (
               <>
                 <Link href="/login" className="text-gray-400 hover:text-white transition-colors text-sm hidden sm:block">
-                  Log In
+                  {t.nav.logIn}
                 </Link>
                 <Link href="/register" className="btn-gradient text-sm !py-2 !px-5">
-                  Get Started
+                  {t.nav.getStarted}
                 </Link>
               </>
             )}
@@ -168,18 +209,21 @@ function Navbar() {
           </div>
         </div>
 
-        {/* Mobile menu */}
+        {/* Mobile menu — nav has bg-dark-900 when mobileOpen */}
         {mobileOpen && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
-            className="md:hidden pb-4 border-t border-white/5"
+            className="md:hidden pb-4 border-t border-white/10"
           >
-            <div className="flex flex-col gap-2 pt-4">
-              <a href="#features" className="px-4 py-2 text-gray-400 hover:text-white" onClick={() => setMobileOpen(false)}>Features</a>
-              <a href="#how-it-works" className="px-4 py-2 text-gray-400 hover:text-white" onClick={() => setMobileOpen(false)}>How It Works</a>
-              <a href="#pricing" className="px-4 py-2 text-gray-400 hover:text-white" onClick={() => setMobileOpen(false)}>Pricing</a>
-              <a href="#faq" className="px-4 py-2 text-gray-400 hover:text-white" onClick={() => setMobileOpen(false)}>FAQ</a>
+            <div className="flex flex-col gap-1 pt-3">
+              <a href="#features" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.features}</a>
+              <a href="#how-it-works" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.howItWorks}</a>
+              <a href="#pricing" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.pricing}</a>
+              <a href="#faq" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.faq}</a>
+              {!user && (
+                <Link href="/login" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.logIn}</Link>
+              )}
             </div>
           </motion.div>
         )}
@@ -191,6 +235,7 @@ function Navbar() {
 // ── Hero Section ────────────────────────────────────────
 
 function Hero() {
+  const { t } = useLanguage();
   return (
     <section className="relative min-h-screen flex items-center pt-20 overflow-hidden">
       <Particles />
@@ -201,32 +246,32 @@ function Hero() {
           <motion.div initial="hidden" animate="visible" variants={staggerContainer}>
             <motion.div variants={fadeUp} className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-500/10 border border-primary-500/20 mb-6">
               <span className="status-dot active" />
-              <span className="text-primary-400 text-sm font-medium">Live Monitoring Active</span>
+              <span className="text-primary-400 text-sm font-medium">{t.hero.badge}</span>
             </motion.div>
 
             <motion.h1 variants={fadeUp} className="text-4xl sm:text-5xl lg:text-6xl font-display font-bold leading-tight mb-6">
-              Never Miss Your{" "}
+              {t.hero.headline1}{" "}
               <span className="bg-gradient-to-r from-primary-400 to-blue-500 bg-clip-text text-transparent">
-                TLS Appointment
+                {t.hero.headline2}
               </span>{" "}
-              Again
+              {t.hero.headline3}
             </motion.h1>
 
             <motion.p variants={fadeUp} className="text-lg text-gray-400 mb-8 max-w-lg">
-              24/7 automated monitoring for German document legalization appointments in Egypt.
+              {t.hero.sub}
             </motion.p>
 
             <motion.div variants={fadeUp} className="flex flex-wrap gap-4 mb-10">
               <Link href="/register" className="btn-gradient text-base flex items-center gap-2 !px-8 !py-4">
-                Start Monitoring <ArrowRight className="w-5 h-5" />
+                {t.hero.cta} <ArrowRight className="w-5 h-5" />
               </Link>
               <a href="#how-it-works" className="btn-outline text-base !px-8 !py-4">
-                Learn More
+                {t.hero.learnMore}
               </a>
             </motion.div>
 
             <motion.div variants={fadeUp} className="flex flex-wrap gap-6 text-sm text-gray-400">
-              {["Email Alerts", "Works on Phone"].map((item) => (
+              {[t.hero.emailAlerts, t.hero.mobileReady].map((item) => (
                 <div key={item} className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-accent-green" />
                   <span>{item}</span>
@@ -251,15 +296,15 @@ function Hero() {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <div className="status-dot active" />
-                    <span className="text-sm font-medium">Monitoring Active</span>
+                    <span className="text-sm font-medium">{t.hero.monitoringActive}</span>
                   </div>
-                  <span className="text-xs text-gray-500">Live</span>
+                  <span className="text-xs text-gray-500">{t.hero.live}</span>
                 </div>
 
                 {/* Branch cards */}
                 {[
-                  { name: "Sheikh Zayed", type: "Legalization", status: "Checking...", color: "text-primary-400" },
-                  { name: "Hurghada", type: "Legalization", status: "No slots", color: "text-gray-400" },
+                  { name: "Sheikh Zayed", type: "Legalization", status: t.hero.checking, color: "text-primary-400" },
+                  { name: "Hurghada", type: "Legalization", status: t.hero.noSlots, color: "text-gray-400" },
                 ].map((branch, i) => (
                   <motion.div
                     key={branch.name}
@@ -283,7 +328,7 @@ function Hero() {
                   transition={{ delay: 1.5, type: "spring" }}
                   className="absolute -top-4 -right-4 bg-accent-green text-black px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-accent-green/30"
                 >
-                  🎉 Slots Open!
+                  {t.hero.slotsOpen}
                 </motion.div>
               </div>
             </div>
@@ -293,10 +338,10 @@ function Hero() {
         {/* Stats bar */}
         <AnimatedSection className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-20 pt-10 border-t border-white/5">
           {[
-            { value: 4, suffix: "", label: "Branches Monitored" },
-            { value: 24, suffix: "/7", label: "Monitoring" },
-            { value: 30, suffix: "min", label: "Check Interval" },
-            { value: 3, suffix: "", label: "Alert Channels" },
+            { value: 4, suffix: "", label: t.stats.branches },
+            { value: 24, suffix: "/7", label: t.stats.monitoring },
+            { value: 30, suffix: "min", label: t.stats.checkInterval },
+            { value: 3, suffix: "", label: t.stats.alertChannels },
           ].map((stat) => (
             <motion.div key={stat.label} variants={fadeUp} className="text-center">
               <div className="text-3xl font-display font-bold text-primary-400">
@@ -314,14 +359,8 @@ function Hero() {
 // ── Features Section ────────────────────────────────────
 
 function Features() {
-  const features = [
-    { icon: Bell, title: "Instant Notifications", desc: "Email and browser push — get alerted the second a slot opens, even on your phone." },
-    { icon: Shield, title: "Secure & Private", desc: "Your data stays safe. Encrypted credentials, secure auth, and no data sharing. Ever." },
-    { icon: Globe, title: "Both Branches", desc: "Monitor Sheikh Zayed & Hurghada legalization branches — both covered under one subscription." },
-    { icon: Zap, title: "Lightning Fast", desc: "Our server checks every 30 minutes. When slots appear, you know within seconds." },
-    { icon: Clock, title: "24/7 Monitoring", desc: "Our server never sleeps. It checks around the clock so you don't have to." },
-    { icon: Smartphone, title: "Mobile Friendly", desc: "Check your dashboard from any device. Your phone, tablet, or computer." },
-  ];
+  const { t } = useLanguage();
+  const icons = [Bell, Shield, Globe, Zap, Clock, Smartphone];
 
   return (
     <section id="features" className="py-24 relative">
@@ -329,23 +368,26 @@ function Features() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
         <AnimatedSection className="text-center mb-16">
           <motion.h2 variants={fadeUp} className="text-3xl sm:text-4xl font-display font-bold mb-4">
-            Why Choose <span className="text-primary-400">TLS Appointment Checker</span>?
+            {t.features.title} <span className="text-primary-400">{t.features.titleHighlight}</span>{t.features.titleEnd}
           </motion.h2>
           <motion.p variants={fadeUp} className="text-gray-400 max-w-2xl mx-auto">
-            Stop refreshing the TLS website manually. Let our server do the work while you live your life.
+            {t.features.sub}
           </motion.p>
         </AnimatedSection>
 
         <AnimatedSection className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {features.map((f) => (
-            <motion.div key={f.title} variants={scaleIn} className="glass-card p-6 group">
-              <div className="w-12 h-12 rounded-xl bg-primary-500/10 flex items-center justify-center mb-4 group-hover:bg-primary-500/20 transition-colors">
-                <f.icon className="w-6 h-6 text-primary-400" />
-              </div>
-              <h3 className="font-semibold text-lg mb-2">{f.title}</h3>
-              <p className="text-gray-400 text-sm leading-relaxed">{f.desc}</p>
-            </motion.div>
-          ))}
+          {t.features.items.map((f, i) => {
+            const Icon = icons[i];
+            return (
+              <motion.div key={f.title} variants={scaleIn} className="glass-card p-6 group">
+                <div className="w-12 h-12 rounded-xl bg-primary-500/10 flex items-center justify-center mb-4 group-hover:bg-primary-500/20 transition-colors">
+                  <Icon className="w-6 h-6 text-primary-400" />
+                </div>
+                <h3 className="font-semibold text-lg mb-2">{f.title}</h3>
+                <p className="text-gray-400 text-sm leading-relaxed">{f.desc}</p>
+              </motion.div>
+            );
+          })}
         </AnimatedSection>
       </div>
     </section>
@@ -355,35 +397,28 @@ function Features() {
 // ── How It Works ────────────────────────────────────────
 
 function HowItWorks() {
-  const steps = [
-    { num: "01", title: "Create Account", desc: "Sign up in seconds with just your email. No downloads, no installations." },
-    { num: "02", title: "Subscribe", desc: "One simple plan for document legalization monitoring. Pay via Vodafone Cash or Instapay." },
-    { num: "03", title: "Select Branches", desc: "Choose which TLS branches to monitor. Our server handles the rest." },
-    { num: "04", title: "Get Notified", desc: "Receive instant alerts via email or push notification when slots open." },
-  ];
+  const { t } = useLanguage();
 
   return (
     <section id="how-it-works" className="py-24 bg-dark-700/30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <AnimatedSection className="text-center mb-16">
           <motion.h2 variants={fadeUp} className="text-3xl sm:text-4xl font-display font-bold mb-4">
-            How It <span className="text-primary-400">Works</span>
+            {t.howItWorks.title} <span className="text-primary-400">{t.howItWorks.titleHighlight}</span>
           </motion.h2>
           <motion.p variants={fadeUp} className="text-gray-400 max-w-2xl mx-auto">
-            Get started in under 2 minutes. No software to install — everything runs in your browser.
+            {t.howItWorks.sub}
           </motion.p>
         </AnimatedSection>
 
         <AnimatedSection className="grid md:grid-cols-4 gap-8">
-          {steps.map((step, i) => (
-            <motion.div key={step.num} variants={fadeUp} className="relative text-center">
-              {/* Connector line */}
-              {i < steps.length - 1 && (
+          {t.howItWorks.steps.map((step, i) => (
+            <motion.div key={step.title} variants={fadeUp} className="relative text-center">
+              {i < t.howItWorks.steps.length - 1 && (
                 <div className="hidden md:block absolute top-8 left-[60%] w-[80%] h-px bg-gradient-to-r from-primary-500/50 to-transparent" />
               )}
-
               <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-primary-500 to-blue-600 flex items-center justify-center mb-4 text-xl font-bold">
-                {step.num}
+                {String(i + 1).padStart(2, "0")}
               </div>
               <h3 className="font-semibold text-lg mb-2">{step.title}</h3>
               <p className="text-gray-400 text-sm">{step.desc}</p>
@@ -398,6 +433,7 @@ function HowItWorks() {
 // ── Pricing Section ─────────────────────────────────────
 
 function Pricing() {
+  const { t } = useLanguage();
   const [plans, setPlans] = useState<any[]>([]);
 
   useEffect(() => {
@@ -415,10 +451,10 @@ function Pricing() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
         <AnimatedSection className="text-center mb-16">
           <motion.h2 variants={fadeUp} className="text-3xl sm:text-4xl font-display font-bold mb-4">
-            Simple, <span className="text-primary-400">Transparent</span> Pricing
+            {t.pricing.title} <span className="text-primary-400">{t.pricing.titleHighlight}</span> {t.pricing.titleEnd}
           </motion.h2>
           <motion.p variants={fadeUp} className="text-gray-400 max-w-2xl mx-auto">
-            Choose the plan that fits your needs. No hidden fees, cancel anytime.
+            {t.pricing.sub}
           </motion.p>
         </AnimatedSection>
 
@@ -437,7 +473,7 @@ function Pricing() {
                 <h3 className="font-display font-bold text-xl mb-2">{plan.display_name}</h3>
                 <div className="flex items-baseline gap-1 mb-6">
                   <span className="text-4xl font-display font-bold">{plan.price_monthly}</span>
-                  <span className="text-gray-400 text-sm">{plan.currency}/mo</span>
+                  <span className="text-gray-400 text-sm">{plan.currency}{t.pricing.perMonth}</span>
                 </div>
 
                 <ul className="space-y-3 mb-8">
@@ -453,7 +489,7 @@ function Pricing() {
                   href="/register"
                   className="block w-full text-center py-3 rounded-xl font-semibold transition-all btn-gradient"
                 >
-                  Get Started
+                  {t.pricing.getStarted}
                 </Link>
               </motion.div>
             );
@@ -466,7 +502,7 @@ function Pricing() {
           viewport={{ once: true }}
           className="text-center text-gray-500 text-sm mt-8"
         >
-          Pay via Vodafone Cash or Instapay. Subscription activated within a few hours.
+          {t.pricing.footer}
         </motion.p>
       </div>
     </section>
@@ -476,16 +512,7 @@ function Pricing() {
 // ── FAQ ─────────────────────────────────────────────────
 
 function FAQ() {
-  const faqs = [
-    { q: "How does monitoring work?", a: "Our server checks TLS appointment availability every 30 minutes for all branches. When a slot opens, all subscribers monitoring that branch are instantly notified via email and web push." },
-    { q: "Do I need to keep my computer on?", a: "No! Everything runs on our server 24/7. You just need an internet connection to receive notifications — on your phone, tablet, or any device." },
-    { q: "How fast will I be notified?", a: "Within seconds of detecting available slots. Our system sends notifications via multiple channels simultaneously to maximize your chances of booking." },
-    { q: "What payment methods do you accept?", a: "We currently accept Vodafone Cash and Instapay. After payment, our team verifies and activates your subscription, usually within a few hours." },
-    { q: "Can I monitor multiple branches?", a: "Yes! Your legalization subscription covers both Sheikh Zayed and Hurghada branches simultaneously." },
-    { q: "What happens when my subscription expires?", a: "Monitoring stops and you won't receive notifications. You can renew at any time to resume monitoring." },
-    { q: "Is this an early access service?", a: "Yes — this is an early access release. While we strive for reliability, we cannot guarantee 100% uptime or uninterrupted monitoring. By using the service you agree to our Terms & Conditions." },
-  ];
-
+  const { t } = useLanguage();
   const [open, setOpen] = useState<number | null>(null);
 
   return (
@@ -493,12 +520,12 @@ function FAQ() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         <AnimatedSection className="text-center mb-12">
           <motion.h2 variants={fadeUp} className="text-3xl sm:text-4xl font-display font-bold mb-4">
-            Frequently Asked <span className="text-primary-400">Questions</span>
+            {t.faq.title} <span className="text-primary-400">{t.faq.titleHighlight}</span>
           </motion.h2>
         </AnimatedSection>
 
         <AnimatedSection className="space-y-3">
-          {faqs.map((faq, i) => (
+          {t.faq.items.map((faq, i) => (
             <motion.div key={i} variants={fadeUp} className="glass-card overflow-hidden">
               <button
                 onClick={() => setOpen(open === i ? null : i)}
@@ -528,20 +555,21 @@ function FAQ() {
 // ── CTA Section ─────────────────────────────────────────
 
 function CTA() {
+  const { t } = useLanguage();
   return (
     <section className="py-24 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-r from-primary-500/10 via-blue-600/10 to-purple-600/10" />
       <div className="max-w-4xl mx-auto px-4 text-center relative z-10">
         <AnimatedSection>
           <motion.h2 variants={fadeUp} className="text-3xl sm:text-4xl font-display font-bold mb-4">
-            Ready to Stop Refreshing?
+            {t.cta.title}
           </motion.h2>
           <motion.p variants={fadeUp} className="text-gray-400 mb-8 text-lg">
-            Join others who are getting instant notifications when TLS appointment slots open.
+            {t.cta.sub}
           </motion.p>
           <motion.div variants={fadeUp}>
             <Link href="/register" className="btn-gradient text-lg !px-10 !py-4 inline-flex items-center gap-2">
-              Get Started Now <ArrowRight className="w-5 h-5" />
+              {t.cta.button} <ArrowRight className="w-5 h-5" />
             </Link>
           </motion.div>
         </AnimatedSection>
@@ -553,6 +581,7 @@ function CTA() {
 // ── Footer ──────────────────────────────────────────────
 
 function Footer() {
+  const { t } = useLanguage();
   return (
     <footer className="py-12 border-t border-white/5">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -562,34 +591,32 @@ function Footer() {
               <img src="/icons/icon-192-white.png" alt="TLS Appointment Checker" className="w-8 h-8 rounded-lg" />
               <span className="font-display font-bold">TLS Appointment Checker</span>
             </div>
-            <p className="text-gray-500 text-sm">Automated appointment monitoring for German document legalization services in Egypt.</p>
-
+            <p className="text-gray-500 text-sm">{t.footer.desc}</p>
           </div>
 
           <div>
-            <h4 className="font-semibold mb-4">Quick Links</h4>
+            <h4 className="font-semibold mb-4">{t.footer.quickLinks}</h4>
             <ul className="space-y-2 text-sm text-gray-400">
-              <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
-              <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
-              <li><a href="#faq" className="hover:text-white transition-colors">FAQ</a></li>
-              <li><Link href="/login" className="hover:text-white transition-colors">Log In</Link></li>
-
+              <li><a href="#features" className="hover:text-white transition-colors">{t.footer.features}</a></li>
+              <li><a href="#pricing" className="hover:text-white transition-colors">{t.footer.pricing}</a></li>
+              <li><a href="#faq" className="hover:text-white transition-colors">{t.footer.faq}</a></li>
+              <li><Link href="/login" className="hover:text-white transition-colors">{t.footer.logIn}</Link></li>
             </ul>
           </div>
 
           <div>
-            <h4 className="font-semibold mb-4">Legal</h4>
+            <h4 className="font-semibold mb-4">{t.footer.legal}</h4>
             <ul className="space-y-2 text-sm text-gray-400">
-              <li><Link href="/terms" className="hover:text-white transition-colors">Terms &amp; Conditions</Link></li>
-              <li><Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
-              <li><Link href="/contact" className="flex items-center gap-2 hover:text-white transition-colors"><Mail className="w-4 h-4" /> Contact Form</Link></li>
+              <li><Link href="/terms" className="hover:text-white transition-colors">{t.footer.terms}</Link></li>
+              <li><Link href="/privacy" className="hover:text-white transition-colors">{t.footer.privacy}</Link></li>
+              <li><Link href="/contact" className="flex items-center gap-2 hover:text-white transition-colors"><Mail className="w-4 h-4" /> {t.footer.contact}</Link></li>
               <li className="flex items-center gap-2"><Mail className="w-4 h-4" /> tlsappointmentchecker@gmail.com</li>
             </ul>
           </div>
         </div>
 
         <div className="border-t border-white/5 mt-8 pt-8 text-center text-gray-500 text-xs">
-          &copy; {new Date().getFullYear()} TLS Appointment Checker. All rights reserved.
+          &copy; {new Date().getFullYear()} TLS Appointment Checker. {t.footer.rights}
         </div>
       </div>
     </footer>

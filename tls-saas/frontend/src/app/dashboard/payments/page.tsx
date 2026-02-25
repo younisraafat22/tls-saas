@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { paymentApi, subscriptionApi } from "@/lib/api";
+import { useLanguage } from "@/lib/i18n";
 import {
   CreditCard, Upload, Clock, CheckCircle2, XCircle,
   AlertCircle, Copy, ArrowRight, Loader2, Sparkles,
@@ -27,6 +28,7 @@ export default function PaymentsPage() {
   const [activeSub, setActiveSub] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"subscribe" | "history">("subscribe");
+  const { t } = useLanguage();
 
   // Payment form
   const [selectedPlan, setSelectedPlan] = useState<number | null>(null);
@@ -181,6 +183,18 @@ export default function PaymentsPage() {
 
       {activeTab === "subscribe" && (
         <div className="space-y-6">
+          {/* Early Access Warning Banner */}
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="glass-card border-amber-500/30 bg-amber-500/5 p-4 flex gap-3 items-start"
+          >
+            <span className="text-amber-400 text-xl shrink-0 mt-0.5">⚠️</span>
+            <div>
+              <div className="font-semibold text-amber-400 text-sm mb-1">{t.payment.earlyAccessTitle}</div>
+              <p className="text-gray-400 text-xs leading-relaxed">{t.payment.earlyAccessBody}</p>
+            </div>
+          </motion.div>
           {/* Plans */}
           <div className="grid sm:grid-cols-3 gap-4">
             {plans.filter(p => p.is_active).map((plan) => {
