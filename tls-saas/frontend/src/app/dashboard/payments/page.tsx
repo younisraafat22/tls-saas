@@ -74,12 +74,12 @@ export default function PaymentsPage() {
 
   const handleSubmitPayment = async () => {
     if (!selectedPlan || !selectedBranch) {
-      setToast({ type: "error", msg: "Please select a plan and a TLS branch" });
+      setToast({ type: "error", msg: t.payment.errSelectPlanBranch });
       setTimeout(() => setToast(null), 4000);
       return;
     }
     if (!reference.trim() && !screenshotData) {
-      setToast({ type: "error", msg: "Please enter a transaction reference number or upload a payment screenshot" });
+      setToast({ type: "error", msg: t.payment.errRequireProof });
       setTimeout(() => setToast(null), 4000);
       return;
     }
@@ -95,7 +95,7 @@ export default function PaymentsPage() {
         reference: reference.trim(),
         screenshot_data: screenshotData || undefined,
       });
-      setToast({ type: "success", msg: "Payment submitted! Awaiting admin approval." });
+      setToast({ type: "success", msg: t.payment.successSubmit });
       setReference("");
       setScreenshotData(null);
       setScreenshotName("");
@@ -103,7 +103,7 @@ export default function PaymentsPage() {
       setSelectedBranch(null);
       loadData();
     } catch (err: any) {
-      setToast({ type: "error", msg: err?.detail || "Failed to submit payment" });
+      setToast({ type: "error", msg: err?.detail || t.payment.errSubmitFail });
     } finally {
       setSubmitting(false);
       setTimeout(() => setToast(null), 5000);
@@ -112,7 +112,7 @@ export default function PaymentsPage() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    setToast({ type: "success", msg: "Copied!" });
+    setToast({ type: "success", msg: t.payment.copied });
     setTimeout(() => setToast(null), 2000);
   };
 
@@ -143,8 +143,8 @@ export default function PaymentsPage() {
       </AnimatePresence>
 
       <div>
-        <h1 className="text-2xl font-display font-bold">Payments & Subscription</h1>
-        <p className="text-gray-400 text-sm mt-1">Manage your subscription and payment history</p>
+        <h1 className="text-2xl font-display font-bold">{t.payment.title}</h1>
+        <p className="text-gray-400 text-sm mt-1">{t.payment.sub}</p>
       </div>
 
       {/* Active subscription banner */}
@@ -156,7 +156,7 @@ export default function PaymentsPage() {
                 <Sparkles className="w-5 h-5 text-accent-green" />
               </div>
               <div>
-                <div className="font-semibold text-accent-green">Active Subscription</div>
+                <div className="font-semibold text-accent-green">{t.payment.activeSubLabel}</div>
                 <div className="text-sm text-gray-400">
                   {activeSub.plan?.display_name} &middot; Expires {new Date(activeSub.expires_at).toLocaleDateString()}
                 </div>
@@ -176,7 +176,7 @@ export default function PaymentsPage() {
               activeTab === tab ? "bg-primary-500 text-white" : "text-gray-400 hover:text-gray-200"
             }`}
           >
-            {tab === "subscribe" ? "Subscribe / Renew" : "Payment History"}
+            {tab === "subscribe" ? t.payment.tabSubscribe : t.payment.tabHistory}
           </button>
         ))}
       </div>
@@ -217,7 +217,7 @@ export default function PaymentsPage() {
                   </div>
                   {isSelected && (
                     <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="mt-3 text-primary-400 text-sm flex items-center gap-1">
-                      <CheckCircle2 className="w-4 h-4" /> Selected
+                      <CheckCircle2 className="w-4 h-4" /> {t.payment.selectedLabel}
                     </motion.div>
                   )}
                 </motion.button>
@@ -230,9 +230,9 @@ export default function PaymentsPage() {
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
               <h3 className="font-semibold mb-3 flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-primary-500/20 text-primary-400 text-xs flex items-center justify-center font-bold">2</span>
-                Select Your TLS Branch
+                {t.payment.selectBranchTitle}
               </h3>
-              <p className="text-sm text-gray-400">Choose the branch and legalization type that matches your TLS application.</p>
+              <p className="text-sm text-gray-400">{t.payment.selectBranchDesc}</p>
               <div className="grid sm:grid-cols-2 gap-3">
                 {branches.filter((b: any) => b.is_active && b.service_type !== "visa").map((branch: any) => {
                   const isSelected = selectedBranch === branch.id;
@@ -253,7 +253,7 @@ export default function PaymentsPage() {
                               ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
                               : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                           }`}>
-                            {isStudents ? "🎓 Students" : "📋 Normal"}
+                            {isStudents ? t.payment.studentsLabel : t.payment.normalLabel}
                           </div>
                         </div>
                         {isSelected && <CheckCircle2 className="w-5 h-5 text-primary-400" />}
@@ -269,12 +269,12 @@ export default function PaymentsPage() {
           {selectedPlan && selectedBranch && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 space-y-5">
               <h3 className="font-semibold flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-primary-400" /> Payment Details
+                <CreditCard className="w-5 h-5 text-primary-400" /> {t.payment.paymentDetailsTitle}
               </h3>
 
               {/* Method selection */}
               <div>
-                <label className="text-sm text-gray-400 mb-2 block">Payment Method</label>
+                <label className="text-sm text-gray-400 mb-2 block">{t.payment.methodLabel}</label>
                 <div className="flex gap-3">
                   {[
                     { value: "vodafone_cash", label: "Vodafone Cash" },
@@ -300,7 +300,7 @@ export default function PaymentsPage() {
                 {paymentMethod === "vodafone_cash" ? (
                   <>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-400">Send to number:</span>
+                      <span className="text-sm text-gray-400">{t.payment.sendToNumber}</span>
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-semibold">01065080242</span>
                         <button onClick={() => copyToClipboard("01065080242")} className="text-gray-500 hover:text-white transition-colors">
@@ -309,7 +309,7 @@ export default function PaymentsPage() {
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-400">Amount:</span>
+                      <span className="text-sm text-gray-400">{t.payment.amount}</span>
                       <span className="font-semibold text-accent-green">
                         {plans.find((p) => p.id === selectedPlan)?.price_monthly} EGP
                       </span>
@@ -318,7 +318,7 @@ export default function PaymentsPage() {
                 ) : (
                   <>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-400">InstaPay Username:</span>
+                      <span className="text-sm text-gray-400">{t.payment.instaPayUsername}</span>
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-semibold">01060263887</span>
                         <button onClick={() => copyToClipboard("01060263887")} className="text-gray-500 hover:text-white transition-colors">
@@ -327,7 +327,7 @@ export default function PaymentsPage() {
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-400">Amount:</span>
+                      <span className="text-sm text-gray-400">{t.payment.amount}</span>
                       <span className="font-semibold text-accent-green">
                         {plans.find((p) => p.id === selectedPlan)?.price_monthly} EGP
                       </span>
@@ -338,11 +338,11 @@ export default function PaymentsPage() {
 
               {/* Reference + Screenshot */}
               <div className="space-y-3">
-                <p className="text-sm text-gray-400">Provide <span className="text-white font-medium">at least one</span> of the following as proof of payment:</p>
+                <p className="text-sm text-gray-400">{t.payment.proofIntro}</p>
 
                 {/* Reference number */}
                 <div>
-                  <label className="text-xs text-gray-500 mb-1.5 block">Transaction Reference Number</label>
+                  <label className="text-xs text-gray-500 mb-1.5 block">{t.payment.referenceLabel}</label>
                   <input
                     type="text"
                     value={reference}
@@ -360,7 +360,7 @@ export default function PaymentsPage() {
 
                 {/* Screenshot upload */}
                 <div>
-                  <label className="text-xs text-gray-500 mb-1.5 block">Payment Screenshot</label>
+                  <label className="text-xs text-gray-500 mb-1.5 block">{t.payment.screenshotLabel}</label>
                   <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                     screenshotData
                       ? "border-primary-500/40 bg-primary-500/5"
@@ -374,7 +374,7 @@ export default function PaymentsPage() {
                     />
                     <Upload className="w-4 h-4 text-gray-400 shrink-0" />
                     <span className="text-sm text-gray-400 truncate">
-                      {screenshotName || "Click to upload screenshot"}
+                      {screenshotName || t.payment.uploadClick}
                     </span>
                     {screenshotData && <CheckCircle2 className="w-4 h-4 text-primary-400 ml-auto shrink-0" />}
                   </label>
@@ -401,7 +401,7 @@ export default function PaymentsPage() {
                 ) : (
                   <Upload className="w-4 h-4" />
                 )}
-                Submit Payment for Approval
+                {t.payment.submitBtn}
               </button>
             </motion.div>
           )}
@@ -413,8 +413,8 @@ export default function PaymentsPage() {
           {payments.length === 0 ? (
             <div className="p-12 text-center">
               <CreditCard className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-              <h3 className="font-semibold text-lg mb-2">No payments yet</h3>
-              <p className="text-gray-400 text-sm">Your payment history will appear here.</p>
+              <h3 className="font-semibold text-lg mb-2">{t.payment.noPayments}</h3>
+              <p className="text-gray-400 text-sm">{t.payment.noPaymentsDesc}</p>
             </div>
           ) : (
             <div className="divide-y divide-white/5">

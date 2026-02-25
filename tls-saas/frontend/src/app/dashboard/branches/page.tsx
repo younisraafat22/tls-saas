@@ -9,6 +9,11 @@ import { useLanguage } from "@/lib/i18n";
 export default function BranchStatusPage() {
   const { t } = useLanguage();
   const tb = t.branches;
+  const serviceLabel: Record<string, string> = {
+    legalization: t.serviceTypes.legalization,
+    visa: t.serviceTypes.visa,
+    students: t.serviceTypes.students,
+  };
   const [status, setStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -59,7 +64,7 @@ export default function BranchStatusPage() {
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <h2 className="text-lg font-semibold">{branch.branch_name}</h2>
-                  <p className="text-sm text-gray-400 capitalize">{branch.service_type} {tb.service}</p>
+                  <p className="text-sm text-gray-400">{serviceLabel[branch.service_type] ?? branch.service_type} {tb.service}</p>
                 </div>
                 {branch.last_slots_available ? (
                   <span className="flex items-center gap-1.5 text-accent-green text-sm font-semibold bg-accent-green/10 px-3 py-1.5 rounded-full">

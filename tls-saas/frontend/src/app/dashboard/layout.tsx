@@ -8,9 +8,12 @@ import {
   LayoutDashboard, Bell, Settings, CreditCard,
   LogOut, Monitor, Shield,
 } from "lucide-react";
+import { useLanguage } from "@/lib/i18n";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = useAuth();
+  const { t } = useLanguage();
+  const sb = t.sidebar;
   const router = useRouter();
 
   useEffect(() => {
@@ -26,10 +29,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   const navItems = [
-    { href: "/dashboard", icon: LayoutDashboard, label: "Overview" },
-    { href: "/dashboard/notifications", icon: Bell, label: "Notifications" },
-    { href: "/dashboard/payments", icon: CreditCard, label: "Payments" },
-    { href: "/dashboard/settings", icon: Settings, label: "Settings" },
+    { href: "/dashboard", icon: LayoutDashboard, label: sb.overview },
+    { href: "/dashboard/notifications", icon: Bell, label: sb.notifications },
+    { href: "/dashboard/payments", icon: CreditCard, label: sb.payments },
+    { href: "/dashboard/settings", icon: Settings, label: sb.settings },
   ];
 
   return (
@@ -53,7 +56,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {user.is_admin && (
             <Link href="/admin" className="sidebar-link text-amber-400">
               <Shield className="w-5 h-5" />
-              <span>Admin Panel</span>
+              <span>{sb.adminPanel}</span>
             </Link>
           )}
         </nav>
@@ -72,7 +75,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             onClick={logout}
             className="flex items-center gap-2 text-gray-500 hover:text-red-400 transition-colors text-sm w-full"
           >
-            <LogOut className="w-4 h-4" /> Log Out
+            <LogOut className="w-4 h-4" /> {sb.logOut}
           </button>
         </div>
       </aside>
