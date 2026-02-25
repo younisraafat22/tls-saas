@@ -88,8 +88,10 @@ async def seed_data():
             {"name": "Sheikh Zayed - Students Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home", "service_type": ServiceType.LEGALIZATION},
             {"name": "Hurghada - Normal Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egHRG2de/home", "service_type": ServiceType.LEGALIZATION},
             {"name": "Hurghada - Students Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egHRG2de/home", "service_type": ServiceType.LEGALIZATION},
-            {"name": "Sheikh Zayed - Visa", "url": "https://visas-de.tlscontact.com/visa/gb/egCAI2gb/home", "service_type": ServiceType.VISA},
-            {"name": "Hurghada - Visa", "url": "https://visas-de.tlscontact.com/visa/gb/egHRG2gb/home", "service_type": ServiceType.VISA},
+            {"name": "New Cairo - Visa", "url": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egHAC2de", "service_type": ServiceType.VISA},
+            {"name": "El-Sheikh Zayed - Visa", "url": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egCAI2de", "service_type": ServiceType.VISA},
+            {"name": "Alexandria - Visa", "url": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egALY2de", "service_type": ServiceType.VISA},
+            {"name": "Hurghada - Visa", "url": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egHRG2de", "service_type": ServiceType.VISA},
         ]
         for bd in branches_data:
             exists = await db.execute(
@@ -230,9 +232,47 @@ async def lifespan(app: FastAPI):
                 text("UPDATE branches SET is_active = 1 WHERE UPPER(service_type) = 'VISA'")
             )
             await db.commit()
-            logger.info("Migration: updated legalization plan name/features/price, removed visa plans/branches")
+            logger.info("Migration: updated legalization plan name/features/price, restored visa plans/branches")
         except Exception as e:
             logger.warning(f"Plan price migration skipped: {e}")
+
+    # Fix visa branch names and URLs to match original TLS application
+    async with async_session() as db:
+        try:
+            # Rename old incorrect entry and fix its URL
+            await db.execute(text(
+                "UPDATE branches SET name = 'El-Sheikh Zayed - Visa', "
+                "url = 'https://visas-de.tlscontact.com/en-us/country/eg/vac/egCAI2de' "
+                "WHERE name = 'Sheikh Zayed - Visa' AND UPPER(service_type) = 'VISA'"
+            ))
+            # Fix Hurghada visa URL
+            await db.execute(text(
+                "UPDATE branches SET "
+                "url = 'https://visas-de.tlscontact.com/en-us/country/eg/vac/egHRG2de' "
+                "WHERE name = 'Hurghada - Visa' AND UPPER(service_type) = 'VISA'"
+            ))
+            # Insert New Cairo visa branch if missing
+            existing_nc = await db.execute(text(
+                "SELECT id FROM branches WHERE name = 'New Cairo - Visa'"
+            ))
+            if not existing_nc.scalar_one_or_none():
+                await db.execute(text(
+                    "INSERT INTO branches (name, url, service_type, is_active) VALUES "
+                    "('New Cairo - Visa', 'https://visas-de.tlscontact.com/en-us/country/eg/vac/egHAC2de', 'visa', 1)"
+                ))
+            # Insert Alexandria visa branch if missing
+            existing_alx = await db.execute(text(
+                "SELECT id FROM branches WHERE name = 'Alexandria - Visa'"
+            ))
+            if not existing_alx.scalar_one_or_none():
+                await db.execute(text(
+                    "INSERT INTO branches (name, url, service_type, is_active) VALUES "
+                    "('Alexandria - Visa', 'https://visas-de.tlscontact.com/en-us/country/eg/vac/egALY2de', 'visa', 1)"
+                ))
+            await db.commit()
+            logger.info("Migration: fixed visa branch names/URLs, added New Cairo & Alexandria")
+        except Exception as e:
+            logger.warning(f"Visa branch fix migration skipped: {e}")
 
     # Update existing admin user email/password to match current ADMIN_EMAIL setting
     async with async_session() as db:
