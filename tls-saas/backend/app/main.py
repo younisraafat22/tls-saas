@@ -129,6 +129,18 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass
 
+    # Deactivate old generic branch names now replaced by Normal/Students variants
+    async with async_session() as db:
+        try:
+            await db.execute(text(
+                "UPDATE branches SET is_active = 0 "
+                "WHERE name IN ('Sheikh Zayed (Legalization)', 'Hurghada (Legalization)')"
+            ))
+            await db.commit()
+            logger.info("Migration: deactivated old generic legalization branches")
+        except Exception:
+            pass
+
     # Update plan prices and remove visa plan/branches
     async with async_session() as db:
         try:
