@@ -251,9 +251,9 @@ async def lifespan(app: FastAPI):
                 "url = 'https://visas-de.tlscontact.com/en-us/country/eg/vac/egHRG2de' "
                 "WHERE name = 'Hurghada - Visa' AND UPPER(service_type) = 'VISA'"
             ))
-            # Fix any rows incorrectly inserted with lowercase service_type
+            # Fix any rows incorrectly inserted with lowercase service_type (delete duplicates — seed re-inserts correct ones)
             await db.execute(text(
-                "UPDATE branches SET service_type = 'VISA' WHERE UPPER(service_type) = 'VISA' AND service_type != 'VISA'"
+                "DELETE FROM branches WHERE UPPER(service_type) = 'VISA' AND service_type != 'VISA'"
             ))
             # Insert New Cairo visa branch if missing
             existing_nc = await db.execute(text(
