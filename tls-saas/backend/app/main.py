@@ -251,6 +251,10 @@ async def lifespan(app: FastAPI):
                 "url = 'https://visas-de.tlscontact.com/en-us/country/eg/vac/egHRG2de' "
                 "WHERE name = 'Hurghada - Visa' AND UPPER(service_type) = 'VISA'"
             ))
+            # Fix any rows incorrectly inserted with lowercase service_type
+            await db.execute(text(
+                "UPDATE branches SET service_type = 'VISA' WHERE UPPER(service_type) = 'VISA' AND service_type != 'VISA'"
+            ))
             # Insert New Cairo visa branch if missing
             existing_nc = await db.execute(text(
                 "SELECT id FROM branches WHERE name = 'New Cairo - Visa'"
@@ -258,7 +262,7 @@ async def lifespan(app: FastAPI):
             if not existing_nc.scalar_one_or_none():
                 await db.execute(text(
                     "INSERT INTO branches (name, url, service_type, is_active) VALUES "
-                    "('New Cairo - Visa', 'https://visas-de.tlscontact.com/en-us/country/eg/vac/egHAC2de', 'visa', 1)"
+                    "('New Cairo - Visa', 'https://visas-de.tlscontact.com/en-us/country/eg/vac/egHAC2de', 'VISA', 1)"
                 ))
             # Insert Alexandria visa branch if missing
             existing_alx = await db.execute(text(
@@ -267,7 +271,7 @@ async def lifespan(app: FastAPI):
             if not existing_alx.scalar_one_or_none():
                 await db.execute(text(
                     "INSERT INTO branches (name, url, service_type, is_active) VALUES "
-                    "('Alexandria - Visa', 'https://visas-de.tlscontact.com/en-us/country/eg/vac/egALY2de', 'visa', 1)"
+                    "('Alexandria - Visa', 'https://visas-de.tlscontact.com/en-us/country/eg/vac/egALY2de', 'VISA', 1)"
                 ))
             await db.commit()
             logger.info("Migration: fixed visa branch names/URLs, added New Cairo & Alexandria")
