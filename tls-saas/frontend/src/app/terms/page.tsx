@@ -51,7 +51,7 @@ export default function TermsPage() {
 
         <div className="mt-12 pt-8 border-t border-white/10 flex gap-4 text-sm text-gray-500">
           <Link href="/privacy" className="hover:text-gray-300 transition-colors">{tr.footerPrivacy}</Link>
-          <span>Â·</span>
+          <span>·</span>
           <Link href="/" className="hover:text-gray-300 transition-colors">{tr.footerHome}</Link>
         </div>
       </div>

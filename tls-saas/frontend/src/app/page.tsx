@@ -449,9 +449,9 @@ function Pricing() {
     subscriptionApi.getPlans().then(setPlans).catch(() => {
       // Fallback plans if API not reachable
       setPlans([
-        { id: 1, plan_type: "legalization", display_name: "Legalization Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice (Sheikh Zayed or Hurghada)", "Email notifications", "Web push notifications", "Real-time dashboard", "30-minute check interval", "PC must stay on"], sort_order: 1 },
-        { id: 2, plan_type: "visa", display_name: "Visa Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice (El-Sheikh Zayed, Hurghada, New Cairo or Alexandria)", "Individual check using your TLS credentials", "Email notifications", "Web push notifications", "Real-time dashboard", "PC must stay on"], sort_order: 2 },
-        { id: 3, plan_type: "premium", display_name: "Premium — Server Monitored", price_monthly: 2500, currency: "EGP", features: ["Server-based monitoring (no PC needed)", "All branches covered", "Real-time notifications", "Priority support", "30-minute check interval"], sort_order: 3 },
+        { id: 1, plan_type: "legalization", display_name: "Legalization Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice (Sheikh Zayed or Hurghada)", "Email & web push notifications", "Real-time dashboard", "30-minute check interval", "No TLS credentials needed", "Desktop app — PC must stay on"], sort_order: 1 },
+        { id: 2, plan_type: "visa", display_name: "Visa Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice (El-Sheikh Zayed, Hurghada, New Cairo or Alexandria)", "Individual check using your TLS credentials", "Email & web push notifications", "Real-time dashboard", "30-minute check interval", "Desktop app — PC must stay on"], sort_order: 2 },
+        { id: 3, plan_type: "premium", display_name: "Premium — Server Monitored", price_monthly: 2500, currency: "EGP", features: ["Server-based monitoring — no PC needed", "Legalization & visa branches covered", "Email & web push notifications", "Real-time dashboard", "Priority support", "30-minute check interval"], sort_order: 3 },
       ]);
     });
   }, []);
@@ -469,7 +469,7 @@ function Pricing() {
           </motion.p>
         </AnimatedSection>
 
-        <AnimatedSection className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+        <AnimatedSection className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-6xl mx-auto">
           {plans.sort((a, b) => a.sort_order - b.sort_order).map((plan) => {
             const isPremium = plan.plan_type === "premium";
             return (
