@@ -693,69 +693,179 @@ class VisaCheckerSB:
             return False, None, f"Error: {e}"
 
     def _is_no_slots_page(self, driver) -> bool:
-        """Return True if the page clearly says no appointments available."""
+        """Return True if a DOM element clearly says no appointments available.
+        Checks specific visible elements only — NOT page_source — to avoid matching
+        CSS class names or script text that contain 'not available'.
+        """
         no_slot_phrases = [
-            "don't have any appointment", "no slots available",
-            "no appointment slots", "not available",
+            "don't have any appointment",
+            "no slots",
+            "currently available",   # part of "not currently available"
         ]
+        # First: check if there are actual available slot buttons — if yes, return False immediately
         try:
-            body = driver.page_source.lower()
-            if any(p in body for p in no_slot_phrases):
-                return True
-            for sel in ["p.text-lg.font-semibold", ".text-center p.font-semibold",
-                        "p.font-semibold.text-on-surface-variant"]:
+            avail = driver.find_elements(
+                By.CSS_SELECTOR, "button[data-testid='btn-available-slot-default']"
+            )
+            if avail:
+                return False
+        except Exception:
+            pass
+
+        # Check specific CMS / page text elements only
+        try:
+            for sel in [
+                "p.text-lg.font-semibold",
+                ".text-center p.font-semibold",
+                "p.font-semibold.text-on-surface-variant",
+                ".TlsCmsContent_cms-wrapper__5pjaA p",
+            ]:
                 for el in driver.find_elements(By.CSS_SELECTOR, sel):
-                    if el.is_displayed() and any(p in el.text.lower() for p in no_slot_phrases):
-                        return True
+                    try:
+                        if el.is_displayed():
+                            txt = el.text.lower()
+                            if any(p in txt for p in no_slot_phrases):
+                                return True
+                    except Exception:
+                        continue
         except Exception:
             pass
         return False
 
     def _get_months(self, driver) -> list[tuple[str, str]]:
-        """Extract available month navigation links from the page."""
+        """Extract navigable month links from the TLS appointment page.
+        Ported from the original app's _get_available_months().
+        Excludes already-selected and disabled months.
+        """
         months: list[tuple[str, str]] = []
+        seen_names: set[str] = set()
         try:
-            for sel in [
-                "a[href*='appointment-booking']",
-                "a[href*='month=']",
-                "li[class*='month'] a",
-                "nav a[href*='booking']",
-            ]:
-                els = driver.find_elements(By.CSS_SELECTOR, sel)
-                for el in els:
-                    try:
-                        href = el.get_attribute("href") or ""
-                        text = el.text.strip()
-                        if href and text and (href, text) not in months:
-                            months.append((text, href))
-                    except Exception:
+            # ── Strategy 1: TLS MonthSelector component (new layout) ──
+            # Add currently selected month with None URL (already on this page)
+            selected = driver.find_elements(
+                By.CSS_SELECTOR,
+                "a.MonthSelector_month-selector_button__An0eF.MonthSelector_--selected__5re9q",
+            )
+            if selected:
+                name = selected[0].text.strip()
+                if name and name not in seen_names:
+                    months.append((name, None))
+                    seen_names.add(name)
+
+            # Navigable (non-selected, non-disabled) month links
+            all_month_links = driver.find_elements(
+                By.CSS_SELECTOR, "a.MonthSelector_month-selector_button__An0eF"
+            )
+            for link in all_month_links:
+                try:
+                    cls = link.get_attribute("class") or ""
+                    if "--selected" in cls or "--disabled" in cls:
                         continue
-                if months:
-                    break
+                    name = link.text.strip()
+                    href = link.get_attribute("href") or ""
+                    if name and href and name not in seen_names:
+                        months.append((name, href))
+                        seen_names.add(name)
+                except Exception:
+                    continue
+
+            if months:
+                return months
+
+            # ── Strategy 2: any anchor with month= in href ─────────────
+            for link in driver.find_elements(
+                By.CSS_SELECTOR,
+                "a[href*='appointment-booking?month='], a[data-testid*='month']",
+            ):
+                try:
+                    name = link.text.strip()
+                    href = link.get_attribute("href") or ""
+                    if name and href and name not in seen_names:
+                        months.append((name, href))
+                        seen_names.add(name)
+                except Exception:
+                    continue
+
+            # ── Strategy 3: infer current month from URL if no-slots page ─
+            if not months:
+                try:
+                    url = driver.current_url
+                    m = re.search(r'month=(\d{2})-(\d{4})', url)
+                    if m:
+                        month_num, year = int(m.group(1)), m.group(2)
+                        month_names_list = [
+                            'January','February','March','April','May','June',
+                            'July','August','September','October','November','December',
+                        ]
+                        name = f"{month_names_list[month_num-1]} {year}"
+                        if name not in seen_names:
+                            months.append((name, None))
+                except Exception:
+                    pass
+
         except Exception:
             pass
         return months
 
     def _find_available_dates(self, driver) -> list[str]:
-        """Find enabled (available) date buttons in the appointment calendar."""
+        """Find available appointment slot buttons.
+        Primary: TLS's exact data-testid attribute.
+        Fallback: day groups + time buttons.
+        """
         available: list[str] = []
         try:
+            # ── Primary: exact TLS selector from original app ──────────
+            slot_btns = driver.find_elements(
+                By.CSS_SELECTOR, "button[data-testid='btn-available-slot-default']"
+            )
+            if slot_btns:
+                # Try to pair with day labels for richer detail
+                day_groups = driver.find_elements(
+                    By.CSS_SELECTOR,
+                    ".AppointmentDay_appointment-day__1Qnz1, .appointment-day",
+                )
+                if day_groups:
+                    for group in day_groups:
+                        try:
+                            spans = group.find_elements(By.CSS_SELECTOR, "p span")
+                            day_label = (
+                                f"{spans[0].text.strip()} {spans[1].text.strip()}"
+                                if len(spans) >= 2
+                                else group.find_element(By.CSS_SELECTOR, "p").text.strip()
+                            )
+                            btns = group.find_elements(
+                                By.CSS_SELECTOR,
+                                "button[data-testid='btn-available-slot-default']",
+                            )
+                            times = [b.text.strip() for b in btns if b.text.strip()]
+                            if times:
+                                available.append(f"{day_label}: {', '.join(times)}")
+                        except Exception:
+                            continue
+                else:
+                    for btn in slot_btns:
+                        txt = btn.text.strip()
+                        if txt and txt not in available:
+                            available.append(txt)
+                return available
+
+            # ── Fallback: generic enabled date/time buttons ────────────
             for sel in [
+                "button[aria-label*='Available']:not([disabled])",
                 "button.available:not([disabled])",
                 "button[class*='available']:not([disabled])",
                 "td[class*='available'] button:not([disabled])",
-                "td.available:not(.disabled)",
-                "button[aria-label*='Available']",
-                ".calendar-day:not(.disabled):not(.empty) button:not([disabled])",
-                "button[class*='CalendarDay']:not([disabled]):not([class*='Blocked'])",
             ]:
                 els = driver.find_elements(By.CSS_SELECTOR, sel)
                 for el in els:
                     try:
                         if el.is_displayed() and el.is_enabled():
-                            txt = (el.text.strip() or
-                                   el.get_attribute("aria-label") or
-                                   el.get_attribute("title") or "")
+                            txt = (
+                                el.text.strip()
+                                or el.get_attribute("aria-label")
+                                or el.get_attribute("title")
+                                or ""
+                            )
                             if txt and txt not in available:
                                 available.append(txt)
                     except Exception:
