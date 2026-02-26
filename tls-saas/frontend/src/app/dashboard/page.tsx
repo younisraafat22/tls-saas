@@ -201,7 +201,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2 text-gray-400 text-sm mb-2">
             <Bell className="w-4 h-4" /> {td.planLabel}
           </div>
-          <div className="text-sm font-medium">{user?.active_plan || "—"}</div>
+          <div className="text-sm font-medium">{t.planNames?.[user?.active_plan ?? ""] ?? user?.active_plan ?? "—"}</div>
         </motion.div>
       </motion.div>
 
@@ -219,8 +219,8 @@ export default function DashboardPage() {
                     branch.last_slots_available ? "bg-accent-green shadow-lg shadow-accent-green/50" : "bg-gray-500"
                   }`} />
                   <div>
-                    <div className="font-medium text-sm">{branch.branch_name}</div>
-                    <div className="text-xs text-gray-500 capitalize">{branch.service_type}</div>
+                    <div className="font-medium text-sm">{t.branchNames?.[branch.branch_name] ?? branch.branch_name}</div>
+                    <div className="text-xs text-gray-500">{t.serviceTypes?.[branch.service_type] ?? branch.service_type}</div>
                   </div>
                 </div>
                 <div className="text-right">
@@ -260,7 +260,7 @@ export default function DashboardPage() {
                     <XCircle className="w-5 h-5 text-gray-500" />
                   )}
                   <div>
-                    <div className="text-sm font-medium">{r.branch_name}</div>
+                    <div className="text-sm font-medium">{t.branchNames?.[r.branch_name] ?? r.branch_name}</div>
                     <div className="text-xs text-gray-500">
                       {new Date(r.checked_at).toLocaleString()} &middot; {r.duration_seconds}s
                     </div>
