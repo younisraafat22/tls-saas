@@ -16,10 +16,12 @@ error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 # ── Config ────────────────────────────────────────────────────────────────────
 USERNAME="younis"
-HOME_DIR="/home/$USERNAME"
-BACKEND_DIR="$HOME_DIR/tls-saas/backend"
+# Auto-detect repo root from where this script lives
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKEND_DIR="$SCRIPT_DIR/backend"
 VENV="$BACKEND_DIR/venv"
 VERCEL_URL="https://tls-saas.vercel.app"
+echo "  Repo root: $SCRIPT_DIR"
 
 echo ""
 echo "============================================================"
@@ -40,14 +42,9 @@ sudo systemctl enable ssh && sudo systemctl start ssh
 success "System packages installed | SSH enabled"
 
 # ── 2. Clone / update repo ────────────────────────────────────────────────────
-info "Cloning repository..."
-if [ -d "$HOME_DIR/tls-saas/.git" ]; then
-    warn "Repo already exists — pulling latest changes..."
-    cd "$HOME_DIR/tls-saas" && git pull origin main
-else
-    cd "$HOME_DIR" && git clone https://github.com/younisraafat22/tls-saas.git
-fi
-success "Repository ready"
+info "Pulling latest changes..."
+cd "$SCRIPT_DIR" && git pull origin main
+success "Repository up to date"
 
 # ── 3. Python virtual environment ─────────────────────────────────────────────
 info "Setting up Python 3.11 virtual environment..."
