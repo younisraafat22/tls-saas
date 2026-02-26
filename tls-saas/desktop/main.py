@@ -204,7 +204,7 @@ class TLSApp:
         init_db()
         self._ensure_default_settings()
 
-        # Start UI-update loop (thread-safe queue â†’ main thread)
+        # Start UI-update loop (thread-safe queue → main thread)
         self.page.run_task(self._ui_update_loop)
 
         # Check for updates in background
@@ -743,7 +743,7 @@ class TLSApp:
                     ),
                     ft.Container(height=5),
                     ft.TextButton(
-                        "ðŸ“‹ Read Terms & Disclaimer",
+                        "📋 Read Terms & Disclaimer",
                         on_click=show_terms_inline,
                         style=ft.ButtonStyle(color="#00D9FF"),
                     ),
@@ -1899,7 +1899,7 @@ class TLSApp:
             screenshot_label = ft.Text("No screenshot selected", size=12, color=ft.Colors.GREY_400)
             submit_status = ft.Text("", size=13, text_align=ft.TextAlign.CENTER)
 
-            def on_screenshot_result(e: ft.FilePickerResultEvent):
+            def on_screenshot_result(e):
                 if e.files:
                     fpath = e.files[0].path
                     screenshot_state["path"] = fpath
@@ -2332,7 +2332,7 @@ class TLSApp:
                         ft.Row(
                             [
                                 ft.TextButton(
-                                    "Already have a license key?  Activate here â†’",
+                                    "Already have a license key?  Activate here →",
                                     on_click=show_activation,
                                     style=ft.ButtonStyle(color="#00D9FF"),
                                 ),
@@ -2345,7 +2345,7 @@ class TLSApp:
                         ft.Row(
                             [
                                 ft.TextButton(
-                                    "ðŸ“‹ Terms & Disclaimer",
+                                    "📋 Terms & Disclaimer",
                                     on_click=show_terms_dialog,
                                     style=ft.ButtonStyle(color=ft.Colors.GREY_400),
                                 ),
@@ -3615,7 +3615,7 @@ class TLSApp:
         self.page.update()
 
     # ==================================================================
-    #  UI UPDATE LOOP  (thread-safe queue â†’ main thread)
+    #  UI UPDATE LOOP  (thread-safe queue → main thread)
     # ==================================================================
     async def _ui_update_loop(self):
         while True:
