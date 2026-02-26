@@ -21,7 +21,6 @@ const settingsDef: Setting[] = [
   { key: "check_interval_minutes", value: "5", label: "Check Interval (minutes)", type: "number", category: "Checker", description: "How often to check each branch for appointments" },
   { key: "vodafone_number", value: "", label: "Vodafone Cash Number", type: "text", category: "Payments", description: "Vodafone Cash number shown to users for payments" },
   { key: "instapay_username", value: "", label: "InstaPay Username", type: "text", category: "Payments", description: "InstaPay username shown to users for payments" },
-  { key: "telegram_bot_token", value: "", label: "Telegram Bot Token", type: "text", category: "Notifications", description: "Bot token from @BotFather" },
   { key: "smtp_from_email", value: "", label: "Email From Address", type: "text", category: "Notifications", description: "Email sender address" },
   { key: "max_retries", value: "3", label: "Max Check Retries", type: "number", category: "Checker", description: "Max retries if a check fails" },
   { key: "maintenance_mode", value: "false", label: "Maintenance Mode", type: "toggle", category: "System", description: "Disable all checking and show maintenance message" },
