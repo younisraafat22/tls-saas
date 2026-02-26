@@ -67,7 +67,7 @@ async def seed_data():
                 "description": "Monitor your personal TLS visa appointment — individual per-user check",
                 "price_monthly": settings.PRICE_VISA_MONTHLY,
                 "features": [
-                    "One branch of your choice (New Cairo or Alexandria)",
+                    "One branch of your choice (El-Sheikh Zayed, Hurghada, New Cairo or Alexandria)",
                     "Individual check using your TLS credentials",
                     "Email notifications",
                     "Web push notifications",
@@ -272,6 +272,15 @@ async def lifespan(app: FastAPI):
                 await db.execute(text(
                     "INSERT INTO branches (name, url, service_type, is_active) VALUES "
                     "('Alexandria - Visa', 'https://visas-de.tlscontact.com/en-us/country/eg/vac/egALY2de', 'VISA', 1)"
+                ))
+            # Insert Hurghada visa branch if missing
+            existing_hrg = await db.execute(text(
+                "SELECT id FROM branches WHERE name = 'Hurghada - Visa'"
+            ))
+            if not existing_hrg.scalar_one_or_none():
+                await db.execute(text(
+                    "INSERT INTO branches (name, url, service_type, is_active) VALUES "
+                    "('Hurghada - Visa', 'https://visas-de.tlscontact.com/en-us/country/eg/vac/egHRG2de', 'VISA', 1)"
                 ))
             await db.commit()
             logger.info("Migration: fixed visa branch names/URLs, added New Cairo & Alexandria")
