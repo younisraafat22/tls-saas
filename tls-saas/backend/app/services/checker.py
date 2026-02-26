@@ -37,11 +37,15 @@ except ImportError:
 
 from cryptography.fernet import Fernet
 from app.config import settings
+from app.services.visa_checker_sb import visa_checker_sb
 
 logger = logging.getLogger("checker")
 
 # Thread pool for running Playwright in its own ProactorEventLoop on Windows
 _pw_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="playwright")
+
+# Separate thread pool for SeleniumBase (visa branches — sync, UC mode)
+_sb_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="sb_visa")
 
 # ── Credential Encryption ────────────────────────────────────────────
 
@@ -61,8 +65,6 @@ def encrypt_credential(plain: str) -> str:
 def decrypt_credential(encrypted: str) -> str:
     return _fernet.decrypt(encrypted.encode()).decode()
 
-
-# ── TLS Checker ──────────────────────────────────────────────────────
 
 # ── TLS Checker ──────────────────────────────────────────────────────
 
@@ -122,9 +124,20 @@ class TLSChecker:
         service_type: str = "legalization",
     ) -> dict:
         """
-        Check a branch for appointment availability using Patchright (legalization).
+        Check a branch for appointment availability.
+        - Visa branches → SeleniumBase UC (bypasses Cloudflare on visas-de.tlscontact.com)
+        - Legalization branches → Patchright async
         """
         try:
+            # Visa: use SeleniumBase UC (synchronous) in a thread pool on all platforms
+            if service_type == "visa":
+                return await asyncio.get_event_loop().run_in_executor(
+                    _sb_executor,
+                    visa_checker_sb.check,
+                    branch_url, tls_email, tls_password, branch_name,
+                )
+
+            # Legalization: use Patchright (async)
             if sys.platform == "win32":
                 return await asyncio.shield(
                     asyncio.get_event_loop().run_in_executor(
