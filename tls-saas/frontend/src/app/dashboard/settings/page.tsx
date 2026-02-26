@@ -7,7 +7,7 @@ import { authApi } from "@/lib/api";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import {
   User, Lock, Bell, Save,
-  Loader2,
+  Eye, EyeOff, Loader2,
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
 
