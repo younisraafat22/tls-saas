@@ -6,7 +6,7 @@ import { paymentApi, subscriptionApi } from "@/lib/api";
 import { useLanguage } from "@/lib/i18n";
 import {
   CreditCard, Upload, Clock, CheckCircle2, XCircle,
-  AlertCircle, Copy, ArrowRight, Loader2, Sparkles, Eye, EyeOff, Shield,
+  AlertCircle, Copy, ArrowRight, Loader2, Sparkles,
 } from "lucide-react";
 
 const statusColors: Record<string, string> = {
@@ -42,11 +42,6 @@ export default function PaymentsPage() {
   const [screenshotName, setScreenshotName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
-  // TLS credentials
-  const [tlsEmail, setTlsEmail] = useState("");
-  const [tlsPassword, setTlsPassword] = useState("");
-  const [showTlsPassword, setShowTlsPassword] = useState(false);
-  const [activeAppConfirmed, setActiveAppConfirmed] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -81,7 +76,6 @@ export default function PaymentsPage() {
   };
 
   const selectedPlanType = plans.find((p) => p.id === selectedPlan)?.plan_type ?? "";
-  const needsTlsCreds = selectedPlanType === "visa";
 
   const handleSubmitPayment = async () => {
     if (!selectedPlan || !selectedBranch) {
@@ -91,16 +85,6 @@ export default function PaymentsPage() {
     }
     if (!reference.trim() && !screenshotData) {
       setToast({ type: "error", msg: t.payment.errRequireProof });
-      setTimeout(() => setToast(null), 4000);
-      return;
-    }
-    if (needsTlsCreds && (!tlsEmail.trim() || !tlsPassword.trim())) {
-      setToast({ type: "error", msg: t.payment.errTlsCredentials });
-      setTimeout(() => setToast(null), 4000);
-      return;
-    }
-    if (needsTlsCreds && !activeAppConfirmed) {
-      setToast({ type: "error", msg: t.payment.errActiveApp });
       setTimeout(() => setToast(null), 4000);
       return;
     }
@@ -115,8 +99,6 @@ export default function PaymentsPage() {
         method: paymentMethod,
         reference: reference.trim(),
         screenshot_data: screenshotData || undefined,
-        tls_email: needsTlsCreds ? tlsEmail.trim() : undefined,
-        tls_password: needsTlsCreds ? tlsPassword.trim() : undefined,
       });
       setToast({ type: "success", msg: t.payment.successSubmit });
       setReference("");
@@ -124,9 +106,6 @@ export default function PaymentsPage() {
       setScreenshotName("");
       setSelectedPlan(null);
       setSelectedBranch(null);
-      setTlsEmail("");
-      setTlsPassword("");
-      setActiveAppConfirmed(false);
       loadData();
     } catch (err: any) {
       setToast({ type: "error", msg: err?.detail || t.payment.errSubmitFail });
@@ -266,9 +245,8 @@ export default function PaymentsPage() {
               <div className="grid sm:grid-cols-2 gap-3">
                 {branches.filter((b: any) => {
                   const plan = plans.find((p) => p.id === selectedPlan);
-                  // premium is server-monitored legalization, maps to legalization branches
-                  const branchServiceType =
-                    plan?.plan_type === "visa" ? "visa" : "legalization";
+                  if (plan?.plan_type === "premium") return b.is_active;
+                  const branchServiceType = plan?.plan_type === "visa" ? "visa" : "legalization";
                   return b.is_active && b.service_type === branchServiceType;
                 }).map((branch: any) => {
                   const isSelected = selectedBranch === branch.id;
@@ -427,77 +405,12 @@ export default function PaymentsPage() {
                 </div>
               </div>
 
-              {/* Active Application Warning — visa plan only */}
-              {needsTlsCreds && (
-                <div className="bg-amber-500/8 border border-amber-500/25 rounded-xl p-4 space-y-3">
-                  <div className="flex items-start gap-3">
-                    <Shield className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                    <div>
-                      <div className="font-semibold text-amber-400 text-sm mb-1">{t.payment.activeAppTitle}</div>
-                      <p className="text-xs text-gray-400 leading-relaxed">{t.payment.activeAppBody}</p>
-                    </div>
-                  </div>
-                  <label className="flex items-start gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={activeAppConfirmed}
-                      onChange={(e) => setActiveAppConfirmed(e.target.checked)}
-                      className="mt-0.5 accent-amber-400"
-                    />
-                    <span className="text-xs text-gray-300 group-hover:text-white transition-colors">
-                      {t.payment.activeAppConfirm}
-                    </span>
-                  </label>
-                </div>
-              )}
-
-              {/* TLS Credentials — visa plan only */}
-              {needsTlsCreds && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Shield className="w-4 h-4 text-primary-400" />
-                    <h4 className="font-semibold text-sm">{t.payment.tlsCredTitle}</h4>
-                  </div>
-                  <p className="text-xs text-gray-400 leading-relaxed">{t.payment.tlsCredDesc}</p>
-                  <div>
-                    <label className="text-xs text-gray-500 mb-1.5 block">{t.payment.tlsEmailLabel}</label>
-                    <input
-                      type="email"
-                      value={tlsEmail}
-                      onChange={(e) => setTlsEmail(e.target.value)}
-                      placeholder="your.email@example.com"
-                      className="input-field"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500 mb-1.5 block">{t.payment.tlsPasswordLabel}</label>
-                    <div className="relative">
-                      <input
-                        type={showTlsPassword ? "text" : "password"}
-                        value={tlsPassword}
-                        onChange={(e) => setTlsPassword(e.target.value)}
-                        placeholder={t.payment.tlsPasswordPlaceholder}
-                        className="input-field pr-12"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowTlsPassword(!showTlsPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
-                      >
-                        {showTlsPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               <button
                 onClick={handleSubmitPayment}
                 disabled={
                   submitting ||
                   (!reference.trim() && !screenshotData) ||
-                  !selectedBranch ||
-                  (needsTlsCreds && (!tlsEmail.trim() || !tlsPassword.trim() || !activeAppConfirmed))
+                  !selectedBranch
                 }
                 className="btn-gradient w-full flex items-center justify-center gap-2 disabled:opacity-50"
               >

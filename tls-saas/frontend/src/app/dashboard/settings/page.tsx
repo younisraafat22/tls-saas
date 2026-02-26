@@ -3,11 +3,11 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
-import { authApi, credentialApi } from "@/lib/api";
+import { authApi } from "@/lib/api";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import {
   User, Lock, Bell, Save,
-  Eye, EyeOff, Loader2, Shield,
+  Loader2,
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
 
@@ -32,57 +32,13 @@ export default function SettingsPage() {
   // Toast
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
-  // TLS Credentials
-  const [savedCreds, setSavedCreds] = useState<any[]>([]);
-  const [credForm, setCredForm] = useState<{ [key: string]: { email: string; password: string; showPw: boolean } }>({
-    legalization: { email: "", password: "", showPw: false },
-    visa: { email: "", password: "", showPw: false },
-  });
-  const [credSaving, setCredSaving] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
       setFullName(user.full_name || "");
       setPhone(user.phone || "");
     }
-    loadCredentials();
   }, [user]);
-
-  const loadCredentials = async () => {
-    try {
-      const data = await credentialApi.getAll();
-      setSavedCreds(data);
-    } catch {}
-  };
-
-  const handleSaveCredential = async (serviceType: string) => {
-    const form = credForm[serviceType];
-    if (!form.email.trim() || !form.password.trim()) {
-      showToast("error", "Please enter both email and password");
-      return;
-    }
-    setCredSaving(serviceType);
-    try {
-      await credentialApi.save({ service_type: serviceType, tls_email: form.email.trim(), tls_password: form.password.trim() });
-      await loadCredentials();
-      setCredForm(prev => ({ ...prev, [serviceType]: { email: "", password: "", showPw: false } }));
-      showToast("success", "TLS credentials saved successfully");
-    } catch (err: any) {
-      showToast("error", err?.detail || "Failed to save credentials");
-    } finally {
-      setCredSaving(null);
-    }
-  };
-
-  const handleRemoveCredential = async (serviceType: string) => {
-    try {
-      await credentialApi.remove(serviceType);
-      await loadCredentials();
-      showToast("success", "Credentials removed");
-    } catch (err: any) {
-      showToast("error", err?.detail || "Failed to remove credentials");
-    }
-  };
 
   const showToast = (type: "success" | "error", msg: string) => {
     setToast({ type, msg });
@@ -129,7 +85,6 @@ export default function SettingsPage() {
     { id: "profile", label: ts.tabProfile, icon: <User className="w-4 h-4" /> },
     { id: "password", label: ts.tabPassword, icon: <Lock className="w-4 h-4" /> },
     { id: "notifications", label: ts.tabNotifications, icon: <Bell className="w-4 h-4" /> },
-    { id: "credentials", label: ts.tabCredentials, icon: <Shield className="w-4 h-4" /> },
   ];
 
   return (
@@ -281,88 +236,6 @@ export default function SettingsPage() {
             <PushNotifToggle />
           </div>
           <p className="text-xs text-gray-500">{ts.notifFooter}</p>
-        </motion.div>
-      )}
-
-      {/* TLS Credentials tab */}
-      {activeTab === "credentials" && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
-          <div className="glass-card p-5 border-amber-500/20 bg-amber-500/5">
-            <div className="flex items-start gap-3">
-              <Shield className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <div className="font-semibold text-amber-400 text-sm mb-1">{ts.credInfoTitle}</div>
-                <p className="text-xs text-gray-400 leading-relaxed">{ts.credInfoDesc}</p>
-              </div>
-            </div>
-          </div>
-
-          {(["visa"] as const).map((svcType) => {
-            const saved = savedCreds.find((c: any) => c.service_type === svcType);
-            const form = credForm[svcType];
-            return (
-              <div key={svcType} className="glass-card p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <Shield className="w-4 h-4 text-primary-400" />
-                    {ts.credVisa}
-                  </h3>
-                  {saved && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-accent-green bg-accent-green/10 px-2 py-0.5 rounded-full">
-                        {ts.credSaved}: {saved.email_masked}
-                      </span>
-                      <button
-                        onClick={() => handleRemoveCredential(svcType)}
-                        className="text-xs text-red-400 hover:text-red-300 transition-colors"
-                      >
-                        {ts.credRemove}
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs text-gray-500 mb-1.5 block">{ts.credTlsEmail}</label>
-                    <input
-                      type="email"
-                      value={form.email}
-                      onChange={(e) => setCredForm(p => ({ ...p, [svcType]: { ...p[svcType], email: e.target.value } }))}
-                      placeholder={saved ? `${ts.credUpdatePlaceholder}: ${saved.email_masked}` : "your-tls-email@example.com"}
-                      className="input-field"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500 mb-1.5 block">{ts.credTlsPassword}</label>
-                    <div className="relative">
-                      <input
-                        type={form.showPw ? "text" : "password"}
-                        value={form.password}
-                        onChange={(e) => setCredForm(p => ({ ...p, [svcType]: { ...p[svcType], password: e.target.value } }))}
-                        placeholder={ts.credNewPasswordPlaceholder}
-                        className="input-field pr-12"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setCredForm(p => ({ ...p, [svcType]: { ...p[svcType], showPw: !p[svcType].showPw } }))}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
-                      >
-                        {form.showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleSaveCredential(svcType)}
-                  disabled={credSaving === svcType || !form.email.trim() || !form.password.trim()}
-                  className="btn-gradient flex items-center gap-2 text-sm disabled:opacity-50"
-                >
-                  {credSaving === svcType ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  {saved ? ts.credUpdate : ts.credSave}
-                </button>
-              </div>
-            );
-          })}
         </motion.div>
       )}
 

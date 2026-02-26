@@ -10,13 +10,12 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models import (
     User, Plan, Subscription, Payment, Branch,
-    PlanType, SubscriptionStatus, PaymentStatus, UserCredential, ServiceType,
+    SubscriptionStatus, PaymentStatus,
 )
 from app.auth import get_current_user
 from app.schemas import (
     PaymentSubmitRequest, PaymentPublic, MessageResponse,
 )
-from app.services.checker import encrypt_credential
 from app.websocket import ws_manager
 
 router = APIRouter(prefix="/api/payments", tags=["payments"])
@@ -79,31 +78,6 @@ async def submit_payment(
         status=PaymentStatus.PENDING,
     )
     db.add(payment)
-
-    # Save / update the user's TLS credentials — only required for visa plan
-    if body.plan_type == PlanType.VISA:
-        if not body.tls_email or not body.tls_password:
-            raise HTTPException(400, "TLS credentials are required for the Visa plan")
-        service_type = ServiceType.VISA
-        existing_cred = await db.execute(
-            select(UserCredential).where(
-                UserCredential.user_id == user.id,
-                UserCredential.service_type == service_type,
-            )
-        )
-        cred = existing_cred.scalar_one_or_none()
-        if cred:
-            cred.email_encrypted = encrypt_credential(body.tls_email)
-            cred.password_encrypted = encrypt_credential(body.tls_password)
-            cred.is_active = True
-            cred.last_error = ""
-        else:
-            db.add(UserCredential(
-                user_id=user.id,
-                service_type=service_type,
-                email_encrypted=encrypt_credential(body.tls_email),
-                password_encrypted=encrypt_credential(body.tls_password),
-            ))
 
     await db.commit()
 
