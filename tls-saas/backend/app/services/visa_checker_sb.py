@@ -99,6 +99,7 @@ class VisaCheckerSB:
             )
             driver.set_page_load_timeout(90)
             driver.implicitly_wait(3)
+            driver.maximize_window()  # Ensures LOGIN text button is visible (not collapsed to icon)
 
             # Navigate — uc_open_with_reconnect disconnects devtools during CF
             # challenge so Cloudflare cannot detect automation, then reconnects.
@@ -281,7 +282,7 @@ class VisaCheckerSB:
 
     def _click_login(self, driver, log) -> bool:
         """Find and click the LOGIN button on the TLS home page."""
-        # TLS-specific selectors
+        # TLS-specific CSS selectors (text button — only visible when maximized)
         for sel in [
             "span.TlsButton_tls-button__syUS5",
             "[class*='TlsButton'][class*='--outline']",
@@ -291,7 +292,7 @@ class VisaCheckerSB:
                 els = driver.find_elements(By.CSS_SELECTOR, sel)
                 for el in els:
                     if el.text.strip().upper() == "LOGIN" and el.is_displayed():
-                        el.click()
+                        driver.execute_script("arguments[0].click();", el)
                         log("Clicked LOGIN button")
                         return True
             except Exception:
@@ -302,22 +303,53 @@ class VisaCheckerSB:
             try:
                 for el in driver.find_elements(By.TAG_NAME, tag):
                     if el.text.strip().upper() in ("LOGIN", "LOG IN") and el.is_displayed():
-                        el.click()
+                        driver.execute_script("arguments[0].click();", el)
                         log("Clicked LOGIN button (text scan)")
                         return True
             except Exception:
                 continue
 
-        # Wait up to 20s for delayed button
-        log("LOGIN button not found yet, waiting...")
+        # Small-screen fallback: SVG User icon (shown when window is narrow)
         try:
-            btn = WebDriverWait(driver, 20).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "span.TlsButton_tls-button__syUS5"))
-            )
-            if btn.text.strip().upper() == "LOGIN":
-                btn.click()
-                log("Clicked LOGIN button (after wait)")
-                return True
+            icon_svg = driver.find_element(By.CSS_SELECTOR, "svg[aria-label='User icon']")
+            login_btn = icon_svg.find_element(By.XPATH, "..")
+            driver.execute_script("arguments[0].click();", login_btn)
+            log("Clicked SVG User icon login button")
+            return True
+        except Exception:
+            pass
+
+        # div#login fallback
+        try:
+            login_div = driver.find_element(By.CSS_SELECTOR, "div#login, [id='login']")
+            driver.execute_script("arguments[0].click();", login_div)
+            log("Clicked login div")
+            return True
+        except Exception:
+            pass
+
+        # Wait up to 20s for delayed button, then retry all
+        log("LOGIN button not found yet, waiting...")
+        time.sleep(10)
+        for sel in [
+            "span.TlsButton_tls-button__syUS5",
+            "[class*='TlsButton'][class*='--outline']",
+        ]:
+            try:
+                els = driver.find_elements(By.CSS_SELECTOR, sel)
+                for el in els:
+                    if el.text.strip().upper() == "LOGIN" and el.is_displayed():
+                        driver.execute_script("arguments[0].click();", el)
+                        log("Clicked LOGIN button (after wait)")
+                        return True
+            except Exception:
+                continue
+        try:
+            icon_svg = driver.find_element(By.CSS_SELECTOR, "svg[aria-label='User icon']")
+            login_btn = icon_svg.find_element(By.XPATH, "..")
+            driver.execute_script("arguments[0].click();", login_btn)
+            log("Clicked SVG User icon (after wait)")
+            return True
         except Exception:
             pass
 
