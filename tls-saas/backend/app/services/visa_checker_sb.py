@@ -91,12 +91,21 @@ class VisaCheckerSB:
             driver.set_page_load_timeout(90)
             driver.implicitly_wait(3)
 
-            # Navigate — UC mode handles Cloudflare challenge automatically
-            driver.get(branch_url)
-            _wait(3, 5)
+            # Navigate — uc_open_with_reconnect disconnects devtools during CF
+            # challenge so Cloudflare cannot detect automation, then reconnects.
+            log("Navigating with uc_open_with_reconnect...")
+            driver.uc_open_with_reconnect(branch_url, reconnect_time=5)
+            _wait(2, 3)
 
-            # Wait for Cloudflare to clear
-            self._wait_cloudflare(driver, log)
+            # If CF is still showing, retry with longer reconnect
+            if self._has_cloudflare(driver):
+                log("Cloudflare still present, retrying with longer reconnect...")
+                driver.uc_open_with_reconnect(branch_url, reconnect_time=10)
+                _wait(3, 5)
+
+            if self._has_cloudflare(driver):
+                log("Cloudflare still present after retries — waiting up to 60s...")
+                self._wait_cloudflare(driver, log, max_wait=60)
 
             # Accept cookies
             self._accept_cookies(driver)
@@ -181,17 +190,25 @@ class VisaCheckerSB:
 
     # ── Cloudflare ────────────────────────────────────────────────────
 
+    _CF_INDICATORS = [
+        "just a moment", "checking your browser",
+        "cf-browser-verification", "challenge-platform",
+        "turnstile",
+    ]
+
+    def _has_cloudflare(self, driver) -> bool:
+        """Quick check if CF challenge page is still showing."""
+        try:
+            body = driver.page_source.lower()
+            return any(ind in body for ind in self._CF_INDICATORS)
+        except Exception:
+            return False
+
     def _wait_cloudflare(self, driver, log, max_wait: int = 90):
         """Wait for Cloudflare challenge / Turnstile to pass."""
         start = time.time()
-        cf_indicators = [
-            "just a moment", "checking your browser",
-            "cf-browser-verification", "challenge-platform",
-            "turnstile", "cloudflare",
-        ]
         while time.time() - start < max_wait:
-            body = driver.page_source.lower()
-            if any(ind in body for ind in cf_indicators):
+            if self._has_cloudflare(driver):
                 log("Cloudflare challenge detected, waiting...")
                 time.sleep(3)
                 continue
