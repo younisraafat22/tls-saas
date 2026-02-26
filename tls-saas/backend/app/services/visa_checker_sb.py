@@ -9,8 +9,11 @@ Called by TLSChecker.check_branch() when service_type == "visa".
 """
 
 import logging
+import os
 import random
 import re
+import subprocess
+import sys
 import time
 from datetime import datetime
 from typing import Optional
@@ -68,13 +71,11 @@ class VisaCheckerSB:
             # IMPORTANT: UC mode CANNOT bypass Cloudflare/Turnstile in headless=True.
             # On Linux servers with no display, we start a virtual Xvfb display and
             # point DISPLAY at it — Chrome thinks it's headed, CF bypass works.
-            import sys as _sys
-            import subprocess as _sp
-            if _sys.platform != "win32" and not os.environ.get("DISPLAY"):
+            if sys.platform != "win32" and not os.environ.get("DISPLAY"):
                 try:
-                    _sp.Popen(["Xvfb", ":99", "-screen", "0", "1920x1080x24"],
-                              stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
-                    import time as _t; _t.sleep(1)
+                    subprocess.Popen(["Xvfb", ":99", "-screen", "0", "1920x1080x24"],
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    time.sleep(1)
                     os.environ["DISPLAY"] = ":99"
                     log("Started Xvfb virtual display :99")
                 except Exception as _xe:
