@@ -1,8 +1,8 @@
 #!/bin/bash
 # =============================================================================
-#  TLS Appointment Checker — Auto Installer for Ubuntu Server 24.04
-#  Run as your normal user (NOT root). Sudo will be used where needed.
-#  Usage:  bash install.sh
+#  TLS Appointment Checker — Auto Installer
+#  Username: younis | Frontend: https://tls-saas.vercel.app
+#  Run: bash install.sh
 # =============================================================================
 
 set -e  # Exit on any error
@@ -14,205 +14,144 @@ success() { echo -e "${GREEN}[OK]${NC}    $1"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC}  $1"; }
 error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
-# ── Config — edit these before running ───────────────────────────────────────
-DOMAIN=""           # e.g. "mysite.com"  — leave empty to use server IP only
-APP_USER=$(whoami)
-APP_DIR="/home/$APP_USER/tls-saas"
-BACKEND_DIR="$APP_DIR/backend"
-FRONTEND_DIR="$APP_DIR/frontend"
-BACKEND_PORT=8000
-FRONTEND_PORT=3000
+# ── Config ────────────────────────────────────────────────────────────────────
+USERNAME="younis"
+HOME_DIR="/home/$USERNAME"
+BACKEND_DIR="$HOME_DIR/tls-saas/backend"
+VENV="$BACKEND_DIR/venv"
+VERCEL_URL="https://tls-saas.vercel.app"
 
 echo ""
 echo "============================================================"
-echo "   TLS Appointment Checker — Installer"
+echo "   TLS Appointment Checker — Auto Installer"
 echo "============================================================"
 echo ""
 
 # ── 1. System packages ────────────────────────────────────────────────────────
-info "Updating system and installing packages..."
-sudo apt-get update -qq
-sudo apt-get upgrade -y -qq
-sudo apt-get install -y -qq \
-    python3 python3-pip python3-venv \
-    nodejs npm \
-    nginx \
-    curl wget git \
-    ffmpeg \
-    libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
-    libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 \
-    libasound2 libpango-1.0-0 libpangocairo-1.0-0
-success "System packages installed"
+info "Installing system dependencies..."
+sudo apt-get update -y
+sudo apt-get install -y \
+    python3.11 python3.11-venv python3-pip git curl openssh-server \
+    wget gnupg2 libnss3 libxss1 libasound2 libatk-bridge2.0-0 \
+    libdrm2 libxcomposite1 libxdamage1 libxrandr2 libgbm1 \
+    libpango-1.0-0 libcairo2 libatspi2.0-0 \
+    fonts-liberation fonts-noto-color-emoji
+sudo systemctl enable ssh && sudo systemctl start ssh
+success "System packages installed | SSH enabled"
 
-# ── 2. Python virtual environment ────────────────────────────────────────────
-info "Setting up Python virtual environment..."
+# ── 2. Clone / update repo ────────────────────────────────────────────────────
+info "Cloning repository..."
+if [ -d "$HOME_DIR/tls-saas/.git" ]; then
+    warn "Repo already exists — pulling latest changes..."
+    cd "$HOME_DIR/tls-saas" && git pull origin main
+else
+    cd "$HOME_DIR" && git clone https://github.com/younisraafat22/tls-saas.git
+fi
+success "Repository ready"
+
+# ── 3. Python virtual environment ─────────────────────────────────────────────
+info "Setting up Python 3.11 virtual environment..."
 cd "$BACKEND_DIR"
-python3 -m venv venv
-source venv/bin/activate
-pip install --quiet --upgrade pip
-pip install --quiet -r requirements.txt
+python3.11 -m venv venv
+source "$VENV/bin/activate"
+pip install --upgrade pip -q
+pip install -r requirements.txt -q
 success "Python dependencies installed"
 
-# ── 3. Patchright browser ────────────────────────────────────────────────────
-info "Installing Patchright Chromium browser..."
-python3 -m patchright install chromium 2>&1 | tail -5
-success "Patchright Chromium installed"
+# ── 4. Playwright Chromium ────────────────────────────────────────────────────
+info "Installing Playwright Chromium (this takes 2-3 mins)..."
+python -m patchright install chromium
+python -m patchright install-deps chromium
+success "Chromium installed"
 
-deactivate
+# ── 5. .env file & data directory ────────────────────────────────────────────
+info "Creating .env file and data directory..."
+mkdir -p "$BACKEND_DIR/data"
 
-# ── 4. Frontend dependencies & build ─────────────────────────────────────────
-info "Installing Node.js dependencies..."
-cd "$FRONTEND_DIR"
-npm install --silent
-info "Building Next.js frontend (this may take 2-3 minutes)..."
-npm run build
-success "Frontend built"
+cat > "$BACKEND_DIR/.env" << ENVEOF
+DATABASE_URL=sqlite+aiosqlite:////$BACKEND_DIR/data/tls_saas.db
+SECRET_KEY=qZGlsKFtbLxl3EBBPYv9UvYIzLR6uydmI0Fcur2LObeR030TnYe3hKoDbqwKqfKo
+JWT_SECRET=qZGlsKFtbLxl3EBBPYv9UvYIzLR6uydmI0Fcur2LObeR030TnYe3hKoDbqwKqfKo
+ADMIN_EMAIL=younis.raafat2@gmail.com
+ADMIN_PASSWORD=Yois@Ra753
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=tlsappointmentchecker@gmail.com
+SMTP_PASSWORD=zylc etmv kuic uluq
+SENDER_EMAIL=tlsappointmentchecker@gmail.com
+SENDER_NAME=TLS Appointment Checker
+CREDENTIAL_ENCRYPTION_KEY=vcgcr_5TAdK4qnuvpgRn858y-K1vMDcRzU5zNKpa6IM=
+CHECK_INTERVAL_MINUTES=5
+BROWSER_HEADLESS=true
+ALLOWED_ORIGINS=$VERCEL_URL
+APP_ENV=production
+ENVEOF
 
-# ── 5. Systemd service — Backend ─────────────────────────────────────────────
-info "Creating backend systemd service..."
-sudo tee /etc/systemd/system/tls-backend.service > /dev/null <<EOF
+success ".env file written"
+
+# ── 6. Systemd service (auto-start on boot) ───────────────────────────────────
+info "Creating systemd auto-start service..."
+sudo tee /etc/systemd/system/tls-backend.service > /dev/null << SVCEOF
 [Unit]
-Description=TLS Appointment Checker — Backend
-After=network.target
+Description=TLS Appointment Checker Backend
+After=network-online.target
+Wants=network-online.target
 
 [Service]
-User=$APP_USER
+Type=simple
+User=$USERNAME
 WorkingDirectory=$BACKEND_DIR
-ExecStart=$BACKEND_DIR/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port $BACKEND_PORT --workers 1
+EnvironmentFile=$BACKEND_DIR/.env
+ExecStart=$VENV/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
-Environment=PYTHONUNBUFFERED=1
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
-EOF
-success "Backend service created"
+SVCEOF
 
-# ── 6. Systemd service — Frontend ────────────────────────────────────────────
-info "Creating frontend systemd service..."
-sudo tee /etc/systemd/system/tls-frontend.service > /dev/null <<EOF
-[Unit]
-Description=TLS Appointment Checker — Frontend
-After=network.target tls-backend.service
-
-[Service]
-User=$APP_USER
-WorkingDirectory=$FRONTEND_DIR
-ExecStart=/usr/bin/npm start -- --port $FRONTEND_PORT
-Restart=always
-RestartSec=5
-Environment=NODE_ENV=production
-
-[Install]
-WantedBy=multi-user.target
-EOF
-success "Frontend service created"
-
-# ── 7. Enable & start services ────────────────────────────────────────────────
-info "Enabling and starting backend & frontend services..."
 sudo systemctl daemon-reload
-sudo systemctl enable tls-backend tls-frontend
-sudo systemctl start tls-backend tls-frontend
-sleep 3
-sudo systemctl is-active --quiet tls-backend && success "Backend is running" || warn "Backend may not have started — check: sudo journalctl -u tls-backend -n 30"
-sudo systemctl is-active --quiet tls-frontend && success "Frontend is running" || warn "Frontend may not have started — check: sudo journalctl -u tls-frontend -n 30"
+sudo systemctl enable tls-backend
+sudo systemctl start tls-backend
+sleep 4
 
-# ── 8. Nginx config ───────────────────────────────────────────────────────────
-info "Configuring Nginx reverse proxy..."
-
-# Determine server_name line
-if [ -n "$DOMAIN" ]; then
-    SERVER_NAME="$DOMAIN www.$DOMAIN"
+if sudo systemctl is-active --quiet tls-backend; then
+    success "Backend service is RUNNING on port 8000"
 else
-    SERVER_NAME="_"
+    warn "Backend didn't start — check: sudo journalctl -u tls-backend -n 40"
 fi
 
-sudo tee /etc/nginx/sites-available/tls > /dev/null <<EOF
-server {
-    listen 80;
-    server_name $SERVER_NAME;
-
-    client_max_body_size 20M;
-
-    # Backend API
-    location /api/ {
-        proxy_pass http://127.0.0.1:$BACKEND_PORT;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_read_timeout 120s;
-    }
-
-    # WebSocket
-    location /ws {
-        proxy_pass http://127.0.0.1:$BACKEND_PORT;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_read_timeout 3600s;
-    }
-
-    # Frontend
-    location / {
-        proxy_pass http://127.0.0.1:$FRONTEND_PORT;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-    }
-}
-EOF
-
-# Remove default site if present
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo ln -sf /etc/nginx/sites-available/tls /etc/nginx/sites-enabled/tls
-
-sudo nginx -t && sudo systemctl reload nginx
-success "Nginx configured and reloaded"
-
-# ── 9. Cloudflare Tunnel (optional) ──────────────────────────────────────────
-info "Installing Cloudflare Tunnel (cloudflared)..."
-ARCH=$(dpkg --print-architecture)
-CF_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$ARCH"
-sudo curl -fsSL "$CF_URL" -o /usr/local/bin/cloudflared
-sudo chmod +x /usr/local/bin/cloudflared
-success "cloudflared installed at /usr/local/bin/cloudflared"
-
-# ── 10. Firewall ──────────────────────────────────────────────────────────────
-info "Configuring firewall (ufw)..."
-sudo ufw allow OpenSSH
-sudo ufw allow 'Nginx Full'
-sudo ufw --force enable
-success "Firewall configured"
+# ── 7. Cloudflare Tunnel ──────────────────────────────────────────────────────
+info "Installing cloudflared..."
+curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o /tmp/cloudflared.deb
+sudo dpkg -i /tmp/cloudflared.deb
+rm /tmp/cloudflared.deb
+success "cloudflared installed"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
-SERVER_IP=$(hostname -I | awk '{print $1}')
+LOCAL_IP=$(hostname -I | awk '{print $1}')
 echo ""
 echo "============================================================"
-echo -e "${GREEN}  Installation complete!${NC}"
+echo -e "${GREEN}  Setup Complete!${NC}"
 echo "============================================================"
 echo ""
-echo "  Local access:   http://$SERVER_IP"
-if [ -n "$DOMAIN" ]; then
-echo "  Domain:         http://$DOMAIN"
-fi
+echo "  Local health check:"
+echo "    curl http://localhost:8000/api/health"
 echo ""
-echo "  Useful commands:"
-echo "    sudo systemctl status tls-backend"
-echo "    sudo systemctl status tls-frontend"
-echo "    sudo journalctl -u tls-backend -f      # live backend logs"
-echo "    sudo journalctl -u tls-frontend -f     # live frontend logs"
+echo "  Backend logs:   sudo journalctl -u tls-backend -f"
+echo "  Restart:        sudo systemctl restart tls-backend"
 echo ""
-echo "  To set up Cloudflare Tunnel (free HTTPS, no port forwarding):"
-echo "    cloudflared tunnel login"
-echo "    cloudflared tunnel create tls-app"
-echo "    cloudflared tunnel route dns tls-app $DOMAIN"
-echo "    cloudflared tunnel run tls-app"
+echo "  ── NEXT STEP: Get a public HTTPS URL ───────────────────"
 echo ""
-echo "  To enable HTTPS with Let's Encrypt (if you have a domain):"
-echo "    sudo apt install certbot python3-certbot-nginx -y"
-echo "    sudo certbot --nginx -d $DOMAIN"
+echo "  Run this command and leave it open:"
+echo "    cloudflared tunnel --url http://localhost:8000"
 echo ""
+echo "  It will print a URL like: https://xxxx-xxxx.trycloudflare.com"
+echo ""
+echo "  Then in Vercel dashboard → tls-saas project →"
+echo "  Settings → Environment Variables → add:"
+echo "    NEXT_PUBLIC_API_URL = https://xxxx-xxxx.trycloudflare.com"
+echo "  Then click Redeploy."
+echo "============================================================"
