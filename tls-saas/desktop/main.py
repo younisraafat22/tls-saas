@@ -1913,7 +1913,8 @@ class TLSApp:
                         screenshot_label.color = ft.Colors.RED_400
                     self.page.update()
 
-            file_picker = ft.FilePicker(on_result=on_screenshot_result)
+            file_picker = ft.FilePicker()
+            file_picker.on_result = on_screenshot_result
             self.page.overlay.append(file_picker)
 
             def pick_screenshot(e):
