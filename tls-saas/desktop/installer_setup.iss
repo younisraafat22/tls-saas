@@ -2,9 +2,9 @@
 ; Inno Setup Configuration
 
 #define MyAppName "TLS Appointment Checker"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "2.0.0"
 #define MyAppPublisher "TLS Appointment Checker"
-#define MyAppURL "https://tls-appointment-checker.netlify.app"
+#define MyAppURL "https://tls-saas.vercel.app"
 #define MyAppExeName "TLSAppointmentChecker.exe"
 #define MyAppSupportEmail "tlsappointmentchecker@gmail.com"
 
