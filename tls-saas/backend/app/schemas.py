@@ -177,9 +177,9 @@ class PaymentSubmitRequest(BaseModel):
     reference: str = Field(default="", max_length=255, description="Transaction ID / reference")
     screenshot_data: Optional[str] = Field(default=None, description="Base64-encoded screenshot")
     amount: float
-    # TLS credentials collected at payment time
-    tls_email: str = Field(min_length=1, max_length=255, description="User's TLS website email")
-    tls_password: str = Field(min_length=1, max_length=255, description="User's TLS website password")
+    # TLS credentials — required for visa plan only
+    tls_email: Optional[str] = Field(default=None, max_length=255, description="User's TLS website email (visa plan only)")
+    tls_password: Optional[str] = Field(default=None, max_length=255, description="User's TLS website password (visa plan only)")
 
 
 class PaymentPublic(BaseModel):

@@ -80,27 +80,30 @@ async def submit_payment(
     )
     db.add(payment)
 
-    # Save / update the user's TLS credentials for this service type
-    service_type = ServiceType.LEGALIZATION if body.plan_type == PlanType.LEGALIZATION else ServiceType.VISA
-    existing_cred = await db.execute(
-        select(UserCredential).where(
-            UserCredential.user_id == user.id,
-            UserCredential.service_type == service_type,
+    # Save / update the user's TLS credentials — only required for visa plan
+    if body.plan_type == PlanType.VISA:
+        if not body.tls_email or not body.tls_password:
+            raise HTTPException(400, "TLS credentials are required for the Visa plan")
+        service_type = ServiceType.VISA
+        existing_cred = await db.execute(
+            select(UserCredential).where(
+                UserCredential.user_id == user.id,
+                UserCredential.service_type == service_type,
+            )
         )
-    )
-    cred = existing_cred.scalar_one_or_none()
-    if cred:
-        cred.email_encrypted = encrypt_credential(body.tls_email)
-        cred.password_encrypted = encrypt_credential(body.tls_password)
-        cred.is_active = True
-        cred.last_error = ""
-    else:
-        db.add(UserCredential(
-            user_id=user.id,
-            service_type=service_type,
-            email_encrypted=encrypt_credential(body.tls_email),
-            password_encrypted=encrypt_credential(body.tls_password),
-        ))
+        cred = existing_cred.scalar_one_or_none()
+        if cred:
+            cred.email_encrypted = encrypt_credential(body.tls_email)
+            cred.password_encrypted = encrypt_credential(body.tls_password)
+            cred.is_active = True
+            cred.last_error = ""
+        else:
+            db.add(UserCredential(
+                user_id=user.id,
+                service_type=service_type,
+                email_encrypted=encrypt_credential(body.tls_email),
+                password_encrypted=encrypt_credential(body.tls_password),
+            ))
 
     await db.commit()
 

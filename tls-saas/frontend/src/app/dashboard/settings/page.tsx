@@ -297,7 +297,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {(["legalization", "visa"] as const).map((svcType) => {
+          {(["visa"] as const).map((svcType) => {
             const saved = savedCreds.find((c: any) => c.service_type === svcType);
             const form = credForm[svcType];
             return (
