@@ -457,17 +457,12 @@ class VisaCheckerSB:
     # ── Navigation to Booking ────────────────────────────────────────
 
     def _navigate_to_booking(self, driver, log, branch_url: str = "") -> bool:
-        """Click Select → Continue to reach the appointment calendar."""
+        """Click Select → (Continue for legalization / skip for visa) → appointment calendar."""
         try:
             self._accept_cookies(driver)
             time.sleep(2)
 
-            body = driver.page_source.lower()
-            if "click on the button to create a new application" in body:
-                log("No TLS application found — user must create one first", "error")
-                return False
-
-            # Extract location keywords from URL for multi-app selection
+            # Extract location keywords from URL for multi-app card matching
             location_keywords: list[str] = []
             if branch_url:
                 m = re.search(r'eg([A-Z]{3})\d', branch_url)
@@ -482,117 +477,106 @@ class VisaCheckerSB:
                     elif code == "ALY":
                         location_keywords = ["aly", "alexandria", "egaly"]
 
-            # Find Select button
+            # ── Step 1: Find Select button ────────────────────────────
             log("Looking for Select button...")
             select_el = None
 
-            # Multiple app cards?
-            try:
-                all_btns = driver.find_elements(By.CSS_SELECTOR, "button[name='formGroupId']")
-                if len(all_btns) > 1 and location_keywords:
-                    for btn in all_btns:
-                        try:
-                            card_text = driver.execute_script(
-                                """
-                                var el = arguments[0];
-                                for (var i = 0; i < 8; i++) {
-                                    el = el.parentElement;
-                                    if (!el) break;
-                                    if (el.textContent.trim().length > 30)
-                                        return el.textContent.toLowerCase();
-                                }
-                                return '';
-                                """,
-                                btn,
-                            )
-                            if any(kw in card_text for kw in location_keywords):
-                                select_el = btn
-                                log("Matched application card to location")
-                                break
-                        except Exception:
-                            pass
-                    if not select_el and all_btns:
-                        select_el = all_btns[0]
-                elif len(all_btns) == 1:
-                    select_el = all_btns[0]
-            except Exception:
-                pass
-
-            if not select_el:
-                for css in ["button[name='formGroupId']", "button.tls-button-primary"]:
-                    try:
-                        el = WebDriverWait(driver, 8).until(
-                            EC.element_to_be_clickable((By.CSS_SELECTOR, css))
-                        )
-                        if el.is_displayed():
-                            select_el = el
-                            break
-                    except Exception:
-                        continue
-
-            if not select_el:
-                for el in driver.find_elements(By.TAG_NAME, "button"):
-                    if el.text.strip().upper() == "SELECT" and el.is_displayed():
-                        select_el = el
+            # Wait up to 20s for the primary button selector (with class)
+            for css in [
+                "button[name='formGroupId'].TlsButton_tls-button__syUS5",
+                "button[name='formGroupId']",
+            ]:
+                try:
+                    found = WebDriverWait(driver, 20).until(
+                        EC.presence_of_all_elements_located((By.CSS_SELECTOR, css))
+                    )
+                    if found:
+                        if len(found) > 1 and location_keywords:
+                            for btn in found:
+                                try:
+                                    card_text = driver.execute_script(
+                                        """
+                                        var el = arguments[0];
+                                        for (var i = 0; i < 8; i++) {
+                                            el = el.parentElement;
+                                            if (!el) break;
+                                            if (el.textContent.trim().length > 30)
+                                                return el.textContent.toLowerCase();
+                                        }
+                                        return '';
+                                        """,
+                                        btn,
+                                    )
+                                    if any(kw in card_text for kw in location_keywords):
+                                        select_el = btn
+                                        log("Matched application card to location")
+                                        break
+                                except Exception:
+                                    pass
+                            if not select_el:
+                                select_el = found[0]
+                        else:
+                            select_el = found[0]
                         break
+                except Exception:
+                    continue
 
+            # Fallback: any button with text SELECT
             if not select_el:
-                log("Select button not found", "error")
+                try:
+                    for btn in driver.find_elements(By.TAG_NAME, "button"):
+                        if btn.text.strip().upper() == "SELECT" and btn.is_displayed():
+                            select_el = btn
+                            break
+                except Exception:
+                    pass
+
+            # If still no Select button, NOW check for "no application" indicators
+            if not select_el:
+                try:
+                    body_text = driver.execute_script("return document.body.innerText;").lower()
+                    no_app_indicators = [
+                        "no application created",
+                        "no application",
+                    ]
+                    if any(ind in body_text for ind in no_app_indicators):
+                        log("No TLS application found — user must create one first", "error")
+                    else:
+                        log("Select button not found (page may still be loading)", "error")
+                except Exception:
+                    log("Select button not found", "error")
                 return False
 
-            driver.execute_script("arguments[0].scrollIntoView(true);", select_el)
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", select_el)
             _wait(0.5, 1)
-            select_el.click()
+            driver.execute_script("arguments[0].click();", select_el)
             log("Clicked Select")
-            _wait(2, 3)
-
-            # Find Continue button
-            log("Looking for Continue button...")
-            continue_el = None
-
-            for _ in range(3):
-                for sel in ["button[type='submit']", "button.tls-button-primary", "button[class*='tls-button-primary']"]:
-                    try:
-                        els = driver.find_elements(By.CSS_SELECTOR, sel)
-                        for el in els:
-                            if el.is_displayed() and el.text.strip().upper() in ("CONTINUE", "CONFIRM", "NEXT", "PROCEED"):
-                                continue_el = el
-                                break
-                        if continue_el:
-                            break
-                    except Exception:
-                        continue
-
-                if not continue_el:
-                    for el in driver.find_elements(By.TAG_NAME, "button"):
-                        if el.text.strip().upper() in ("CONTINUE", "CONFIRM", "NEXT") and el.is_displayed():
-                            continue_el = el
-                            break
-
-                if continue_el:
-                    break
-                time.sleep(2)
-
-            if not continue_el:
-                log("Continue button not found", "error")
-                return False
-
-            driver.execute_script("arguments[0].scrollIntoView(true);", continue_el)
-            _wait(0.5, 1)
-            continue_el.click()
-            log("Clicked Continue")
             _wait(3, 5)
 
-            # Verify we reached booking page
+            # ── Step 2: Visa goes straight to appointments — skip Continue ──
+            log("Group selected – loading appointments...")
+            _wait(4, 6)
+
+            # ── Step 3: Verify appointment/booking page loaded ─────────
             for _ in range(10):
                 url = driver.current_url.lower()
-                body_lc = driver.page_source.lower()
                 if any(k in url for k in ("appointment-booking", "appointment", "booking", "workflow")):
                     log("Appointment page loaded")
                     return True
-                if "calendar" in body_lc or "month" in body_lc:
-                    log("Appointment page loaded (calendar detected)")
-                    return True
+                try:
+                    body_text = driver.execute_script("return document.body.innerText;").lower()
+                    if any(k in body_text for k in ("calendar", "slot", "month", "don't have any", "available")):
+                        log("Appointment page loaded (calendar/slot text detected)")
+                        return True
+                except Exception:
+                    pass
+                # Also check for month-link anchors
+                try:
+                    if driver.find_elements(By.CSS_SELECTOR, "a[href*='appointment-booking?month=']"):
+                        log("Appointment page loaded (month links found)")
+                        return True
+                except Exception:
+                    pass
                 time.sleep(2)
 
             log("Could not confirm booking page — proceeding anyway", "warn")
