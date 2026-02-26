@@ -129,7 +129,7 @@ export default function SettingsPage() {
     { id: "profile", label: ts.tabProfile, icon: <User className="w-4 h-4" /> },
     { id: "password", label: ts.tabPassword, icon: <Lock className="w-4 h-4" /> },
     { id: "notifications", label: ts.tabNotifications, icon: <Bell className="w-4 h-4" /> },
-    { id: "credentials", label: "TLS Credentials", icon: <Shield className="w-4 h-4" /> },
+    { id: "credentials", label: ts.tabCredentials, icon: <Shield className="w-4 h-4" /> },
   ];
 
   return (
@@ -291,11 +291,8 @@ export default function SettingsPage() {
             <div className="flex items-start gap-3">
               <Shield className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
               <div>
-                <div className="font-semibold text-amber-400 text-sm mb-1">TLS Website Credentials</div>
-                <p className="text-xs text-gray-400 leading-relaxed">
-                  These are your login credentials for the TLS appointments website. They are stored encrypted and used
-                  to check for available appointments on your behalf. Update them here if you change your TLS password.
-                </p>
+                <div className="font-semibold text-amber-400 text-sm mb-1">{ts.credInfoTitle}</div>
+                <p className="text-xs text-gray-400 leading-relaxed">{ts.credInfoDesc}</p>
               </div>
             </div>
           </div>
@@ -308,41 +305,41 @@ export default function SettingsPage() {
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold flex items-center gap-2">
                     <Shield className="w-4 h-4 text-primary-400" />
-                    {svcType === "legalization" ? "Legalization Credentials" : "Visa Credentials"}
+                    {svcType === "legalization" ? ts.credLegalization : ts.credVisa}
                   </h3>
                   {saved && (
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-accent-green bg-accent-green/10 px-2 py-0.5 rounded-full">
-                        Saved: {saved.email_masked}
+                        {ts.credSaved}: {saved.email_masked}
                       </span>
                       <button
                         onClick={() => handleRemoveCredential(svcType)}
                         className="text-xs text-red-400 hover:text-red-300 transition-colors"
                       >
-                        Remove
+                        {ts.credRemove}
                       </button>
                     </div>
                   )}
                 </div>
                 <div className="space-y-3">
                   <div>
-                    <label className="text-xs text-gray-500 mb-1.5 block">TLS Email</label>
+                    <label className="text-xs text-gray-500 mb-1.5 block">{ts.credTlsEmail}</label>
                     <input
                       type="email"
                       value={form.email}
                       onChange={(e) => setCredForm(p => ({ ...p, [svcType]: { ...p[svcType], email: e.target.value } }))}
-                      placeholder={saved ? `Update: currently ${saved.email_masked}` : "your-tls-email@example.com"}
+                      placeholder={saved ? `${ts.credUpdatePlaceholder}: ${saved.email_masked}` : "your-tls-email@example.com"}
                       className="input-field"
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-gray-500 mb-1.5 block">TLS Password</label>
+                    <label className="text-xs text-gray-500 mb-1.5 block">{ts.credTlsPassword}</label>
                     <div className="relative">
                       <input
                         type={form.showPw ? "text" : "password"}
                         value={form.password}
                         onChange={(e) => setCredForm(p => ({ ...p, [svcType]: { ...p[svcType], password: e.target.value } }))}
-                        placeholder="New TLS password"
+                        placeholder={ts.credNewPasswordPlaceholder}
                         className="input-field pr-12"
                       />
                       <button
@@ -361,7 +358,7 @@ export default function SettingsPage() {
                   className="btn-gradient flex items-center gap-2 text-sm disabled:opacity-50"
                 >
                   {credSaving === svcType ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  {saved ? "Update Credentials" : "Save Credentials"}
+                  {saved ? ts.credUpdate : ts.credSave}
                 </button>
               </div>
             );
