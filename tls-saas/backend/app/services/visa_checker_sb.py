@@ -65,10 +65,16 @@ class VisaCheckerSB:
         try:
             from seleniumbase import Driver
 
-            log("Opening TLS Visa website (SeleniumBase UC mode)...")
+            # IMPORTANT: UC mode CANNOT bypass Cloudflare/Turnstile in headless=True.
+            # On Linux servers with no display, use xvfb=True (virtual framebuffer)
+            # which runs a hidden Xvfb display — Chrome thinks it's headed, CF is bypassed.
+            import sys as _sys
+            use_xvfb = _sys.platform != "win32"  # Xvfb only on Linux
+            log(f"Opening TLS Visa website (SeleniumBase UC mode, xvfb={use_xvfb})...")
             driver = Driver(
                 uc=True,
-                headless=settings.BROWSER_HEADLESS,
+                headless=False,   # Must be False — headless is detectable by Cloudflare
+                xvfb=use_xvfb,    # Virtual display on Linux so Chrome runs without a monitor
                 no_sandbox=True,
                 disable_gpu=True,
             )
