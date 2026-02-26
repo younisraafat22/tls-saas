@@ -524,8 +524,27 @@ function Pricing() {
 function DownloadApp() {
   const { t } = useLanguage();
   const dl = t.downloadSection;
-  // Will be set to actual URL when published
-  const downloadUrl = "";
+  const [downloadInfo, setDownloadInfo] = useState<{
+    version: string;
+    download_url: string;
+    size_mb: string;
+    requirements: string;
+  }>({ version: "2.0.0", download_url: "", size_mb: "~80", requirements: "Windows 10/11" });
+
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.108:8000";
+    fetch(`${apiUrl}/api/app/download-info`)
+      .then((r) => r.json())
+      .then((data) =>
+        setDownloadInfo({
+          version: data.version ?? "2.0.0",
+          download_url: data.download_url ?? "",
+          size_mb: data.size_mb ?? "~80",
+          requirements: data.requirements ?? "Windows 10/11",
+        })
+      )
+      .catch(() => {/* keep defaults on network error */});
+  }, []);
 
   return (
     <section id="download" className="py-24 relative overflow-hidden">
@@ -568,12 +587,12 @@ function DownloadApp() {
               </div>
 
               <h3 className="text-2xl font-bold mb-2">TLS Appointment Checker</h3>
-              <p className="text-gray-400 text-sm mb-1">{dl.version} 2.0.0</p>
-              <p className="text-gray-500 text-xs mb-6">{dl.requirements}</p>
+              <p className="text-gray-400 text-sm mb-1">{dl.version} {downloadInfo.version}</p>
+              <p className="text-gray-500 text-xs mb-6">{downloadInfo.requirements}</p>
 
-              {downloadUrl ? (
+              {downloadInfo.download_url ? (
                 <a
-                  href={downloadUrl}
+                  href={downloadInfo.download_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn-gradient text-lg !px-8 !py-3 inline-flex items-center gap-2 w-full justify-center"
@@ -588,7 +607,7 @@ function DownloadApp() {
               )}
 
               <div className="mt-6 flex items-center justify-center gap-6 text-xs text-gray-500">
-                <span className="flex items-center gap-1"><HardDrive className="w-3.5 h-3.5" /> ~80 MB</span>
+                <span className="flex items-center gap-1"><HardDrive className="w-3.5 h-3.5" /> {downloadInfo.size_mb} MB</span>
                 <span className="flex items-center gap-1"><Monitor className="w-3.5 h-3.5" /> Windows 10/11</span>
               </div>
             </motion.div>

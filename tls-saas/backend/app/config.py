@@ -59,6 +59,12 @@ class Settings(BaseSettings):
     PRICE_VISA_MONTHLY: float = 500.0
     CURRENCY: str = "EGP"
 
+    # ── Desktop App Release ──────────────────────────────
+    DESKTOP_APP_VERSION: str = "2.0.0"
+    DESKTOP_DOWNLOAD_URL: str = ""  # Set to GitHub Releases URL when published
+    DESKTOP_RELEASE_NOTES: str = "Initial release with API-based authentication and local monitoring."
+    DESKTOP_FORCE_UPDATE: bool = False
+
     @property
     def allowed_origins_list(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",")]
