@@ -160,8 +160,8 @@ export const translations = {
     },
     planFeatures: ["Sheikh Zayed & Hurghada branches", "Individual appointment monitoring", "Email notifications", "Web push notifications", "Real-time dashboard"],
     planFeaturesMap: {
-      legalization: ["Sheikh Zayed & Hurghada branches", "Email notifications", "Web push notifications", "Real-time dashboard", "30-minute check interval"],
-      visa: ["New Cairo & Alexandria branches", "Individual check using your TLS credentials", "Email notifications", "Web push notifications", "Real-time dashboard"],
+      legalization: ["One branch of your choice (Sheikh Zayed or Hurghada)", "Email notifications", "Web push notifications", "Real-time dashboard", "30-minute check interval"],
+      visa: ["One branch of your choice (New Cairo or Alexandria)", "Individual check using your TLS credentials", "Email notifications", "Web push notifications", "Real-time dashboard"],
     } as Record<string, string[]>,
     branchNames: { "Sheikh Zayed": "Sheikh Zayed", "Hurghada": "Hurghada", "New Cairo": "New Cairo", "Alexandria": "Alexandria" } as Record<string, string>,
     planNames: { "legalization": "Legalization Monitor", "visa": "Visa Monitor" } as Record<string, string>,
@@ -508,8 +508,8 @@ export const translations = {
     },
     planFeatures: ["فروع الشيخ زايد والغردقة", "مراقبة مواعيد فردية", "تنبيهات بريد إلكتروني", "إشعارات الويب", "لوحة تحكم لحظية"],
     planFeaturesMap: {
-      legalization: ["فروع الشيخ زايد والغردقة", "تنبيهات بريد إلكتروني", "إشعارات الويب", "لوحة تحكم لحظية", "فحص كل 30 دقيقة"],
-      visa: ["فروع القاهرة الجديدة والإسكندرية", "فحص فردي ببيانات TLS الخاصة بك", "تنبيهات بريد إلكتروني", "إشعارات الويب", "لوحة تحكم لحظية"],
+      legalization: ["فرع واحد حسب اختيارك (الشيخ زايد أو الغردقة)", "تنبيهات بريد إلكتروني", "إشعارات الويب", "لوحة تحكم لحظية", "فحص كل 30 دقيقة"],
+      visa: ["فرع واحد حسب اختيارك (القاهرة الجديدة أو الإسكندرية)", "فحص فردي ببيانات TLS الخاصة بك", "تنبيهات بريد إلكتروني", "إشعارات الويب", "لوحة تحكم لحظية"],
     } as Record<string, string[]>,
     branchNames: { "Sheikh Zayed": "الشيخ زايد", "Hurghada": "الغردقة", "New Cairo": "القاهرة الجديدة", "Alexandria": "الإسكندرية" } as Record<string, string>,
     planNames: { "legalization": "مراقبة التوثيق", "visa": "مراقبة الفيزا" } as Record<string, string>,
@@ -856,8 +856,8 @@ export const translations = {
     },
     planFeatures: ["Sheikh Zayed & Hurghada Filialen", "Individuelle Terminüberwachung", "E-Mail-Benachrichtigungen", "Web-Push-Benachrichtigungen", "Echtzeit-Dashboard"],
     planFeaturesMap: {
-      legalization: ["Sheikh Zayed & Hurghada Filialen", "E-Mail-Benachrichtigungen", "Web-Push-Benachrichtigungen", "Echtzeit-Dashboard", "30-Minuten-Prüfintervall"],
-      visa: ["Neu-Kairo & Alexandria Filialen", "Individuelle Prüfung mit deinen TLS-Zugangsdaten", "E-Mail-Benachrichtigungen", "Web-Push-Benachrichtigungen", "Echtzeit-Dashboard"],
+      legalization: ["Eine Filiale deiner Wahl (Sheikh Zayed oder Hurghada)", "E-Mail-Benachrichtigungen", "Web-Push-Benachrichtigungen", "Echtzeit-Dashboard", "30-Minuten-Prüfintervall"],
+      visa: ["Eine Filiale deiner Wahl (Neu-Kairo oder Alexandria)", "Individuelle Prüfung mit deinen TLS-Zugangsdaten", "E-Mail-Benachrichtigungen", "Web-Push-Benachrichtigungen", "Echtzeit-Dashboard"],
     } as Record<string, string[]>,
     branchNames: { "Sheikh Zayed": "Sheikh Zayed", "Hurghada": "Hurghada", "New Cairo": "Neu-Kairo", "Alexandria": "Alexandria" } as Record<string, string>,
     planNames: { "legalization": "Beglaubigungs-Monitor", "visa": "Visum-Monitor" } as Record<string, string>,

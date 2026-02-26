@@ -442,8 +442,8 @@ function Pricing() {
     subscriptionApi.getPlans().then(setPlans).catch(() => {
       // Fallback plans if API not reachable
       setPlans([
-        { id: 1, plan_type: "legalization", display_name: "Legalization Monitor", price_monthly: 500, currency: "EGP", features: ["Sheikh Zayed & Hurghada branches", "Email notifications", "Web push notifications", "Real-time dashboard", "30-minute check interval"], sort_order: 1 },
-        { id: 2, plan_type: "visa", display_name: "Visa Monitor", price_monthly: 500, currency: "EGP", features: ["New Cairo & Alexandria branches", "Individual check using your TLS credentials", "Email notifications", "Web push notifications", "Real-time dashboard"], sort_order: 2 },
+        { id: 1, plan_type: "legalization", display_name: "Legalization Monitor", price_monthly: 300, currency: "EGP", features: ["One branch of your choice (Sheikh Zayed or Hurghada)", "Email notifications", "Web push notifications", "Real-time dashboard", "30-minute check interval"], sort_order: 1 },
+        { id: 2, plan_type: "visa", display_name: "Visa Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice (New Cairo or Alexandria)", "Individual check using your TLS credentials", "Email notifications", "Web push notifications", "Real-time dashboard"], sort_order: 2 },
       ]);
     });
   }, []);

@@ -53,7 +53,7 @@ async def seed_data():
                 "description": "Monitor all legalization branches for appointment availability",
                 "price_monthly": settings.PRICE_LEGALIZATION_MONTHLY,
                 "features": [
-                    "Sheikh Zayed & Hurghada branches",
+                    "One branch of your choice (Sheikh Zayed or Hurghada)",
                     "Email notifications",
                     "Web push notifications",
                     "Real-time dashboard",
@@ -67,7 +67,7 @@ async def seed_data():
                 "description": "Monitor your personal TLS visa appointment — individual per-user check",
                 "price_monthly": settings.PRICE_VISA_MONTHLY,
                 "features": [
-                    "New Cairo & Alexandria branches",
+                    "One branch of your choice (New Cairo or Alexandria)",
                     "Individual check using your TLS credentials",
                     "Email notifications",
                     "Web push notifications",
