@@ -1,4 +1,4 @@
-"""
+﻿"""
 TLS Appointment Checker - Main Application
 License-based desktop app with service selection, pricing & activation flow
 """
@@ -2297,7 +2297,7 @@ class TLSApp:
                         ft.Container(
                             content=ft.Row([
                                 ft.TextButton(
-                                    "â† Back",
+                                    "← Back",
                                     on_click=go_back,
                                     style=ft.ButtonStyle(color="#00D9FF"),
                                 ),
@@ -2418,7 +2418,7 @@ class TLSApp:
         top_bar = ft.Container(
             content=ft.Row([
                 ft.TextButton(
-                    "â† Back to Pricing",
+                    "← Back to Pricing",
                     on_click=go_back,
                     style=ft.ButtonStyle(color="#00D9FF"),
                 ),
@@ -2528,7 +2528,7 @@ class TLSApp:
                     status_msg,
                     ft.Container(height=10),
                     ft.TextButton(
-                        "â† Back to Plans",
+                        "← Back to Plans",
                         on_click=go_back,
                         style=ft.ButtonStyle(color="#00D9FF"),
                     ),
@@ -2876,7 +2876,7 @@ class TLSApp:
             db.commit()
             db.close()
             status = "background" if headless_switch.value else "visible"
-            self.update_status_log(f"âœ“ Browser will run in {status} mode")
+            self.update_status_log(f"“ Browser will run in {status} mode")
 
         # Headless switch
         db = SessionLocal()
@@ -3004,13 +3004,13 @@ class TLSApp:
                 can_change, message = can_change_tls_email(new_tls_email)
                 
                 if not can_change:
-                    self.update_status_log(f"âœ— {message}")
+                    self.update_status_log(f"— {message}")
                     db.close()
                     return
                 
                 # Record the TLS email change
                 record_tls_email_change(old_tls_email, new_tls_email)
-                self.update_status_log(f"âœ“ {message}")
+                self.update_status_log(f"“ {message}")
 
             settings_obj.tls_email = new_tls_email
             if config_password_field.value:
@@ -3038,7 +3038,7 @@ class TLSApp:
 
             db.commit()
             db.close()
-            self.update_status_log("âœ“ Configuration saved")
+            self.update_status_log("“ Configuration saved")
 
         # Build config card children dynamically
         config_children = [
@@ -3251,7 +3251,7 @@ class TLSApp:
                             server.login("tlsappointmentchecker@gmail.com", "zylc etmv kuic uluq")
                             server.send_message(email_msg)
 
-                        support_status.value = "âœ… Message sent! We'll get back to you soon."
+                        support_status.value = "… Message sent! We'll get back to you soon."
                         support_status.color = ft.Colors.GREEN_400
                     except Exception as ex:
                         support_status.value = f"Failed to send: {str(ex)[:60]}"
@@ -3625,6 +3625,15 @@ class TLSApp:
                 item = self._ui_queue.get_nowait()
             except queue.Empty:
                 await asyncio.sleep(0.1)
+                continue
+
+            # Handle plain callables (used by login/register callbacks)
+            if callable(item):
+                try:
+                    item()
+                    self.page.update()
+                except Exception:
+                    pass
                 continue
 
             try:
