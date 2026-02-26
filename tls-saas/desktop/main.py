@@ -883,7 +883,7 @@ class TLSApp:
             self.page.update()
 
         login_btn = ft.FilledButton(
-            text="Log In",
+            content="Log In",
             width=420,
             height=50,
             style=ft.ButtonStyle(
@@ -1093,7 +1093,7 @@ class TLSApp:
             self.page.update()
 
         register_btn = ft.FilledButton(
-            text="Create Account",
+            content="Create Account",
             width=420,
             height=50,
             style=ft.ButtonStyle(
