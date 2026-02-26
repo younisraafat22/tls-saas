@@ -46,7 +46,7 @@ export const translations = {
       items: [
         { title: "Instant Notifications", desc: "Email and browser push — get alerted the second a slot opens, even on your phone." },
         { title: "Secure & Private", desc: "Your data stays safe. Encrypted credentials, secure auth, and no data sharing. Ever." },
-        { title: "Both Branches", desc: "Monitor Sheikh Zayed & Hurghada legalization branches — real-time status updates for each branch independently." },
+        { title: "Both Branches", desc: "Monitor legalization branches (Sheikh Zayed & Hurghada) and visa branches (New Cairo & Alexandria) — real-time status updates for each branch independently." },
         { title: "Lightning Fast", desc: "Our server checks every 30 minutes. When slots appear, you know within seconds." },
         { title: "24/7 Monitoring", desc: "Our server never sleeps. It checks around the clock so you don't have to." },
         { title: "Mobile Friendly", desc: "Check your dashboard from any device. Your phone, tablet, or computer." },
@@ -159,6 +159,10 @@ export const translations = {
       selectBranchDesc_visa: "Choose the visa branch closest to you.",
     },
     planFeatures: ["Sheikh Zayed & Hurghada branches", "Individual appointment monitoring", "Email notifications", "Web push notifications", "Real-time dashboard"],
+    planFeaturesMap: {
+      legalization: ["Sheikh Zayed & Hurghada branches", "Email notifications", "Web push notifications", "Real-time dashboard", "30-minute check interval"],
+      visa: ["New Cairo & Alexandria branches", "Individual check using your TLS credentials", "Email notifications", "Web push notifications", "Real-time dashboard"],
+    } as Record<string, string[]>,
     branchNames: { "Sheikh Zayed": "Sheikh Zayed", "Hurghada": "Hurghada", "New Cairo": "New Cairo", "Alexandria": "Alexandria" } as Record<string, string>,
     planNames: { "legalization": "Legalization Monitor", "visa": "Visa Monitor" } as Record<string, string>,
     planDesc: { "legalization": "Monitor legalization branches for appointment availability", "visa": "Individual per-user check for your personal TLS visa appointment" } as Record<string, string>,
@@ -390,7 +394,7 @@ export const translations = {
       items: [
         { title: "تنبيهات فورية", desc: "بريد إلكتروني ونوتيفيكيشن — تعرف في اللحظة التي يُفتح فيها موعد، حتى على هاتفك." },
         { title: "آمن وخاص", desc: "بياناتك في أمان. بيانات اعتماد مشفرة، مصادقة آمنة، وبدون مشاركة البيانات أبدًا." },
-        { title: "جميع الفروع", desc: "راقب فرعَي الشيخ زايد والغردقة للتوثيق — تحديثات الحالة لحظية لكل فرع على حدة." },
+        { title: "جميع الفروع", desc: "راقب فروع التوثيق (الشيخ زايد والغردقة) وفروع الفيزا (القاهرة الجديدة والإسكندرية) — تحديثات الحالة لحظية لكل فرع على حدة." },
         { title: "سرعة فائقة", desc: "يفحص سيرفرنا كل 30 دقيقة. حين تظهر المواعيد، تعلم خلال ثوانٍ." },
         { title: "مراقبة 24/7", desc: "سيرفرنا لا ينام. يعمل على مدار الساعة حتى لا تضطر للسهر." },
         { title: "متوافق مع الجوال", desc: "تابع لوحة التحكم من أي جهاز — هاتفك أو تابلت أو كمبيوتر." },
@@ -503,6 +507,10 @@ export const translations = {
       selectBranchDesc_visa: "اختر فرع الفيزا الأقرب منك.",
     },
     planFeatures: ["فروع الشيخ زايد والغردقة", "مراقبة مواعيد فردية", "تنبيهات بريد إلكتروني", "إشعارات الويب", "لوحة تحكم لحظية"],
+    planFeaturesMap: {
+      legalization: ["فروع الشيخ زايد والغردقة", "تنبيهات بريد إلكتروني", "إشعارات الويب", "لوحة تحكم لحظية", "فحص كل 30 دقيقة"],
+      visa: ["فروع القاهرة الجديدة والإسكندرية", "فحص فردي ببيانات TLS الخاصة بك", "تنبيهات بريد إلكتروني", "إشعارات الويب", "لوحة تحكم لحظية"],
+    } as Record<string, string[]>,
     branchNames: { "Sheikh Zayed": "الشيخ زايد", "Hurghada": "الغردقة", "New Cairo": "القاهرة الجديدة", "Alexandria": "الإسكندرية" } as Record<string, string>,
     planNames: { "legalization": "مراقبة التوثيق", "visa": "مراقبة الفيزا" } as Record<string, string>,
     planDesc: { "legalization": "مراقبة فروع التوثيق لتوفر المواعيد", "visa": "فحص فردي لكل مستخدم باستخدام بيانات TLS الخاصة به" } as Record<string, string>,
@@ -734,7 +742,7 @@ export const translations = {
       items: [
         { title: "Sofortige Benachrichtigungen", desc: "E-Mail und Browser-Push — du wirst sofort benachrichtigt, sobald ein Termin frei wird, auch auf deinem Handy." },
         { title: "Sicher & Privat", desc: "Deine Daten sind sicher. Verschlüsselte Zugangsdaten, sichere Authentifizierung, keine Datenweitergabe. Niemals." },
-        { title: "Alle Filialen", desc: "Überwache Sheikh Zayed & Hurghada Beglaubigungsfilialen — Echtzeit-Status unabhängig für jede Filiale." },
+        { title: "Alle Filialen", desc: "Überwache Beglaubigungsfilialen (Sheikh Zayed & Hurghada) und Visumfilialen (Neu-Kairo & Alexandria) — Echtzeit-Status unabhängig für jede Filiale." },
         { title: "Blitzschnell", desc: "Unser Server prüft alle 30 Minuten. Wenn Termine erscheinen, weißt du es innerhalb von Sekunden." },
         { title: "24/7 Überwachung", desc: "Unser Server schläft nie. Er überprüft rund um die Uhr, damit du das nicht musst." },
         { title: "Mobil-freundlich", desc: "Überprüfe dein Dashboard von jedem Gerät aus — Handy, Tablet oder Computer." },
@@ -847,6 +855,10 @@ export const translations = {
       selectBranchDesc_visa: "Wähle die Visum-Filiale in deiner Nähe.",
     },
     planFeatures: ["Sheikh Zayed & Hurghada Filialen", "Individuelle Terminüberwachung", "E-Mail-Benachrichtigungen", "Web-Push-Benachrichtigungen", "Echtzeit-Dashboard"],
+    planFeaturesMap: {
+      legalization: ["Sheikh Zayed & Hurghada Filialen", "E-Mail-Benachrichtigungen", "Web-Push-Benachrichtigungen", "Echtzeit-Dashboard", "30-Minuten-Prüfintervall"],
+      visa: ["Neu-Kairo & Alexandria Filialen", "Individuelle Prüfung mit deinen TLS-Zugangsdaten", "E-Mail-Benachrichtigungen", "Web-Push-Benachrichtigungen", "Echtzeit-Dashboard"],
+    } as Record<string, string[]>,
     branchNames: { "Sheikh Zayed": "Sheikh Zayed", "Hurghada": "Hurghada", "New Cairo": "Neu-Kairo", "Alexandria": "Alexandria" } as Record<string, string>,
     planNames: { "legalization": "Beglaubigungs-Monitor", "visa": "Visum-Monitor" } as Record<string, string>,
     planDesc: { "legalization": "Überwache Beglaubigungsfilialen auf Terminverfügbarkeit", "visa": "Individuelle Prüfung für deinen persönlichen TLS-Visumtermin" } as Record<string, string>,

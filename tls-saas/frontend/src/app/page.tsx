@@ -480,7 +480,7 @@ function Pricing() {
                 </div>
 
                 <ul className="space-y-3 mb-8">
-                  {(plan.features?.length > 0 ? plan.features : t.planFeatures).map((feat: string) => (
+                  {(t.planFeaturesMap?.[plan.plan_type] ?? plan.features ?? t.planFeatures).map((feat: string) => (
                     <li key={feat} className="flex items-start gap-2 text-sm">
                       <Check className="w-4 h-4 text-accent-green mt-0.5 shrink-0" />
                       <span className="text-gray-300">{feat}</span>
