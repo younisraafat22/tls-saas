@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Bell, Shield, Globe, Zap, Clock, Smartphone,
   Check, ChevronDown, ChevronUp, ArrowRight,
-  Mail, Monitor,
+  Mail, Monitor, Download, Laptop, HardDrive,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { subscriptionApi } from "@/lib/api";
@@ -182,6 +182,7 @@ function Navbar() {
             <a href="#features" className="text-gray-400 hover:text-white transition-colors text-sm">{t.nav.features}</a>
             <a href="#how-it-works" className="text-gray-400 hover:text-white transition-colors text-sm">{t.nav.howItWorks}</a>
             <a href="#pricing" className="text-gray-400 hover:text-white transition-colors text-sm">{t.nav.pricing}</a>
+            <a href="#download" className="text-gray-400 hover:text-white transition-colors text-sm">{t.nav.download}</a>
             <a href="#faq" className="text-gray-400 hover:text-white transition-colors text-sm">{t.nav.faq}</a>
           </div>
 
@@ -220,6 +221,7 @@ function Navbar() {
               <a href="#features" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.features}</a>
               <a href="#how-it-works" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.howItWorks}</a>
               <a href="#pricing" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.pricing}</a>
+              <a href="#download" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.download}</a>
               <a href="#faq" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.faq}</a>
               {user ? (
                 <>
@@ -517,6 +519,86 @@ function Pricing() {
   );
 }
 
+// ── Download App Section ────────────────────────────────
+
+function DownloadApp() {
+  const { t } = useLanguage();
+  const dl = t.downloadSection;
+  // Will be set to actual URL when published
+  const downloadUrl = "";
+
+  return (
+    <section id="download" className="py-24 relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-b from-primary-500/5 via-transparent to-transparent" />
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <AnimatedSection>
+          <motion.div variants={fadeUp} className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-display font-bold mb-4">
+              {dl.title} <span className="text-primary-400">{dl.titleHighlight}</span>
+            </h2>
+            <p className="text-gray-400 max-w-2xl mx-auto">{dl.sub}</p>
+          </motion.div>
+
+          <div className="grid md:grid-cols-2 gap-8 items-center">
+            {/* Left: Features list */}
+            <motion.div variants={fadeUp} className="space-y-6">
+              {dl.features.map((feat: string, i: number) => (
+                <div key={i} className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary-500/20 flex items-center justify-center mt-0.5">
+                    <Check className="w-3.5 h-3.5 text-primary-400" />
+                  </div>
+                  <p className="text-gray-300 text-sm">{feat}</p>
+                </div>
+              ))}
+
+              {/* Privacy callout */}
+              <div className="mt-6 p-4 rounded-xl bg-green-500/10 border border-green-500/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <Shield className="w-5 h-5 text-green-400" />
+                  <span className="font-semibold text-green-300 text-sm">{dl.whyLocal}</span>
+                </div>
+                <p className="text-green-200/70 text-xs">{dl.whyLocalDesc}</p>
+              </div>
+            </motion.div>
+
+            {/* Right: Download card */}
+            <motion.div variants={fadeUp} className="glass p-8 rounded-2xl text-center">
+              <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-primary-500/20 to-blue-600/20 flex items-center justify-center">
+                <Laptop className="w-10 h-10 text-primary-400" />
+              </div>
+
+              <h3 className="text-2xl font-bold mb-2">TLS Appointment Checker</h3>
+              <p className="text-gray-400 text-sm mb-1">{dl.version} 2.0.0</p>
+              <p className="text-gray-500 text-xs mb-6">{dl.requirements}</p>
+
+              {downloadUrl ? (
+                <a
+                  href={downloadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-gradient text-lg !px-8 !py-3 inline-flex items-center gap-2 w-full justify-center"
+                >
+                  <Download className="w-5 h-5" />
+                  {dl.downloadBtn}
+                </a>
+              ) : (
+                <div className="px-8 py-3 rounded-xl bg-white/5 border border-white/10 text-gray-400 text-sm">
+                  {dl.comingSoon}
+                </div>
+              )}
+
+              <div className="mt-6 flex items-center justify-center gap-6 text-xs text-gray-500">
+                <span className="flex items-center gap-1"><HardDrive className="w-3.5 h-3.5" /> ~80 MB</span>
+                <span className="flex items-center gap-1"><Monitor className="w-3.5 h-3.5" /> Windows 10/11</span>
+              </div>
+            </motion.div>
+          </div>
+        </AnimatedSection>
+      </div>
+    </section>
+  );
+}
+
 // ── FAQ ─────────────────────────────────────────────────
 
 function FAQ() {
@@ -607,6 +689,7 @@ function Footer() {
             <ul className="space-y-2 text-sm text-gray-400">
               <li><a href="#features" className="hover:text-white transition-colors">{t.footer.features}</a></li>
               <li><a href="#pricing" className="hover:text-white transition-colors">{t.footer.pricing}</a></li>
+              <li><a href="#download" className="hover:text-white transition-colors">{t.nav.download}</a></li>
               <li><a href="#faq" className="hover:text-white transition-colors">{t.footer.faq}</a></li>
               <li><Link href="/login" className="hover:text-white transition-colors">{t.footer.logIn}</Link></li>
             </ul>
@@ -641,6 +724,7 @@ export default function LandingPage() {
       <Features />
       <HowItWorks />
       <Pricing />
+      <DownloadApp />
       <FAQ />
       <CTA />
       <Footer />

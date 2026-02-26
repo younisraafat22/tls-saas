@@ -1,0 +1,37 @@
+# TLS Appointment Checker - Windows Application Requirements
+
+# UI Framework (cross-platform: Windows, Android, iOS, Web)
+flet>=0.23.0
+
+# Selenium & Browser Automation
+selenium>=4.15.0
+seleniumbase>=4.20.0
+undetected-chromedriver>=3.5.4
+webdriver-manager>=4.0.1
+
+# Database
+sqlalchemy>=2.0.23
+
+# Security & Authentication
+bcrypt>=4.1.2
+cryptography>=41.0.7
+pyjwt>=2.8.0
+
+# Email & Notifications
+plyer>=2.1.0  # Cross-platform notifications
+
+# Configuration & Environment
+python-dotenv>=1.0.0
+
+# Server (monitoring_server.py)
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# Utilities
+requests>=2.31.0
+pillow>=10.1.0
+
+# Audio CAPTCHA solving
+SpeechRecognition>=3.10.0
+pydub>=0.25.1
+imageio-ffmpeg>=0.5.1

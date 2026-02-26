@@ -1,5 +1,5 @@
 """
-Monitoring Routes — Check results, live status for user dashboard
+Monitoring Routes — Check results, live status for user dashboard, desktop app reporting
 """
 
 from datetime import datetime, timedelta, timezone
@@ -10,10 +10,10 @@ from app.database import get_db
 from app.models import (
     User, Branch, CheckResult, UserBranchMonitor,
     NotificationLog, SubscriptionStatus, Subscription, Payment, PaymentStatus,
-    SystemSetting,
+    SystemSetting, ServiceType,
 )
 from app.auth import get_current_user
-from app.schemas import CheckResultPublic, NotificationLogPublic
+from app.schemas import CheckResultPublic, NotificationLogPublic, DesktopCheckReport
 
 router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
 
@@ -188,3 +188,80 @@ async def my_notifications(
         )
         for nl, cr, b in result.all()
     ]
+
+
+@router.post("/report-desktop")
+async def report_desktop_check(
+    body: DesktopCheckReport,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Receive a check result from the desktop app.
+    Creates a CheckResult entry linked to the correct branch.
+    """
+    # Find the branch
+    svc_type = ServiceType.VISA if body.service_type.lower() == "visa" else ServiceType.LEGALIZATION
+    branch_result = await db.execute(
+        select(Branch).where(
+            Branch.name.ilike(f"%{body.branch_name}%"),
+            Branch.service_type == svc_type,
+        ).limit(1)
+    )
+    branch = branch_result.scalar_one_or_none()
+
+    if not branch:
+        # Try broader match
+        branch_result = await db.execute(
+            select(Branch).where(Branch.service_type == svc_type).limit(1)
+        )
+        branch = branch_result.scalar_one_or_none()
+
+    if not branch:
+        raise HTTPException(404, f"Branch not found: {body.branch_name}")
+
+    # Save screenshot if provided
+    screenshot_path = ""
+    if body.screenshot_b64:
+        import base64, os
+        screenshots_dir = os.path.join("data", "screenshots")
+        os.makedirs(screenshots_dir, exist_ok=True)
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        screenshot_path = os.path.join(screenshots_dir, f"desktop_{user.id}_{ts}.png")
+        try:
+            with open(screenshot_path, "wb") as f:
+                f.write(base64.b64decode(body.screenshot_b64))
+        except Exception:
+            screenshot_path = ""
+
+    # Create check result
+    cr = CheckResult(
+        branch_id=branch.id,
+        checked_at=datetime.now(timezone.utc),
+        slots_available=body.slots_available,
+        slot_details=body.slot_details or "",
+        screenshot_path=screenshot_path,
+        duration_seconds=body.duration_seconds,
+        error=body.error or "",
+        source="desktop",
+    )
+    db.add(cr)
+    await db.commit()
+
+    # If slots found, notify via backend email too
+    if body.slots_available:
+        try:
+            from app.services.email_service import EmailService
+            email_svc = EmailService()
+            email_svc.send_appointment_alert(
+                to_email=user.email,
+                user_name=user.full_name or user.email,
+                branch_name=branch.name,
+                service_type=branch.service_type.value,
+                slot_details=body.slot_details or "Slots detected by desktop app",
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger("monitoring").warning(f"Failed to send desktop alert email: {e}")
+
+    return {"status": "ok", "check_result_id": cr.id, "slots_available": body.slots_available}

@@ -129,6 +129,15 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass  # Column already exists
 
+    # Add source column to check_results (desktop vs server)
+    async with async_session() as db:
+        try:
+            await db.execute(text("ALTER TABLE check_results ADD COLUMN source VARCHAR(20) DEFAULT 'server'"))
+            await db.commit()
+            logger.info("Migration: added source column to check_results")
+        except Exception:
+            pass  # Column already exists
+
     # Create user_credentials table if not exists (handled by create_tables, but add migration safety)
     async with async_session() as db:
         try:
@@ -346,6 +355,7 @@ from app.api.monitoring_routes import router as monitoring_router
 from app.api.admin_routes import router as admin_router
 from app.api.contact_routes import router as contact_router
 from app.api.credential_routes import router as credential_router
+from app.api.desktop_routes import router as desktop_router
 
 app.include_router(auth_router)
 app.include_router(sub_router)
@@ -354,6 +364,7 @@ app.include_router(monitoring_router)
 app.include_router(admin_router)
 app.include_router(contact_router)
 app.include_router(credential_router)
+app.include_router(desktop_router)
 
 
 # ── Health Check ─────────────────────────────────────────────────────

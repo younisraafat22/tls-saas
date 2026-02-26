@@ -1,0 +1,38 @@
+TLS APPOINTMENT CHECKER
+End-User License Agreement (EULA)
+
+Copyright (c) 2026 TLS Appointment Checker
+
+This software is provided for personal and educational use only.
+
+By installing this application, you agree to the following terms:
+
+1. PERMITTED USE
+   - This software may be used for personal appointment checking
+   - License is valid for a single device (identified by Hardware ID)
+   - You may share the installer, but each user needs their own license key
+
+2. RESTRICTIONS
+   - You may not sell or commercially distribute this software
+   - You may not reverse engineer or decompile the software
+   - You may not use the software for illegal purposes
+
+3. DISCLAIMER
+   - This software is provided "as is" without warranty of any kind
+   - The author is not responsible for any issues arising from use
+   - Use at your own risk
+
+4. DATA PRIVACY
+   - Your credentials are stored locally on your device
+   - No data is sent to third parties except the TLS website
+   - Email notifications are sent only if you enable them
+
+5. THIRD-PARTY COMPONENTS
+   - This software uses open-source libraries
+   - See requirements.txt for full list of dependencies
+   - Each component has its own license
+
+By clicking "I Agree" and installing this software, you acknowledge that
+you have read and agree to these terms.
+
+For support: tlsappointmentchecker@gmail.com

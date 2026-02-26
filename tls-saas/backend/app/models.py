@@ -188,6 +188,7 @@ class CheckResult(Base):
     screenshot_path = Column(String(500), default="")
     error = Column(Text, default="")
     duration_seconds = Column(Float, default=0)
+    source = Column(String(20), default="server")  # "server" or "desktop"
 
     branch = relationship("Branch", back_populates="check_results")
     notification_logs = relationship("NotificationLog", back_populates="check_result", lazy="selectin")

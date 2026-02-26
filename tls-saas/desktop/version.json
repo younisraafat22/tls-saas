@@ -1,0 +1,5 @@
+{
+  "version": "1.0.0",
+  "download_url": "https://example.com/download/TLSAppointmentChecker-v1.0.0.exe",
+  "release_notes": "Initial release with automated CAPTCHA solving and license system"
+}

@@ -277,6 +277,27 @@ class AdminUserUpdate(BaseModel):
     is_admin: Optional[bool] = None
 
 
+# ── Desktop App ──────────────────────────────────────────────────────
+
+class DesktopCheckReport(BaseModel):
+    """Report from the desktop app after a local TLS check."""
+    branch_name: str
+    service_type: str
+    slots_available: bool
+    slot_details: str = ""
+    screenshot_b64: str = ""
+    duration_seconds: float = 0
+    error: str = ""
+
+
+class AppVersionResponse(BaseModel):
+    """Version info for desktop app auto-update."""
+    version: str
+    download_url: str = ""
+    release_notes: str = ""
+    force_update: bool = False
+
+
 # ── Generic ──────────────────────────────────────────────────────────
 
 class MessageResponse(BaseModel):
