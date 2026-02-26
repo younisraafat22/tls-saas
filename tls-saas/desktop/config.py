@@ -7,8 +7,13 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from .env
+# When running as frozen exe, look next to the .exe; otherwise use source dir
+if getattr(sys, 'frozen', False):
+    _env_path = Path(sys.executable).parent / '.env'
+else:
+    _env_path = Path(__file__).resolve().parent / '.env'
+load_dotenv(_env_path, override=True)
 
 # Base directory - use AppData for installed apps, current dir for development
 if getattr(sys, 'frozen', False):

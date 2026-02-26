@@ -53,6 +53,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "dist\TLSAppointmentChecker\TLSAppointmentChecker.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\TLSAppointmentChecker\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+; Environment configuration (backend URL, website URL, etc.)
+Source: ".env"; DestDir: "{app}"; Flags: ignoreversion
+
 ; Documentation
 Source: "LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion isreadme
 

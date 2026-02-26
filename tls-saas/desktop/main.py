@@ -845,99 +845,168 @@ class TLSApp:
         self.page.controls.clear()
         self.page.scroll = None
 
-        email_field = ft.TextField(
-            label="Email Address",
-            width=420,
+        # ── fields ──────────────────────────────────────────────────
+        _field_style = dict(
             border_radius=12,
-            prefix_icon=ft.Icons.EMAIL,
-            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
-            border_color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
-            hint_text="your@email.com",
-            keyboard_type=ft.KeyboardType.EMAIL,
+            bgcolor=ft.Colors.with_opacity(0.07, ft.Colors.WHITE),
+            border_color=ft.Colors.with_opacity(0.25, ft.Colors.WHITE),
+            focused_border_color="#00D9FF",
+            text_size=14,
+            content_padding=ft.Padding(left=16, right=16, top=14, bottom=14),
         )
 
+        email_field = ft.TextField(
+            hint_text="you@example.com",
+            keyboard_type=ft.KeyboardType.EMAIL,
+            **_field_style,
+        )
         password_field = ft.TextField(
-            label="Password",
-            width=420,
-            border_radius=12,
-            prefix_icon=ft.Icons.LOCK,
-            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
-            border_color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
+            hint_text="••••••••",
             password=True,
             can_reveal_password=True,
+            **_field_style,
         )
 
-        status_msg = ft.Text("", size=13, text_align=ft.TextAlign.CENTER)
+        # ── state ────────────────────────────────────────────────────
+        error_container = ft.Container(
+            content=ft.Text("", size=13, text_align=ft.TextAlign.CENTER, color="#F87171"),
+            bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.RED),
+            border=ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.RED)),
+            border_radius=12,
+            padding=ft.Padding(left=16, right=16, top=10, bottom=10),
+            visible=False,
+        )
+
+        def _set_error(msg: str):
+            error_container.content.value = msg
+            error_container.visible = bool(msg)
+            self.page.update()
+
         login_btn = ft.FilledButton(
-            content=ft.Row([
-                ft.Icon(ft.Icons.LOGIN, size=18, color="#0A0E27"),
-                ft.Text("Login", size=15, weight=ft.FontWeight.BOLD, color="#0A0E27"),
-            ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
+            text="Log In",
             width=420,
-            height=48,
+            height=50,
             style=ft.ButtonStyle(
                 bgcolor="#00D9FF",
+                color="#0A0E27",
+                text_style=ft.TextStyle(size=15, weight=ft.FontWeight.BOLD),
                 shape=ft.RoundedRectangleBorder(radius=14),
             ),
         )
-
-        loading_ring = ft.ProgressRing(width=20, height=20, stroke_width=2, color="#00D9FF", visible=False)
+        loading_row = ft.Row(
+            [ft.ProgressRing(width=18, height=18, stroke_width=2, color="#00D9FF"),
+             ft.Text("Logging in…", size=13, color=ft.Colors.GREY_400)],
+            alignment=ft.MainAxisAlignment.CENTER,
+            visible=False,
+        )
 
         def do_login(e):
-            email = email_field.value.strip() if email_field.value else ""
+            email = (email_field.value or "").strip()
             password = password_field.value or ""
             if not email or not password:
-                status_msg.value = "Please enter both email and password"
-                status_msg.color = ft.Colors.RED_400
-                self.page.update()
+                _set_error("Please enter both email and password")
                 return
-
+            _set_error("")
             login_btn.disabled = True
-            loading_ring.visible = True
-            status_msg.value = "Logging in..."
-            status_msg.color = ft.Colors.GREY_400
+            loading_row.visible = True
             self.page.update()
 
-            def _login_thread():
+            def _thread():
                 try:
                     user = api_client.login(email, password)
-                    # Check subscription
                     active_plan = user.get("active_plan")
-
-                    def _on_success():
+                    def _ok():
                         login_btn.disabled = False
-                        loading_ring.visible = False
+                        loading_row.visible = False
                         if active_plan:
                             self.show_monitoring_page()
                         else:
-                            status_msg.value = f"Logged in as {user.get('full_name', email)}! No active subscription.\nSubscribe at our website to start monitoring."
-                            status_msg.color = ft.Colors.AMBER_400
+                            _set_error("")
+                            error_container.visible = True
+                            error_container.bgcolor = ft.Colors.with_opacity(0.1, ft.Colors.AMBER)
+                            error_container.border = ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.AMBER))
+                            error_container.content.color = ft.Colors.AMBER_300
+                            error_container.content.value = (
+                                f"Logged in as {user.get('full_name', email)}!\n"
+                                "No active subscription yet. Subscribe on our website to start monitoring."
+                            )
                             self.page.update()
-                    self._ui_queue.put(_on_success)
-
-                except APIError as ex:
-                    def _on_error():
+                    self._ui_queue.put(_ok)
+                except (APIError, Exception) as ex:
+                    msg = getattr(ex, 'detail', None) or str(ex)
+                    def _err():
                         login_btn.disabled = False
-                        loading_ring.visible = False
-                        status_msg.value = str(ex.detail)
-                        status_msg.color = ft.Colors.RED_400
-                        self.page.update()
-                    self._ui_queue.put(_on_error)
-                except Exception as ex:
-                    def _on_error():
-                        login_btn.disabled = False
-                        loading_ring.visible = False
-                        status_msg.value = f"Connection error: {ex}"
-                        status_msg.color = ft.Colors.RED_400
-                        self.page.update()
-                    self._ui_queue.put(_on_error)
+                        loading_row.visible = False
+                        _set_error(msg)
+                    self._ui_queue.put(_err)
 
-            threading.Thread(target=_login_thread, daemon=True).start()
+            threading.Thread(target=_thread, daemon=True).start()
 
         login_btn.on_click = do_login
         password_field.on_submit = do_login
 
-        # Top bar
+        # ── glass card layout ─────────────────────────────────────────
+        card = ft.Container(
+            content=ft.Column(
+                [
+                    # Logo
+                    ft.Image(src=self._logo_src or "Logos/LOGO_H_W.png", width=220, height=55),
+                    ft.Container(height=4),
+                    ft.Text("Welcome Back", size=22, weight=ft.FontWeight.BOLD,
+                            text_align=ft.TextAlign.CENTER),
+                    ft.Text("Log in to your monitoring dashboard", size=13,
+                            color=ft.Colors.GREY_400, text_align=ft.TextAlign.CENTER),
+                    ft.Container(height=20),
+                    error_container,
+                    ft.Container(height=4),
+                    ft.Text("Email", size=13, color=ft.Colors.GREY_400),
+                    ft.Container(height=4),
+                    email_field,
+                    ft.Container(height=14),
+                    ft.Text("Password", size=13, color=ft.Colors.GREY_400),
+                    ft.Container(height=4),
+                    password_field,
+                    ft.Container(height=20),
+                    login_btn,
+                    loading_row,
+                    ft.Container(height=16),
+                    ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.WHITE)),
+                    ft.Container(height=12),
+                    ft.Row([
+                        ft.Text("Don't have an account?", size=12, color=ft.Colors.GREY_400),
+                        ft.TextButton("Sign Up",
+                                      on_click=lambda e: self.show_register_page(),
+                                      style=ft.ButtonStyle(color="#00D9FF")),
+                    ], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
+                    ft.Container(height=4),
+                    ft.TextButton(
+                        content=ft.Row([
+                            ft.Icon(ft.Icons.VPN_KEY, size=14, color=ft.Colors.GREY_500),
+                            ft.Text("Use License Key Instead", size=12, color=ft.Colors.GREY_500),
+                        ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
+                        on_click=lambda e: self.show_service_selection_page(),
+                    ),
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=0,
+                tight=True,
+            ),
+            width=460,
+            padding=ft.Padding(left=40, right=40, top=36, bottom=32),
+            border_radius=20,
+            gradient=ft.LinearGradient(
+                begin=ft.alignment.Alignment(-1, -1),
+                end=ft.alignment.Alignment(1, 1),
+                colors=["#1A1F3A", "#0F1525"],
+            ),
+            border=ft.Border.all(1, ft.Colors.with_opacity(0.2, "#00D9FF")),
+            shadow=ft.BoxShadow(
+                spread_radius=0, blur_radius=30,
+                color=ft.Colors.with_opacity(0.15, "#00D9FF"),
+                offset=ft.Offset(0, 8),
+            ),
+        )
+
         top_bar = ft.Container(
             content=ft.Row([
                 ft.TextButton("← Back", on_click=lambda e: self.show_welcome_page(),
@@ -945,7 +1014,7 @@ class TLSApp:
                 ft.Container(expand=True),
                 self.create_website_icon_button(),
             ]),
-            padding=ft.Padding(left=20, right=20, top=15, bottom=0),
+            padding=ft.Padding(left=20, right=20, top=12, bottom=0),
         )
 
         self.page.add(
@@ -953,51 +1022,24 @@ class TLSApp:
                 content=ft.Column(
                     [
                         top_bar,
-                        ft.Container(height=40),
-                        ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=64, color="#00D9FF"),
-                        ft.Container(height=10),
-                        ft.Text("Login to Your Account", size=24, weight=ft.FontWeight.BOLD,
-                                text_align=ft.TextAlign.CENTER),
-                        ft.Text("Sign in with your TLS Checker account", size=13,
-                                color=ft.Colors.GREY_400, text_align=ft.TextAlign.CENTER),
-                        ft.Container(height=25),
-                        email_field,
-                        ft.Container(height=10),
-                        password_field,
-                        ft.Container(height=8),
-                        status_msg,
-                        loading_ring,
-                        ft.Container(height=15),
-                        login_btn,
-                        ft.Container(height=15),
-                        ft.Row([
-                            ft.Text("Don't have an account?", size=12, color=ft.Colors.GREY_400),
-                            ft.TextButton("Create Account", on_click=lambda e: self.show_register_page(),
-                                          style=ft.ButtonStyle(color="#00D9FF")),
-                        ], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
-                        ft.Container(height=8),
-                        ft.Row([
-                            ft.Text("Or", size=12, color=ft.Colors.GREY_600),
-                        ], alignment=ft.MainAxisAlignment.CENTER),
-                        ft.TextButton(
-                            content=ft.Row([
-                                ft.Icon(ft.Icons.VPN_KEY, size=16, color=ft.Colors.GREY_400),
-                                ft.Text("Use License Key Instead", size=12, color=ft.Colors.GREY_400),
-                            ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
-                            on_click=lambda e: self.show_service_selection_page(),
+                        ft.Container(
+                            content=card,
+                            expand=True,
+                            alignment=ft.alignment.center,
                         ),
-                        ft.Container(height=10),
-                        ft.TextButton(
-                            content=ft.Row([
-                                ft.Icon(ft.Icons.LANGUAGE, size=14, color=ft.Colors.GREY_500),
-                                ft.Text("Subscribe at our website", size=11, color=ft.Colors.GREY_500),
-                            ], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
-                            on_click=lambda e: webbrowser.open(Config.WEBSITE_URL),
+                        ft.Container(
+                            content=ft.TextButton(
+                                content=ft.Row([
+                                    ft.Icon(ft.Icons.LANGUAGE, size=14, color=ft.Colors.GREY_600),
+                                    ft.Text("Subscribe at our website", size=11, color=ft.Colors.GREY_600),
+                                ], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
+                                on_click=lambda e: webbrowser.open(Config.WEBSITE_URL),
+                            ),
+                            alignment=ft.alignment.center,
+                            padding=ft.Padding(left=0, right=0, top=0, bottom=16),
                         ),
                     ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    alignment=ft.MainAxisAlignment.START,
-                    scroll=ft.ScrollMode.AUTO,
+                    spacing=0,
                     expand=True,
                 ),
                 expand=True,
@@ -1005,114 +1047,194 @@ class TLSApp:
         )
         self.page.update()
 
-    # ==================================================================
     #  REGISTER PAGE (API-based)
     # ==================================================================
     def show_register_page(self):
         self.page.controls.clear()
         self.page.scroll = None
 
-        name_field = ft.TextField(
-            label="Full Name", width=420, border_radius=12,
-            prefix_icon=ft.Icons.PERSON,
-            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
-            border_color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
-        )
-        email_field = ft.TextField(
-            label="Email Address", width=420, border_radius=12,
-            prefix_icon=ft.Icons.EMAIL,
-            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
-            border_color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
-            keyboard_type=ft.KeyboardType.EMAIL,
-        )
-        phone_field = ft.TextField(
-            label="Phone (optional)", width=420, border_radius=12,
-            prefix_icon=ft.Icons.PHONE,
-            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
-            border_color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
-            keyboard_type=ft.KeyboardType.PHONE,
-        )
-        password_field = ft.TextField(
-            label="Password (min 6 characters)", width=420, border_radius=12,
-            prefix_icon=ft.Icons.LOCK,
-            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
-            border_color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
-            password=True, can_reveal_password=True,
+        _field_style = dict(
+            border_radius=12,
+            bgcolor=ft.Colors.with_opacity(0.07, ft.Colors.WHITE),
+            border_color=ft.Colors.with_opacity(0.25, ft.Colors.WHITE),
+            focused_border_color="#00D9FF",
+            text_size=14,
+            content_padding=ft.Padding(left=16, right=16, top=14, bottom=14),
         )
 
-        status_msg = ft.Text("", size=13, text_align=ft.TextAlign.CENTER)
-        register_btn = ft.FilledButton(
-            content=ft.Row([
-                ft.Icon(ft.Icons.PERSON_ADD, size=18, color="#0A0E27"),
-                ft.Text("Create Account", size=15, weight=ft.FontWeight.BOLD, color="#0A0E27"),
-            ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
-            width=420, height=48,
-            style=ft.ButtonStyle(bgcolor="#00D9FF", shape=ft.RoundedRectangleBorder(radius=14)),
+        name_field = ft.TextField(hint_text="Ahmed Mohamed", **_field_style)
+        email_field = ft.TextField(hint_text="you@example.com",
+                                   keyboard_type=ft.KeyboardType.EMAIL, **_field_style)
+        phone_field = ft.TextField(hint_text="+20 1X XXXX XXXX (optional)",
+                                   keyboard_type=ft.KeyboardType.PHONE, **_field_style)
+        password_field = ft.TextField(hint_text="At least 6 characters",
+                                      password=True, can_reveal_password=True, **_field_style)
+
+        error_container = ft.Container(
+            content=ft.Text("", size=13, text_align=ft.TextAlign.CENTER, color="#F87171"),
+            bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.RED),
+            border=ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.RED)),
+            border_radius=12,
+            padding=ft.Padding(left=16, right=16, top=10, bottom=10),
+            visible=False,
         )
-        loading_ring = ft.ProgressRing(width=20, height=20, stroke_width=2, color="#00D9FF", visible=False)
 
-        def do_register(e):
-            name = name_field.value.strip() if name_field.value else ""
-            email = email_field.value.strip() if email_field.value else ""
-            phone = phone_field.value.strip() if phone_field.value else ""
-            password = password_field.value or ""
-
-            if not name or not email or not password:
-                status_msg.value = "Name, email and password are required"
-                status_msg.color = ft.Colors.RED_400
-                self.page.update()
-                return
-            if len(password) < 6:
-                status_msg.value = "Password must be at least 6 characters"
-                status_msg.color = ft.Colors.RED_400
-                self.page.update()
-                return
-
-            register_btn.disabled = True
-            loading_ring.visible = True
-            status_msg.value = "Creating account..."
-            status_msg.color = ft.Colors.GREY_400
+        def _set_error(msg: str, amber: bool = False):
+            error_container.content.value = msg
+            if amber:
+                error_container.bgcolor = ft.Colors.with_opacity(0.1, ft.Colors.AMBER)
+                error_container.border = ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.AMBER))
+                error_container.content.color = ft.Colors.AMBER_300
+            else:
+                error_container.bgcolor = ft.Colors.with_opacity(0.1, ft.Colors.RED)
+                error_container.border = ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.RED))
+                error_container.content.color = "#F87171"
+            error_container.visible = bool(msg)
             self.page.update()
 
-            def _register_thread():
+        register_btn = ft.FilledButton(
+            text="Create Account",
+            width=420,
+            height=50,
+            style=ft.ButtonStyle(
+                bgcolor="#00D9FF",
+                color="#0A0E27",
+                text_style=ft.TextStyle(size=15, weight=ft.FontWeight.BOLD),
+                shape=ft.RoundedRectangleBorder(radius=14),
+            ),
+        )
+        loading_row = ft.Row(
+            [ft.ProgressRing(width=18, height=18, stroke_width=2, color="#00D9FF"),
+             ft.Text("Creating account…", size=13, color=ft.Colors.GREY_400)],
+            alignment=ft.MainAxisAlignment.CENTER,
+            visible=False,
+        )
+
+        def do_register(e):
+            name = (name_field.value or "").strip()
+            email = (email_field.value or "").strip()
+            phone = (phone_field.value or "").strip()
+            password = password_field.value or ""
+            if not name or not email or not password:
+                _set_error("Name, email and password are required")
+                return
+            if len(password) < 6:
+                _set_error("Password must be at least 6 characters")
+                return
+            _set_error("")
+            register_btn.disabled = True
+            loading_row.visible = True
+            self.page.update()
+
+            def _thread():
                 try:
                     user = api_client.register(email, password, name, phone)
-                    def _on_success():
+                    def _ok():
                         register_btn.disabled = False
-                        loading_ring.visible = False
-                        status_msg.value = f"Account created! Welcome, {user.get('full_name', name)}!"
-                        status_msg.color = ft.Colors.GREEN_400
-                        self.page.update()
-                        # Show login page after a brief delay
-                        import time
-                        time.sleep(1)
-                        active_plan = user.get("active_plan")
-                        if active_plan:
+                        loading_row.visible = False
+                        _set_error(
+                            f"Account created! Welcome, {user.get('full_name', name)}!\n"
+                            "Subscribe on our website to activate your plan.",
+                            amber=True,
+                        )
+                        import time; time.sleep(1.5)
+                        if user.get("active_plan"):
                             self.show_monitoring_page()
-                        else:
-                            self.show_login_page()
-                    self._ui_queue.put(_on_success)
-                except APIError as ex:
-                    def _on_error():
+                        # stay on register page so user reads the subscribe message
+                    self._ui_queue.put(_ok)
+                except (APIError, Exception) as ex:
+                    msg = getattr(ex, 'detail', None) or str(ex)
+                    def _err():
                         register_btn.disabled = False
-                        loading_ring.visible = False
-                        status_msg.value = str(ex.detail)
-                        status_msg.color = ft.Colors.RED_400
-                        self.page.update()
-                    self._ui_queue.put(_on_error)
-                except Exception as ex:
-                    def _on_error():
-                        register_btn.disabled = False
-                        loading_ring.visible = False
-                        status_msg.value = f"Connection error: {ex}"
-                        status_msg.color = ft.Colors.RED_400
-                        self.page.update()
-                    self._ui_queue.put(_on_error)
+                        loading_row.visible = False
+                        _set_error(msg)
+                    self._ui_queue.put(_err)
 
-            threading.Thread(target=_register_thread, daemon=True).start()
+            threading.Thread(target=_thread, daemon=True).start()
 
         register_btn.on_click = do_register
         password_field.on_submit = do_register
+
+        # ── benefits row ────────────────────────────────────────────
+        def _mini_benefit(label: str, icon) -> ft.Container:
+            return ft.Container(
+                content=ft.Column(
+                    [ft.Icon(icon, size=18, color="#00D9FF"),
+                     ft.Text(label, size=10, color=ft.Colors.GREY_400,
+                             text_align=ft.TextAlign.CENTER)],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=3,
+                ),
+                padding=ft.Padding(left=12, right=12, top=8, bottom=8),
+                border_radius=10,
+                bgcolor=ft.Colors.with_opacity(0.06, ft.Colors.WHITE),
+                border=ft.Border.all(1, ft.Colors.with_opacity(0.1, "#00D9FF")),
+            )
+
+        benefits = ft.Row(
+            [
+                _mini_benefit("24/7 monitoring", ft.Icons.SCHEDULE),
+                _mini_benefit("Instant alerts", ft.Icons.NOTIFICATIONS),
+                _mini_benefit("Secure & private", ft.Icons.LOCK),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=12,
+        )
+
+        card = ft.Container(
+            content=ft.Column(
+                [
+                    ft.Image(src=self._logo_src or "Logos/LOGO_H_W.png", width=220, height=55),
+                    ft.Container(height=2),
+                    ft.Text("Create Account", size=22, weight=ft.FontWeight.BOLD,
+                            text_align=ft.TextAlign.CENTER),
+                    ft.Text("Start monitoring TLS appointments today", size=13,
+                            color=ft.Colors.GREY_400, text_align=ft.TextAlign.CENTER),
+                    ft.Container(height=12),
+                    benefits,
+                    ft.Container(height=16),
+                    error_container,
+                    ft.Container(height=4),
+                    ft.Text("Full Name", size=13, color=ft.Colors.GREY_400),
+                    ft.Container(height=4), name_field,
+                    ft.Container(height=12),
+                    ft.Text("Email", size=13, color=ft.Colors.GREY_400),
+                    ft.Container(height=4), email_field,
+                    ft.Container(height=12),
+                    ft.Text("Phone", size=13, color=ft.Colors.GREY_400),
+                    ft.Container(height=4), phone_field,
+                    ft.Container(height=12),
+                    ft.Text("Password", size=13, color=ft.Colors.GREY_400),
+                    ft.Container(height=4), password_field,
+                    ft.Container(height=20),
+                    register_btn,
+                    loading_row,
+                    ft.Container(height=14),
+                    ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.WHITE)),
+                    ft.Container(height=10),
+                    ft.Row([
+                        ft.Text("Already have an account?", size=12, color=ft.Colors.GREY_400),
+                        ft.TextButton("Log In", on_click=lambda e: self.show_login_page(),
+                                      style=ft.ButtonStyle(color="#00D9FF")),
+                    ], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=0, tight=True,
+            ),
+            width=460,
+            padding=ft.Padding(left=40, right=40, top=32, bottom=28),
+            border_radius=20,
+            gradient=ft.LinearGradient(
+                begin=ft.alignment.Alignment(-1, -1),
+                end=ft.alignment.Alignment(1, 1),
+                colors=["#1A1F3A", "#0F1525"],
+            ),
+            border=ft.Border.all(1, ft.Colors.with_opacity(0.2, "#00D9FF")),
+            shadow=ft.BoxShadow(
+                spread_radius=0, blur_radius=30,
+                color=ft.Colors.with_opacity(0.15, "#00D9FF"),
+                offset=ft.Offset(0, 8),
+            ),
+        )
 
         top_bar = ft.Container(
             content=ft.Row([
@@ -1121,7 +1243,7 @@ class TLSApp:
                 ft.Container(expand=True),
                 self.create_website_icon_button(),
             ]),
-            padding=ft.Padding(left=20, right=20, top=15, bottom=0),
+            padding=ft.Padding(left=20, right=20, top=12, bottom=0),
         )
 
         self.page.add(
@@ -1129,36 +1251,18 @@ class TLSApp:
                 content=ft.Column(
                     [
                         top_bar,
-                        ft.Container(height=30),
-                        ft.Icon(ft.Icons.PERSON_ADD, size=56, color="#00D9FF"),
-                        ft.Container(height=8),
-                        ft.Text("Create Your Account", size=24, weight=ft.FontWeight.BOLD,
-                                text_align=ft.TextAlign.CENTER),
-                        ft.Text("Register to subscribe and start monitoring", size=13,
-                                color=ft.Colors.GREY_400, text_align=ft.TextAlign.CENTER),
-                        ft.Container(height=20),
-                        name_field,
-                        ft.Container(height=8),
-                        email_field,
-                        ft.Container(height=8),
-                        phone_field,
-                        ft.Container(height=8),
-                        password_field,
-                        ft.Container(height=8),
-                        status_msg,
-                        loading_ring,
-                        ft.Container(height=12),
-                        register_btn,
-                        ft.Container(height=12),
-                        ft.Row([
-                            ft.Text("Already have an account?", size=12, color=ft.Colors.GREY_400),
-                            ft.TextButton("Login", on_click=lambda e: self.show_login_page(),
-                                          style=ft.ButtonStyle(color="#00D9FF")),
-                        ], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
+                        ft.Container(
+                            content=ft.Column(
+                                [card],
+                                scroll=ft.ScrollMode.AUTO,
+                                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            expand=True,
+                            alignment=ft.alignment.top_center,
+                            padding=ft.Padding(left=0, right=0, top=20, bottom=20),
+                        ),
                     ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    alignment=ft.MainAxisAlignment.START,
-                    scroll=ft.ScrollMode.AUTO,
+                    spacing=0,
                     expand=True,
                 ),
                 expand=True,
