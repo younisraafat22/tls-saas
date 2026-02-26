@@ -95,8 +95,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <Shield className="w-5 h-5" />
               </Link>
             )}
-            <button onClick={logout} className="text-gray-500">
+            <button onClick={logout} className="flex items-center gap-1.5 text-gray-400 hover:text-red-400 transition-colors p-2 rounded-lg hover:bg-white/5">
               <LogOut className="w-5 h-5" />
+              <span className="text-xs">{sb.logOut}</span>
             </button>
           </div>
         </div>

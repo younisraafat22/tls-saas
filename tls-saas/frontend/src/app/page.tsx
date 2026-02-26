@@ -147,7 +147,7 @@ function Counter({ target, suffix = "" }: { target: number; suffix?: string }) {
 // ── Navbar ──────────────────────────────────────────────
 
 function Navbar() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { t } = useLanguage();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -221,7 +221,12 @@ function Navbar() {
               <a href="#how-it-works" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.howItWorks}</a>
               <a href="#pricing" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.pricing}</a>
               <a href="#faq" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.faq}</a>
-              {!user && (
+              {user ? (
+                <>
+                  <Link href={user.is_admin ? "/admin" : "/dashboard"} className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.dashboard}</Link>
+                  <button onClick={() => { logout(); setMobileOpen(false); }} className="px-4 py-2.5 text-left text-red-400 hover:text-red-300 hover:bg-white/5 rounded-lg transition-colors w-full">{t.sidebar.logOut}</button>
+                </>
+              ) : (
                 <Link href="/login" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.logIn}</Link>
               )}
             </div>
