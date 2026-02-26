@@ -1899,29 +1899,26 @@ class TLSApp:
             screenshot_label = ft.Text("No screenshot selected", size=12, color=ft.Colors.GREY_400)
             submit_status = ft.Text("", size=13, text_align=ft.TextAlign.CENTER)
 
-            def on_screenshot_result(e):
-                if e.files:
-                    fpath = e.files[0].path
+            file_picker = ft.FilePicker()
+            self.page.services.append(file_picker)
+
+            def pick_screenshot(e):
+                files = file_picker.pick_files(
+                    allowed_extensions=["png", "jpg", "jpeg"],
+                    dialog_title="Select payment receipt screenshot",
+                )
+                if files:
+                    fpath = files[0].path
                     screenshot_state["path"] = fpath
                     try:
                         with open(fpath, "rb") as f:
                             screenshot_state["b64"] = base64.b64encode(f.read()).decode("utf-8")
-                        screenshot_label.value = f"✓ {e.files[0].name}"
+                        screenshot_label.value = f"✓ {files[0].name}"
                         screenshot_label.color = ft.Colors.GREEN_400
                     except Exception as ex:
                         screenshot_label.value = f"Error reading file: {ex}"
                         screenshot_label.color = ft.Colors.RED_400
                     self.page.update()
-
-            file_picker = ft.FilePicker()
-            file_picker.on_result = on_screenshot_result
-            self.page.overlay.append(file_picker)
-
-            def pick_screenshot(e):
-                file_picker.pick_files(
-                    allowed_extensions=["png", "jpg", "jpeg"],
-                    dialog_title="Select payment receipt screenshot",
-                )
 
             def copy_vodafone(e):
                 pyperclip.copy("01065080242")
@@ -1937,8 +1934,8 @@ class TLSApp:
 
             def close_payment(e):
                 payment_dlg.open = False
-                if file_picker in self.page.overlay:
-                    self.page.overlay.remove(file_picker)
+                if file_picker in self.page.services:
+                    self.page.services.remove(file_picker)
                 self.page.update()
 
             def do_submit(e):
