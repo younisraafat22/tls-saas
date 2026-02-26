@@ -1,176 +1,511 @@
-"use client";
+﻿"use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { adminApi } from "@/lib/api";
 import {
   KeyRound, Monitor, Copy, CheckCircle2, Clock, Loader2,
-  XCircle, Search, RefreshCw,
+  XCircle, Search, RefreshCw, Plus, X, AlertTriangle,
+  RotateCcw, Trash2, Shield, ChevronLeft, ChevronRight,
+  Info,
 } from "lucide-react";
 
-const statusConfig: Record<string, { color: string; bg: string; icon: React.ReactNode }> = {
-  pending: { color: "text-amber-400", bg: "bg-amber-500/10", icon: <Clock className="w-3 h-3" /> },
-  approved: { color: "text-accent-green", bg: "bg-accent-green/10", icon: <CheckCircle2 className="w-3 h-3" /> },
-  rejected: { color: "text-red-400", bg: "bg-red-500/10", icon: <XCircle className="w-3 h-3" /> },
+interface LicenseRecord {
+  id: number;
+  submitter_name: string;
+  submitter_email: string;
+  hardware_id: string;
+  plan_key: string;
+  amount: number;
+  currency: string;
+  method: string;
+  reference: string;
+  has_screenshot: boolean;
+  screenshot_data?: string;
+  status: "pending" | "approved" | "rejected";
+  admin_notes: string;
+  license_key: string;
+  created_at: string;
+  processed_at?: string;
+  direct_issue: boolean;
+}
+
+const PLAN_OPTIONS = [
+  { value: "legalization_monthly", label: "Legalization  Monthly" },
+  { value: "legalization_quarterly", label: "Legalization  Quarterly" },
+  { value: "visa_monthly", label: "Visa  Monthly" },
+  { value: "visa_quarterly", label: "Visa  Quarterly" },
+  { value: "premium_monthly", label: "Premium  Monthly" },
+  { value: "premium_quarterly", label: "Premium  Quarterly" },
+  { value: "premium_annual", label: "Premium  Annual" },
+  { value: "premium", label: "Premium" },
+  { value: "basic", label: "Basic" },
+];
+
+const statusConfig: Record<string, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
+  pending: {
+    label: "Pending",
+    color: "text-amber-400",
+    bg: "bg-amber-500/10 border-amber-500/30",
+    icon: <Clock className="w-3 h-3" />,
+  },
+  approved: {
+    label: "Active",
+    color: "text-emerald-400",
+    bg: "bg-emerald-500/10 border-emerald-500/30",
+    icon: <CheckCircle2 className="w-3 h-3" />,
+  },
+  rejected: {
+    label: "Revoked",
+    color: "text-red-400",
+    bg: "bg-red-500/10 border-red-500/30",
+    icon: <XCircle className="w-3 h-3" />,
+  },
 };
 
-export default function AdminLicensesPage() {
-  const [payments, setPayments] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("pending");
-  const [search, setSearch] = useState("");
-  const [processing, setProcessing] = useState<number | null>(null);
-  const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
-  const [generatedKeys, setGeneratedKeys] = useState<Record<number, string>>({});
-  const [copied, setCopied] = useState<number | null>(null);
+function Toast({ toast }: { toast: { type: "success" | "error"; msg: string } | null }) {
+  return (
+    <AnimatePresence>
+      {toast && (
+        <motion.div
+          initial={{ x: 100, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          exit={{ x: 100, opacity: 0 }}
+          className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-xl font-medium shadow-xl max-w-md ${
+            toast.type === "success" ? "bg-emerald-500 text-white" : "bg-red-500 text-white"
+          }`}
+        >
+          {toast.msg}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
 
-  useEffect(() => {
-    loadPayments();
-  }, []);
+interface CreateModalProps {
+  onClose: () => void;
+  onCreated: (key: string, email: string) => void;
+}
 
-  const loadPayments = async () => {
+function CreateLicenseModal({ onClose, onCreated }: CreateModalProps) {
+  const [form, setForm] = useState({
+    hardware_id: "",
+    plan_key: "premium_monthly",
+    customer_name: "",
+    customer_email: "",
+    notes: "",
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<{ key: string; email: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.hardware_id.trim()) { setError("Hardware ID is required"); return; }
+    if (!form.plan_key) { setError("Plan is required"); return; }
+    setError("");
     setLoading(true);
     try {
-      const data = await adminApi.getDesktopPayments();
-      setPayments(data.items || data);
-    } catch (err) {
-      console.error(err);
+      const res = await adminApi.createLicense(form);
+      setResult({ key: res.license_key, email: res.customer_email });
+      onCreated(res.license_key, res.customer_email);
+    } catch (err: any) {
+      setError(err?.detail || err?.message || "Failed to create license");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGenerateLicense = async (paymentId: number) => {
-    setProcessing(paymentId);
-    try {
-      const result = await adminApi.generateLicense(paymentId);
-      setGeneratedKeys((prev) => ({ ...prev, [paymentId]: result.license_key }));
-      setPayments((prev) =>
-        prev.map((p) =>
-          p.id === paymentId
-            ? { ...p, status: "approved", license_key: result.license_key }
-            : p
-        )
-      );
-      showToast("success", `License key generated! Send to: ${result.submitter_email}`);
-    } catch (err: any) {
-      showToast("error", err?.detail || "Failed to generate license");
-    } finally {
-      setProcessing(null);
-    }
-  };
-
-  const handleCopy = (text: string, paymentId: number) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(paymentId);
-      setTimeout(() => setCopied(null), 2000);
+  const handleCopy = () => {
+    if (!result) return;
+    navigator.clipboard.writeText(result.key).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     });
   };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={(e) => e.target === e.currentTarget && !result && onClose()}
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="glass-card w-full max-w-lg p-6 space-y-5"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <Shield className="w-5 h-5 text-primary-400" />
+            Generate License Key
+          </h2>
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {!result ? (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 text-xs text-blue-300 flex gap-2">
+              <Info className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>Create a license directly for any device without waiting for a payment submission.</span>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-400 mb-1.5">
+                Hardware ID <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={form.hardware_id}
+                onChange={(e) => setForm({ ...form, hardware_id: e.target.value })}
+                placeholder="e.g. A1B2C3D4E5F6..."
+                className="input-field font-mono text-sm"
+                autoFocus
+              />
+              <p className="text-xs text-gray-500 mt-1">Found in the desktop app purchase screen.</p>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-400 mb-1.5">
+                Plan <span className="text-red-400">*</span>
+              </label>
+              <select
+                value={form.plan_key}
+                onChange={(e) => setForm({ ...form, plan_key: e.target.value })}
+                className="input-field"
+              >
+                {PLAN_OPTIONS.map((p) => (
+                  <option key={p.value} value={p.value}>{p.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1.5">Customer Name</label>
+                <input
+                  type="text"
+                  value={form.customer_name}
+                  onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
+                  placeholder="Optional"
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1.5">Customer Email</label>
+                <input
+                  type="email"
+                  value={form.customer_email}
+                  onChange={(e) => setForm({ ...form, customer_email: e.target.value })}
+                  placeholder="Optional"
+                  className="input-field"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-400 mb-1.5">Notes</label>
+              <input
+                type="text"
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder="Internal notes (optional)"
+                className="input-field"
+              />
+            </div>
+
+            {error && (
+              <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">
+                {error}
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={onClose} className="flex-1 btn-secondary py-2.5">
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex-1 btn-primary py-2.5 flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                Generate
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+              <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
+              <div>
+                <div className="font-semibold text-emerald-400">License created!</div>
+                <div className="text-sm text-gray-400 mt-0.5">Copy and send to the customer.</div>
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-amber-400 font-medium mb-2">License Key</div>
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                <code className="font-mono text-amber-300 text-sm break-all leading-relaxed">{result.key}</code>
+              </div>
+            </div>
+            {result.email && (
+              <div className="text-sm text-gray-400">
+                Send to: <span className="text-white">{result.email}</span>
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={handleCopy}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl text-sm font-medium hover:bg-amber-500/20 transition-colors"
+              >
+                {copied ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                {copied ? "Copied!" : "Copy Key"}
+              </button>
+              <button onClick={onClose} className="flex-1 btn-primary py-2.5">Done</button>
+            </div>
+          </div>
+        )}
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function ConfirmDialog({
+  message, onConfirm, onCancel, danger = true,
+}: { message: string; onConfirm: () => void; onCancel: () => void; danger?: boolean }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+    >
+      <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="glass-card w-full max-w-sm p-6 space-y-5">
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${danger ? "bg-red-500/15" : "bg-amber-500/15"}`}>
+            <AlertTriangle className={`w-5 h-5 ${danger ? "text-red-400" : "text-amber-400"}`} />
+          </div>
+          <p className="text-sm text-gray-300">{message}</p>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onCancel} className="flex-1 btn-secondary py-2">Cancel</button>
+          <button
+            onClick={onConfirm}
+            className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors ${
+              danger
+                ? "bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20"
+                : "btn-primary"
+            }`}
+          >
+            Confirm
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+export default function AdminLicensesPage() {
+  const [licenses, setLicenses] = useState<LicenseRecord[]>([]);
+  const [total, setTotal] = useState(0);
+  const [pages, setPages] = useState(1);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [processing, setProcessing] = useState<number | null>(null);
+  const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [copied, setCopied] = useState<number | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [confirm, setConfirm] = useState<{ id: number; action: "revoke" | "delete" | "regenerate" } | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const loadLicenses = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await adminApi.getLicenses(page, filter === "all" ? "" : filter, debouncedSearch);
+      setLicenses(data.items || []);
+      setTotal(data.total || 0);
+      setPages(data.pages || 1);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, filter, debouncedSearch]);
+
+  useEffect(() => { setPage(1); }, [filter, debouncedSearch]);
+  useEffect(() => { loadLicenses(); }, [loadLicenses]);
 
   const showToast = (type: "success" | "error", msg: string) => {
     setToast({ type, msg });
     setTimeout(() => setToast(null), 5000);
   };
 
-  const filtered = payments.filter((p) => {
-    if (filter !== "all" && p.status !== filter) return false;
-    if (search) {
-      const s = search.toLowerCase();
-      return (
-        p.submitter_email?.toLowerCase().includes(s) ||
-        p.submitter_name?.toLowerCase().includes(s) ||
-        p.hardware_id?.toLowerCase().includes(s) ||
-        p.plan_key?.toLowerCase().includes(s) ||
-        p.license_key?.toLowerCase().includes(s)
-      );
-    }
-    return true;
-  });
+  const handleCopy = (text: string, id: number) => {
+    navigator.clipboard.writeText(text).then(() => { setCopied(id); setTimeout(() => setCopied(null), 2000); });
+  };
 
-  const pendingCount = payments.filter((p) => p.status === "pending").length;
+  const handleGenerate = async (id: number) => {
+    setProcessing(id);
+    try {
+      const res = await adminApi.generateLicense(id);
+      showToast("success", `Key generated! Send to: ${res.submitter_email || "buyer"}`);
+      loadLicenses();
+    } catch (err: any) {
+      showToast("error", err?.detail || "Failed to generate");
+    } finally { setProcessing(null); }
+  };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="spinner w-10 h-10" />
-      </div>
-    );
-  }
+  const handleRevoke = async (id: number) => {
+    setConfirm(null); setProcessing(id);
+    try {
+      await adminApi.revokeLicense(id);
+      showToast("success", "License revoked");
+      loadLicenses();
+    } catch (err: any) {
+      showToast("error", err?.detail || "Failed to revoke");
+    } finally { setProcessing(null); }
+  };
+
+  const handleRegenerate = async (id: number) => {
+    setConfirm(null); setProcessing(id);
+    try {
+      const res = await adminApi.regenerateLicense(id);
+      showToast("success", "New key: " + res.license_key);
+      loadLicenses();
+    } catch (err: any) {
+      showToast("error", err?.detail || "Failed to regenerate");
+    } finally { setProcessing(null); }
+  };
+
+  const handleDelete = async (id: number) => {
+    setConfirm(null); setProcessing(id);
+    try {
+      await adminApi.deletePayment(id);
+      showToast("success", "Record deleted");
+      loadLicenses();
+    } catch (err: any) {
+      showToast("error", err?.detail || "Failed to delete");
+    } finally { setProcessing(null); }
+  };
+
+  const handleConfirm = () => {
+    if (!confirm) return;
+    if (confirm.action === "revoke") handleRevoke(confirm.id);
+    else if (confirm.action === "delete") handleDelete(confirm.id);
+    else handleRegenerate(confirm.id);
+  };
+
+  const activeCount = licenses.filter((l) => l.status === "approved" && l.license_key).length;
+  const pendingCount = licenses.filter((l) => l.status === "pending").length;
+
+  const filterTabs = [
+    { key: "all", label: "All" },
+    { key: "approved", label: "Active" },
+    { key: "pending", label: "Pending", count: pendingCount > 0 ? pendingCount : null },
+    { key: "rejected", label: "Revoked" },
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Toast */}
+      <Toast toast={toast} />
+
       <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ x: 100, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 100, opacity: 0 }}
-            className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-xl font-medium shadow-lg max-w-md ${
-              toast.type === "success" ? "bg-accent-green text-black" : "bg-red-500 text-white"
-            }`}
-          >
-            {toast.msg}
-          </motion.div>
+        {confirm && (
+          <ConfirmDialog
+            message={
+              confirm.action === "revoke"
+                ? "Revoke this license? The key will stop working immediately."
+                : confirm.action === "delete"
+                ? "Permanently delete this record? This cannot be undone."
+                : "Regenerate a new license key? The old key will no longer work."
+            }
+            danger={confirm.action !== "regenerate"}
+            onConfirm={handleConfirm}
+            onCancel={() => setConfirm(null)}
+          />
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {showCreate && (
+          <CreateLicenseModal
+            onClose={() => { setShowCreate(false); loadLicenses(); }}
+            onCreated={(key, email) => showToast("success", `License created!${email ? ` Send to ${email}` : ""}`)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-display font-bold flex items-center gap-2">
             <KeyRound className="w-6 h-6 text-primary-400" /> License Management
           </h1>
           <p className="text-gray-400 text-sm mt-1">
-            {pendingCount > 0 ? (
-              <span className="text-amber-400">{pendingCount} pending license generation</span>
-            ) : (
-              "Desktop app payment submissions"
-            )}
+            {total > 0 ? (
+              <span>
+                {total} total &nbsp;&middot;&nbsp;
+                <span className="text-emerald-400">{activeCount} active</span>
+                {pendingCount > 0 && <> &nbsp;&middot;&nbsp; <span className="text-amber-400">{pendingCount} pending</span></>}
+              </span>
+            ) : "No licenses yet"}
           </p>
         </div>
-        <button
-          onClick={loadPayments}
-          className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-          title="Refresh"
-        >
-          <RefreshCw className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={loadLicenses} className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors" title="Refresh">
+            <RefreshCw className="w-4 h-4" />
+          </button>
+          <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2 px-4 py-2">
+            <Plus className="w-4 h-4" /> Generate License
+          </button>
+        </div>
       </div>
 
-      {/* Info box */}
-      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 text-sm text-blue-300">
-        <strong>How it works:</strong> Desktop app users submit payment here. Review the payment,
-        then click <em>Generate License Key</em> to create a hardware-bound key for their device.
-        Copy and email the key to the buyer.
+      {/* Info */}
+      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 text-sm text-blue-300 flex gap-3">
+        <Info className="w-4 h-4 shrink-0 mt-0.5" />
+        <div>
+          <strong>Full license control:</strong> Create licenses instantly for any hardware ID.
+          Approve pending submissions. Revoke, regenerate, or delete any license record.
+        </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters + Search */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, email, hardware ID, plan..."
+            type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, email, hardware ID, plan, license key"
             className="input-field !pl-10"
           />
         </div>
-        <div className="flex gap-2">
-          {(["pending", "approved", "rejected", "all"] as const).map((s) => (
+        <div className="flex gap-2 flex-wrap">
+          {filterTabs.map((tab) => (
             <button
-              key={s}
-              onClick={() => setFilter(s)}
-              className={`px-3 py-2 rounded-xl text-sm border transition-all ${
-                filter === s
+              key={tab.key} onClick={() => setFilter(tab.key)}
+              className={`px-3 py-2 rounded-xl text-sm border transition-all flex items-center gap-1.5 ${
+                filter === tab.key
                   ? "bg-primary-500/10 border-primary-500/50 text-primary-400"
                   : "border-white/10 text-gray-400 hover:border-white/20"
               }`}
             >
-              {s.charAt(0).toUpperCase() + s.slice(1)}
-              {s === "pending" && pendingCount > 0 && (
-                <span className="ml-1.5 bg-amber-500 text-black text-xs w-5 h-5 rounded-full inline-flex items-center justify-center">
-                  {pendingCount}
+              {tab.label}
+              {"count" in tab && tab.count != null && (
+                <span className="bg-amber-500 text-black text-xs w-5 h-5 rounded-full inline-flex items-center justify-center font-bold">
+                  {tab.count}
                 </span>
               )}
             </button>
@@ -180,91 +515,96 @@ export default function AdminLicensesPage() {
 
       {/* List */}
       <div className="glass-card overflow-hidden">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center h-48"><div className="spinner w-8 h-8" /></div>
+        ) : licenses.length === 0 ? (
           <div className="p-12 text-center">
             <KeyRound className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-            <h3 className="font-semibold text-lg mb-2">No desktop payments found</h3>
-            <p className="text-gray-400 text-sm">
-              {filter === "pending"
-                ? "No payments waiting for license generation"
-                : "No desktop payments match your filter"}
+            <h3 className="font-semibold text-lg mb-2">No licenses found</h3>
+            <p className="text-gray-400 text-sm mb-4">
+              {filter === "pending" ? "No pending submissions waiting for license generation."
+                : search ? "No results match your search."
+                : "No license records yet."}
             </p>
+            <button onClick={() => setShowCreate(true)} className="btn-primary px-4 py-2 text-sm flex items-center gap-2 mx-auto">
+              <Plus className="w-4 h-4" /> Generate License
+            </button>
           </div>
         ) : (
           <div className="divide-y divide-white/5">
-            {filtered.map((p) => {
-              const st = statusConfig[p.status] || statusConfig.pending;
-              const isProcessing = processing === p.id;
-              const licenseKey = p.license_key || generatedKeys[p.id];
+            {licenses.map((lic) => {
+              const st = statusConfig[lic.status] || statusConfig.pending;
+              const isProcessing = processing === lic.id;
 
               return (
-                <motion.div key={p.id} layout className="p-5">
+                <motion.div key={lic.id} layout className="p-5">
                   <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                    {/* User info */}
                     <div className="flex items-start gap-3 flex-1 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center shrink-0">
-                        <Monitor className="w-5 h-5 text-blue-400" />
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${lic.direct_issue ? "bg-primary-500/15" : "bg-blue-500/15"}`}>
+                        {lic.direct_issue ? <Shield className="w-5 h-5 text-primary-400" /> : <Monitor className="w-5 h-5 text-blue-400" />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="font-medium text-sm flex flex-wrap items-center gap-2">
-                          {p.submitter_name || "—"}
-                          <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${st.bg} ${st.color}`}>
-                            {st.icon}{p.status}
+                          {lic.submitter_name || ""}
+                          <span className={`text-xs px-2 py-0.5 rounded-full border flex items-center gap-1 ${st.bg} ${st.color}`}>
+                            {st.icon} {st.label}
                           </span>
-                          {p.plan_key && (
+                          {lic.plan_key && (
                             <span className="text-xs bg-white/10 text-gray-300 px-2 py-0.5 rounded-full">
-                              {p.plan_key.replace(/_/g, " ")}
+                              {lic.plan_key.replace(/_/g, " ")}
+                            </span>
+                          )}
+                          {lic.direct_issue && (
+                            <span className="text-xs bg-primary-500/10 text-primary-400 border border-primary-500/30 px-2 py-0.5 rounded-full">
+                              Direct Issue
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-gray-400 mt-1">{p.submitter_email}</div>
-                        <div className="mt-2 space-y-1">
-                          <div className="text-xs">
-                            <span className="text-gray-500">Amount: </span>
-                            <span className="font-bold text-amber-400">{p.amount} EGP</span>
-                            <span className="text-gray-500 ml-3">Method: </span>
-                            <span className="text-gray-300">{p.method?.replace(/_/g, " ")}</span>
+
+                        {lic.submitter_email && (
+                          <div className="text-xs text-gray-400 mt-1">{lic.submitter_email}</div>
+                        )}
+
+                        <div className="mt-2 space-y-1.5">
+                          <div className="text-xs flex flex-wrap gap-x-4 gap-y-1">
+                            <span>
+                              <span className="text-gray-500">Hardware ID: </span>
+                              <span className="font-mono text-blue-300 break-all">{lic.hardware_id}</span>
+                            </span>
+                            {lic.amount > 0 && (
+                              <span>
+                                <span className="text-gray-500">Amount: </span>
+                                <span className="font-bold text-amber-400">{lic.amount} {lic.currency}</span>
+                                <span className="text-gray-500 ml-2">via </span>
+                                <span className="text-gray-300">{lic.method?.replace(/_/g, " ")}</span>
+                              </span>
+                            )}
                           </div>
-                          <div className="text-xs">
-                            <span className="text-gray-500">Hardware ID: </span>
-                            <span className="font-mono text-blue-300 break-all">{p.hardware_id}</span>
-                          </div>
-                          {p.reference && (
+                          {lic.reference && lic.reference !== "admin-direct" && (
                             <div className="text-xs">
-                              <span className="text-gray-500">Reference: </span>
-                              <span className="font-mono">{p.reference}</span>
+                              <span className="text-gray-500">Ref: </span>
+                              <span className="font-mono text-gray-300">{lic.reference}</span>
                             </div>
                           )}
                           <div className="text-xs text-gray-500">
-                            Submitted: {new Date(p.created_at).toLocaleString()}
+                            Created: {new Date(lic.created_at).toLocaleString()}
+                            {lic.processed_at && <> &middot; Processed: {new Date(lic.processed_at).toLocaleString()}</>}
                           </div>
-                          {p.has_screenshot && (
-                            <div className="text-xs text-primary-400">📎 Payment screenshot attached</div>
-                          )}
+                          {lic.admin_notes && <div className="text-xs text-gray-500 italic">{lic.admin_notes}</div>}
+                          {lic.has_screenshot && <div className="text-xs text-primary-400"> Payment screenshot attached</div>}
                         </div>
 
-                        {/* Generated license key */}
-                        {licenseKey && (
+                        {lic.license_key && (
                           <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                             <div className="text-amber-400 text-xs mb-1 font-medium">License Key</div>
                             <div className="flex items-center gap-2">
-                              <code className="font-mono text-sm text-amber-300 flex-1 break-all">
-                                {licenseKey}
-                              </code>
+                              <code className="font-mono text-sm text-amber-300 flex-1 break-all">{lic.license_key}</code>
                               <button
-                                onClick={() => handleCopy(licenseKey, p.id)}
+                                onClick={() => handleCopy(lic.license_key, lic.id)}
                                 className="shrink-0 p-1.5 text-amber-400 hover:text-amber-300 hover:bg-amber-500/20 rounded-lg transition-colors"
-                                title="Copy license key"
                               >
-                                {copied === p.id ? (
-                                  <CheckCircle2 className="w-4 h-4 text-accent-green" />
-                                ) : (
-                                  <Copy className="w-4 h-4" />
-                                )}
+                                {copied === lic.id ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                               </button>
-                            </div>
-                            <div className="text-xs text-gray-400 mt-1">
-                              Send this key to: <span className="text-gray-300">{p.submitter_email}</span>
                             </div>
                           </div>
                         )}
@@ -272,20 +612,58 @@ export default function AdminLicensesPage() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-2 lg:shrink-0">
-                      {p.status === "pending" && (
-                        <button
-                          onClick={() => handleGenerateLicense(p.id)}
-                          disabled={isProcessing}
-                          className="flex items-center gap-2 px-4 py-2 bg-primary-500/10 text-primary-400 border border-primary-500/30 rounded-xl text-sm font-medium hover:bg-primary-500/20 transition-colors disabled:opacity-50"
-                        >
-                          {isProcessing ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <KeyRound className="w-4 h-4" />
+                    <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
+                      {isProcessing ? (
+                        <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                      ) : (
+                        <>
+                          {lic.status === "pending" && (
+                            <button
+                              onClick={() => handleGenerate(lic.id)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-500/10 text-primary-400 border border-primary-500/30 rounded-xl text-xs font-medium hover:bg-primary-500/20 transition-colors"
+                            >
+                              <KeyRound className="w-3.5 h-3.5" /> Generate Key
+                            </button>
                           )}
-                          Generate License Key
-                        </button>
+                          {lic.status === "approved" && lic.license_key && (
+                            <>
+                              <button
+                                onClick={() => handleCopy(lic.license_key, lic.id)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-gray-300 border border-white/10 rounded-xl text-xs font-medium hover:bg-white/10 transition-colors"
+                              >
+                                {copied === lic.id ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                                Copy
+                              </button>
+                              <button
+                                onClick={() => setConfirm({ id: lic.id, action: "regenerate" })}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/30 rounded-xl text-xs font-medium hover:bg-blue-500/20 transition-colors"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" /> Regenerate
+                              </button>
+                              <button
+                                onClick={() => setConfirm({ id: lic.id, action: "revoke" })}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 text-red-400 border border-red-500/30 rounded-xl text-xs font-medium hover:bg-red-500/20 transition-colors"
+                              >
+                                <XCircle className="w-3.5 h-3.5" /> Revoke
+                              </button>
+                            </>
+                          )}
+                          {lic.status === "rejected" && (
+                            <button
+                              onClick={() => setConfirm({ id: lic.id, action: "regenerate" })}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/30 rounded-xl text-xs font-medium hover:bg-blue-500/20 transition-colors"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" /> Reissue
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setConfirm({ id: lic.id, action: "delete" })}
+                            className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                            title="Delete record"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -295,6 +673,22 @@ export default function AdminLicensesPage() {
           </div>
         )}
       </div>
+
+      {/* Pagination */}
+      {pages > 1 && (
+        <div className="flex items-center justify-between text-sm text-gray-400">
+          <span>Showing {(page - 1) * 30 + 1}{Math.min(page * 30, total)} of {total}</span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="p-1.5 rounded-lg hover:bg-white/5 disabled:opacity-30 transition-colors">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="px-3 py-1 bg-white/5 rounded-lg">{page} / {pages}</span>
+            <button onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={page === pages} className="p-1.5 rounded-lg hover:bg-white/5 disabled:opacity-30 transition-colors">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

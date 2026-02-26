@@ -12,7 +12,7 @@ from app.models import (
     User, Plan, Subscription, Branch, Payment, CheckResult,
     NotificationLog, ServiceAccount, SystemSetting, ActivityLog,
     UserBranchMonitor,
-    PlanType, SubscriptionStatus, PaymentStatus, ServiceType,
+    PlanType, SubscriptionStatus, PaymentStatus, PaymentMethod, ServiceType,
     NotificationLogStatus,
 )
 from app.auth import get_current_admin, decode_token
@@ -545,6 +545,204 @@ async def generate_license(
         "hardware_id": payment.hardware_id,
         "submitter_email": payment.submitter_email or "",
         "message": f"License key generated and payment approved. Send the key to: {payment.submitter_email or 'buyer'}",
+    }
+
+
+@router.post("/licenses/create")
+async def create_license_directly(
+    body: dict,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Create a license key directly without needing a desktop payment submission.
+    Admin provides hardware_id, plan_key, and optional customer info.
+    """
+    hardware_id = (body.get("hardware_id") or "").strip()
+    plan_key = (body.get("plan_key") or "").strip()
+    customer_name = (body.get("customer_name") or "").strip()
+    customer_email = (body.get("customer_email") or "").strip()
+    notes = (body.get("notes") or "").strip()
+
+    if not hardware_id:
+        raise HTTPException(400, "hardware_id is required")
+    if not plan_key:
+        raise HTTPException(400, "plan_key is required")
+
+    license_key = _generate_license_key(plan_key, hardware_id)
+    now = datetime.now(timezone.utc)
+
+    payment = Payment(
+        user_id=admin.id,
+        amount=0,
+        currency="EGP",
+        method=PaymentMethod.OTHER,
+        reference="admin-direct",
+        status=PaymentStatus.APPROVED,
+        admin_notes=(f"Manually created by admin. {notes}".strip()),
+        processed_at=now,
+        hardware_id=hardware_id,
+        plan_key=plan_key,
+        submitter_name=customer_name or "Direct Issue",
+        submitter_email=customer_email or "",
+        license_key=license_key,
+    )
+    db.add(payment)
+    db.add(ActivityLog(
+        actor_id=admin.id,
+        action="license_created_direct",
+        details={
+            "plan_key": plan_key,
+            "hardware_id": hardware_id,
+            "customer_email": customer_email,
+        },
+    ))
+    await db.commit()
+    await db.refresh(payment)
+
+    return {
+        "success": True,
+        "license_key": license_key,
+        "payment_id": payment.id,
+        "plan_key": plan_key,
+        "hardware_id": hardware_id,
+        "customer_email": customer_email,
+        "message": "License created successfully.",
+    }
+
+
+@router.get("/licenses")
+async def list_all_licenses(
+    page: int = 1,
+    per_page: int = 30,
+    status: str = "",
+    search: str = "",
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all license records (payments with hardware_id, ordered newest first)."""
+    query = (
+        select(Payment)
+        .where(Payment.hardware_id != None)
+        .order_by(Payment.created_at.desc())
+    )
+    if status:
+        query = query.where(Payment.status == status)
+    if search:
+        search_lower = f"%{search.lower()}%"
+        from sqlalchemy import or_
+        query = query.where(
+            or_(
+                Payment.submitter_email.ilike(search_lower),
+                Payment.submitter_name.ilike(search_lower),
+                Payment.hardware_id.ilike(search_lower),
+                Payment.plan_key.ilike(search_lower),
+                Payment.license_key.ilike(search_lower),
+            )
+        )
+
+    count_q = select(func.count(Payment.id)).where(Payment.hardware_id != None)
+    if status:
+        count_q = count_q.where(Payment.status == status)
+    total = (await db.execute(count_q)).scalar() or 0
+
+    result = await db.execute(query.offset((page - 1) * per_page).limit(per_page))
+    payments = result.scalars().all()
+
+    items = [
+        {
+            "id": p.id,
+            "submitter_name": p.submitter_name or "",
+            "submitter_email": p.submitter_email or "",
+            "hardware_id": p.hardware_id or "",
+            "plan_key": p.plan_key or "",
+            "amount": p.amount,
+            "currency": p.currency,
+            "method": p.method,
+            "reference": p.reference or "",
+            "has_screenshot": bool(p.screenshot_data),
+            "screenshot_data": p.screenshot_data,
+            "status": p.status,
+            "admin_notes": p.admin_notes or "",
+            "license_key": p.license_key or "",
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "processed_at": p.processed_at.isoformat() if p.processed_at else None,
+            "direct_issue": p.reference == "admin-direct",
+        }
+        for p in payments
+    ]
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": (total + per_page - 1) // per_page,
+    }
+
+
+@router.post("/licenses/{payment_id}/revoke", response_model=MessageResponse)
+async def revoke_license(
+    payment_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Revoke a license — marks the record as rejected and clears the license key."""
+    result = await db.execute(select(Payment).where(Payment.id == payment_id))
+    payment = result.scalar_one_or_none()
+    if not payment:
+        raise HTTPException(404, "License record not found")
+    if not payment.license_key and payment.status != PaymentStatus.APPROVED:
+        raise HTTPException(400, "No active license to revoke")
+
+    payment.status = PaymentStatus.REJECTED
+    payment.license_key = None
+    payment.admin_notes = ((payment.admin_notes or "") + " [REVOKED]").strip()
+    payment.processed_at = datetime.now(timezone.utc)
+
+    db.add(ActivityLog(
+        actor_id=admin.id,
+        action="license_revoked",
+        details={"payment_id": payment_id},
+    ))
+    await db.commit()
+    return MessageResponse(message=f"License #{payment_id} revoked successfully")
+
+
+@router.post("/licenses/{payment_id}/regenerate")
+async def regenerate_license(
+    payment_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Re-generate a fresh license key for an existing record (e.g. after hardware change)."""
+    result = await db.execute(select(Payment).where(Payment.id == payment_id))
+    payment = result.scalar_one_or_none()
+    if not payment:
+        raise HTTPException(404, "License record not found")
+    if not payment.hardware_id:
+        raise HTTPException(400, "No hardware_id on this record")
+    if not payment.plan_key:
+        raise HTTPException(400, "No plan_key on this record")
+
+    new_key = _generate_license_key(payment.plan_key, payment.hardware_id)
+    payment.license_key = new_key
+    payment.status = PaymentStatus.APPROVED
+    payment.processed_at = datetime.now(timezone.utc)
+    payment.admin_notes = ((payment.admin_notes or "").replace(" [REVOKED]", "") + " [REGENERATED]").strip()
+
+    db.add(ActivityLog(
+        actor_id=admin.id,
+        action="license_regenerated",
+        details={"payment_id": payment_id, "new_key": new_key},
+    ))
+    await db.commit()
+
+    return {
+        "success": True,
+        "license_key": new_key,
+        "payment_id": payment_id,
+        "message": "License key regenerated successfully.",
     }
 
 

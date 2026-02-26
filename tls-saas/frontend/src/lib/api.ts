@@ -277,4 +277,18 @@ export const adminApi = {
     api.get(`/api/admin/desktop-payments?page=${page || 1}${status ? `&status=${status}` : ""}`),
   generateLicense: (paymentId: number) =>
     api.post(`/api/admin/desktop-payments/${paymentId}/generate-license`),
+  // Full license management
+  getLicenses: (page?: number, status?: string, search?: string) => {
+    const params = new URLSearchParams();
+    if (page) params.set("page", String(page));
+    if (status) params.set("status", status);
+    if (search) params.set("search", search);
+    return api.get(`/api/admin/licenses?${params.toString()}`);
+  },
+  createLicense: (data: { hardware_id: string; plan_key: string; customer_name?: string; customer_email?: string; notes?: string }) =>
+    api.post("/api/admin/licenses/create", data),
+  revokeLicense: (paymentId: number) =>
+    api.post(`/api/admin/licenses/${paymentId}/revoke`),
+  regenerateLicense: (paymentId: number) =>
+    api.post(`/api/admin/licenses/${paymentId}/regenerate`),
 };
