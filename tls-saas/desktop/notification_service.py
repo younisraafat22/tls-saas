@@ -56,8 +56,7 @@ The {Config.APP_NAME} Team
     def send_verification_email(self, user_email: str, full_name: str, token: str) -> bool:
         """Send email verification email"""
         subject = f"Verify your {Config.APP_NAME} account"
-        # In a real app, this would be a link to your website
-        verification_link = f"http://localhost:8080/verify?token={token}"
+        verification_link = f"{Config.BACKEND_URL}/verify?token={token}"
         
         body = f"""
 Hello {full_name},
@@ -82,8 +81,7 @@ The {Config.APP_NAME} Team
     def send_password_reset_email(self, user_email: str, full_name: str, token: str) -> bool:
         """Send password reset email"""
         subject = f"Reset your {Config.APP_NAME} password"
-        # In a real app, this would be a link to your website
-        reset_link = f"http://localhost:8080/reset?token={token}"
+        reset_link = f"{Config.BACKEND_URL}/reset?token={token}"
         
         body = f"""
 Hello {full_name},

@@ -59,7 +59,7 @@ class Config:
     
     # Trial & License (offline fallback)
     TRIAL_DAYS = int(os.getenv("TRIAL_DAYS", "3"))
-    LICENSE_SERVER_URL = os.getenv("LICENSE_SERVER_URL", "http://localhost:5000")
+    LICENSE_SERVER_URL = os.getenv("LICENSE_SERVER_URL", os.getenv("BACKEND_URL", "http://192.168.1.108:8000"))
     
     # AI Vision CAPTCHA Solver (Google Gemini)
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")

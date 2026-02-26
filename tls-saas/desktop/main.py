@@ -3093,7 +3093,7 @@ class TLSApp:
             webbrowser.open("https://wa.me/201060263887")
 
         def open_faq(e):
-            webbrowser.open("https://tls-saas.vercel.app/user-guide.html")
+            webbrowser.open("https://tls-saas.vercel.app/#faq")
 
         help_card = self.create_glass_container(
             ft.Column([
