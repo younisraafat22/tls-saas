@@ -66,6 +66,47 @@ try:
 except ImportError:
     UNDETECTED_CHROME_AVAILABLE = False
 
+
+def _get_chrome_major_version() -> int | None:
+    """Detect the installed Chrome/Chromium major version number.
+    Returns e.g. 145 or None if undetectable."""
+    import subprocess
+    import re
+    candidates = [
+        os.path.join(os.environ.get('PROGRAMFILES', ''), 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        os.path.join(os.environ.get('PROGRAMFILES(X86)', ''), 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    ]
+    for path in candidates:
+        if not os.path.exists(path):
+            continue
+        try:
+            out = subprocess.check_output(
+                [path, '--version'],
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            ).decode('utf-8', errors='ignore')
+            m = re.search(r'(\d+)\.', out)
+            if m:
+                return int(m.group(1))
+        except Exception:
+            pass
+    # Fallback: read version from registry
+    try:
+        import winreg
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r'Software\Google\Chrome\BLBeacon',
+        )
+        version, _ = winreg.QueryValueEx(key, 'version')
+        winreg.CloseKey(key)
+        m = re.search(r'(\d+)\.', str(version))
+        if m:
+            return int(m.group(1))
+    except Exception:
+        pass
+    return None
+
 # Audio transcription imports
 
 class TLSCheckerService:
@@ -81,10 +122,6 @@ class TLSCheckerService:
         self.on_status_update = on_status_update  # Callback for UI updates
         self.on_countdown_update = on_countdown_update  # Callback for countdown timer
         self.last_status_report = None
-        # Current check context (set during run_check)
-        self._current_branch_name = ""
-        self._current_service_type = ""
-        self._check_start_time = None
     
     # Messages allowed in the UI activity log (prefix match).
     # Everything else is printed to terminal only.
@@ -226,23 +263,16 @@ class TLSCheckerService:
         Without this, UC mode fails because it can't write patched chromedriver."""
         if not getattr(sys, 'frozen', False):
             return
-        import shutil
         from config import BASE_DIR
 
         writable_drivers = os.path.join(str(BASE_DIR), "drivers")
         os.makedirs(writable_drivers, exist_ok=True)
 
-        # Copy bundled drivers to writable location
+        # Redirect SeleniumBase paths to writable directory so it can
+        # download the correct driver version there (don't copy bundled
+        # driver which may be a different version than installed Chrome).
         try:
             from seleniumbase.core import browser_launcher
-            bundled_dir = browser_launcher.DRIVER_DIR
-            for fname in ["chromedriver.exe", "uc_driver.exe"]:
-                src = os.path.join(bundled_dir, fname)
-                dst = os.path.join(writable_drivers, fname)
-                if os.path.exists(src):
-                    shutil.copy2(src, dst)
-
-            # Redirect SeleniumBase module-level paths to writable directory
             browser_launcher.DRIVER_DIR = writable_drivers
             browser_launcher.LOCAL_CHROMEDRIVER = os.path.join(
                 writable_drivers, "chromedriver.exe"
@@ -253,7 +283,7 @@ class TLSCheckerService:
         except Exception as e:
             print(f"[Checker] Warning: driver path redirect failed: {e}")
 
-        # Update PATH so SeleniumBase and Selenium find the writable drivers
+        # Update PATH so SeleniumBase and Selenium find drivers in writable dir
         if writable_drivers not in os.environ.get("PATH", ""):
             os.environ["PATH"] = (
                 writable_drivers + os.pathsep + os.environ["PATH"]
@@ -302,8 +332,15 @@ class TLSCheckerService:
                     driver_kwargs = {
                         "uc": True,
                         "headless": False,
-                        "driver_version": "keep",
                     }
+
+                    # Auto-detect installed Chrome version so driver matches
+                    chrome_ver = _get_chrome_major_version()
+                    if chrome_ver:
+                        self._log(f"[DEBUG] Detected Chrome v{chrome_ver}, requesting matching driver")
+                        driver_kwargs["driver_version"] = str(chrome_ver)
+                    else:
+                        self._log("[DEBUG] Could not detect Chrome version, letting SeleniumBase auto-detect")
                     
                     # If running as frozen app, explicitly set binary location
                     if getattr(sys, 'frozen', False):
@@ -1844,17 +1881,6 @@ class TLSCheckerService:
                 finally:
                     db.close()
 
-                # Report to backend API
-                duration = (datetime.now() - self._check_start_time).total_seconds() if self._check_start_time else 0
-                notification_service.report_to_backend(
-                    branch_name=self._current_branch_name,
-                    service_type=self._current_service_type,
-                    slots_available=True,
-                    slot_details="\n".join(slot_details),
-                    screenshot_path=screenshot_path,
-                    duration_seconds=duration,
-                )
-
                 # Discover new months that may have appeared after navigating to this month
                 newly_available = self._get_available_months()
                 for new_month, new_link in newly_available:
@@ -1978,17 +2004,6 @@ class TLSCheckerService:
                         self._log("📧 Notification sent!")
                 finally:
                     db.close()
-
-                # Report to backend API
-                duration = (datetime.now() - self._check_start_time).total_seconds() if self._check_start_time else 0
-                notification_service.report_to_backend(
-                    branch_name=self._current_branch_name,
-                    service_type=self._current_service_type,
-                    slots_available=True,
-                    slot_details="Appointments available (legacy layout)",
-                    screenshot_path=screenshot_path,
-                    duration_seconds=duration,
-                )
                 return True, "Appointments available!"
         except Exception as e:
             self._log(f"Error checking slots (legacy): {e}")
@@ -2029,11 +2044,6 @@ class TLSCheckerService:
             # Read service type and branch URL
             service_type = getattr(settings, 'service_type', 'legalization') or 'legalization'
             branch_url = settings.branch_url or Config.TLS_URL
-
-            # Store context for report_to_backend calls inside _check_slots
-            self._current_branch_name = getattr(settings, 'branch', '') or ''
-            self._current_service_type = service_type
-            self._check_start_time = datetime.now()
             
             # Setup browser
             if not self._setup_driver():
@@ -2098,18 +2108,10 @@ class TLSCheckerService:
             
             db.commit()
             
-            # Notifications & backend reports for slots-found are sent from
-            # _check_slots() / _check_slots_legacy() with the actual screenshot.
-            # Report no-slots results to the backend too.
-            if not slots_available:
-                duration = (datetime.now() - self._check_start_time).total_seconds() if self._check_start_time else 0
-                notification_service.report_to_backend(
-                    branch_name=self._current_branch_name,
-                    service_type=self._current_service_type,
-                    slots_available=False,
-                    slot_details=message,
-                    duration_seconds=duration,
-                )
+            # Notifications are sent from _check_slots() / _check_slots_legacy() with the actual screenshot
+            
+            # Status reports only when appointments are found
+            # (notifications are sent from _check_slots with screenshot)
             
             self._cleanup_driver()
             return True  # Check completed successfully
