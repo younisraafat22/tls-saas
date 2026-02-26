@@ -266,7 +266,10 @@ export default function PaymentsPage() {
               <div className="grid sm:grid-cols-2 gap-3">
                 {branches.filter((b: any) => {
                   const plan = plans.find((p) => p.id === selectedPlan);
-                  return b.is_active && b.service_type === (plan?.plan_type || "legalization");
+                  // premium is server-monitored legalization, maps to legalization branches
+                  const branchServiceType =
+                    plan?.plan_type === "visa" ? "visa" : "legalization";
+                  return b.is_active && b.service_type === branchServiceType;
                 }).map((branch: any) => {
                   const isSelected = selectedBranch === branch.id;
                   const isStudents = branch.name.toLowerCase().includes("students");
