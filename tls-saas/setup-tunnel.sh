@@ -12,6 +12,7 @@ success() { echo -e "${GREEN}[OK]${NC}    $1"; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 USERNAME="younis"
 VERCEL_PROJECT="tls-saas"
+VERCEL_PROJECT_ID="prj_BHMyW0hTWuAw3kxgxGPSgD2ZaCGJ"
 WRAPPER="$SCRIPT_DIR/tunnel-wrapper.sh"
 
 # Token passed as argument or already saved in .env.tunnel
@@ -36,6 +37,7 @@ cat > "$WRAPPER" << 'WRAPEOF'
 
 VERCEL_TOKEN=$(cat "$(dirname "$0")/.env.tunnel" 2>/dev/null || echo '')
 VERCEL_PROJECT="tls-saas"
+VERCEL_PROJECT_ID="prj_BHMyW0hTWuAw3kxgxGPSgD2ZaCGJ"
 LOGFILE="/tmp/cloudflared-tunnel.log"
 
 # Kill any old cloudflared process
@@ -72,9 +74,7 @@ ENV_LIST=$(curl -sf \
   -H "Authorization: Bearer $VERCEL_TOKEN" \
   "https://api.vercel.com/v9/projects/$VERCEL_PROJECT/env?target=production" 2>/dev/null || echo "{}")
 
-ENV_ID=$(echo "$ENV_LIST" | grep -o '"id":"[^"]*"' | head -1 | \
-  # Find the one next to NEXT_PUBLIC_API_URL key
-  true; echo "$ENV_LIST" | python3 -c "
+ENV_ID=$(echo "$ENV_LIST" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 envs = data.get('envs', [])
@@ -86,28 +86,28 @@ for e in envs:
 
 if [ -n "$ENV_ID" ]; then
     # Update existing
-    RESULT=$(curl -sf -X PATCH \
+    curl -sf -X PATCH \
       -H "Authorization: Bearer $VERCEL_TOKEN" \
       -H "Content-Type: application/json" \
       -d "{\"value\":\"$URL\",\"target\":[\"production\"]}" \
-      "https://api.vercel.com/v9/projects/$VERCEL_PROJECT/env/$ENV_ID" 2>/dev/null)
+      "https://api.vercel.com/v9/projects/$VERCEL_PROJECT/env/$ENV_ID" > /dev/null 2>&1
     echo "[tunnel] Updated existing env var"
 else
     # Create new
-    RESULT=$(curl -sf -X POST \
+    curl -sf -X POST \
       -H "Authorization: Bearer $VERCEL_TOKEN" \
       -H "Content-Type: application/json" \
       -d "{\"key\":\"NEXT_PUBLIC_API_URL\",\"value\":\"$URL\",\"target\":[\"production\"],\"type\":\"plain\"}" \
-      "https://api.vercel.com/v10/projects/$VERCEL_PROJECT/env" 2>/dev/null)
+      "https://api.vercel.com/v10/projects/$VERCEL_PROJECT/env" > /dev/null 2>&1
     echo "[tunnel] Created new env var"
 fi
 
 # ── Trigger Vercel redeploy ───────────────────────────────────────────────────
 echo "[tunnel] Triggering Vercel redeploy..."
-# Get latest deployment ID
+# Get latest deployment UID using project ID
 LATEST_DEP=$(curl -sf \
   -H "Authorization: Bearer $VERCEL_TOKEN" \
-  "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT&limit=1&target=production" 2>/dev/null)
+  "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&limit=1&target=production" 2>/dev/null)
 
 DEP_ID=$(echo "$LATEST_DEP" | python3 -c "
 import sys, json
@@ -120,9 +120,11 @@ if [ -n "$DEP_ID" ]; then
     curl -sf -X POST \
       -H "Authorization: Bearer $VERCEL_TOKEN" \
       -H "Content-Type: application/json" \
-      -d "{\"name\":\"$VERCEL_PROJECT\"}" \
-      "https://api.vercel.com/v13/deployments?forceNew=1&withLatestCommit=1&deploymentId=$DEP_ID" \
-      > /dev/null 2>&1 && echo "[tunnel] Redeploy triggered" || echo "[tunnel] Redeploy skipped (will use cached env on next deploy)"
+      -d "{\"deploymentId\":\"$DEP_ID\",\"name\":\"$VERCEL_PROJECT\",\"target\":\"production\"}" \
+      "https://api.vercel.com/v13/deployments" \
+      > /dev/null 2>&1 && echo "[tunnel] Redeploy triggered" || echo "[tunnel] Redeploy API error"
+else
+    echo "[tunnel] Could not get deployment ID — redeploy skipped"
 fi
 
 echo "[tunnel] All done. Tunnel is live at: $URL"
