@@ -2314,7 +2314,8 @@ class TLSApp:
                         ft.Container(height=5),
                         ft.Text(
                             "Visa Appointment Monitoring" if self.flow_data.get('service_type') == 'visa'
-                            else "Document Legalization Appointment Monitoring",
+                            else "Legalization Appointment Monitoring" if self.flow_data.get('service_type') == 'legalization'
+                            else "TLS Appointment Monitoring",
                             size=14, color=ft.Colors.GREY_400,
                             text_align=ft.TextAlign.CENTER,
                         ),
