@@ -165,7 +165,6 @@ export const translations = {
     } as Record<string, string[]>,
     branchNames: { "Sheikh Zayed": "Sheikh Zayed", "Hurghada": "Hurghada", "New Cairo": "New Cairo", "Alexandria": "Alexandria", "El-Sheikh Zayed - Visa": "El-Sheikh Zayed - Visa", "Hurghada - Visa": "Hurghada - Visa", "New Cairo - Visa": "New Cairo - Visa", "Alexandria - Visa": "Alexandria - Visa", "Sheikh Zayed - Normal Legalization": "Sheikh Zayed - Normal Legalization", "Sheikh Zayed - Students Legalization": "Sheikh Zayed - Students Legalization", "Hurghada - Normal Legalization": "Hurghada - Normal Legalization", "Hurghada - Students Legalization": "Hurghada - Students Legalization" } as Record<string, string>,
     planNames: { "legalization": "Legalization Monitor", "visa": "Visa Monitor", "Visa Monitor": "Visa Monitor", "Legalization Monitor": "Legalization Monitor" } as Record<string, string>,
-    serviceTypes: { "visa": "Visa", "legalization": "Legalization" } as Record<string, string>,
     planDesc: { "legalization": "Monitor legalization branches for appointment availability", "visa": "Individual per-user check for your personal TLS visa appointment" } as Record<string, string>,
     login: {
       title: "Welcome Back",
@@ -527,7 +526,6 @@ export const translations = {
     } as Record<string, string[]>,
     branchNames: { "Sheikh Zayed": "الشيخ زايد", "Hurghada": "الغردقة", "New Cairo": "القاهرة الجديدة", "Alexandria": "الإسكندرية", "El-Sheikh Zayed - Visa": "الشيخ زايد - فيزا", "Hurghada - Visa": "الغردقة - فيزا", "New Cairo - Visa": "القاهرة الجديدة - فيزا", "Alexandria - Visa": "الإسكندرية - فيزا", "Sheikh Zayed - Normal Legalization": "الشيخ زايد - توثيق عادي", "Sheikh Zayed - Students Legalization": "الشيخ زايد - توثيق الطلاب", "Hurghada - Normal Legalization": "الغردقة - توثيق عادي", "Hurghada - Students Legalization": "الغردقة - توثيق الطلاب" } as Record<string, string>,
     planNames: { "legalization": "مراقبة التوثيق", "visa": "مراقبة الفيزا", "Visa Monitor": "مراقبة الفيزا", "Legalization Monitor": "مراقبة التوثيق" } as Record<string, string>,
-    serviceTypes: { "visa": "فيزا", "legalization": "توثيق" } as Record<string, string>,
     planDesc: { "legalization": "مراقبة فروع التوثيق لتوفر المواعيد", "visa": "فحص فردي لكل مستخدم باستخدام بيانات TLS الخاصة به" } as Record<string, string>,
     login: {
       title: "مرحبًا بعودتك",
@@ -889,7 +887,6 @@ export const translations = {
     } as Record<string, string[]>,
     branchNames: { "Sheikh Zayed": "Sheikh Zayed", "Hurghada": "Hurghada", "New Cairo": "Neu-Kairo", "Alexandria": "Alexandria", "El-Sheikh Zayed - Visa": "Sheikh Zayed - Visum", "Hurghada - Visa": "Hurghada - Visum", "New Cairo - Visa": "Neu-Kairo - Visum", "Alexandria - Visa": "Alexandria - Visum", "Sheikh Zayed - Normal Legalization": "Sheikh Zayed - Normale Beglaubigung", "Sheikh Zayed - Students Legalization": "Sheikh Zayed - Studenten-Beglaubigung", "Hurghada - Normal Legalization": "Hurghada - Normale Beglaubigung", "Hurghada - Students Legalization": "Hurghada - Studenten-Beglaubigung" } as Record<string, string>,
     planNames: { "legalization": "Beglaubigungs-Monitor", "visa": "Visum-Monitor", "Visa Monitor": "Visum-Monitor", "Legalization Monitor": "Beglaubigungs-Monitor" } as Record<string, string>,
-    serviceTypes: { "visa": "Visum", "legalization": "Beglaubigung" } as Record<string, string>,
     planDesc: { "legalization": "Überwache Beglaubigungsfilialen auf Terminverfügbarkeit", "visa": "Individuelle Prüfung für deinen persönlichen TLS-Visumtermin" } as Record<string, string>,
     login: {
       title: "Willkommen zurück",
