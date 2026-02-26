@@ -915,22 +915,16 @@ class TLSApp:
                 try:
                     user = api_client.login(email, password)
                     active_plan = user.get("active_plan")
+                    _user_name = user.get('full_name') or email
                     def _ok():
                         login_btn.disabled = False
                         loading_row.visible = False
                         if active_plan:
                             self.show_monitoring_page()
                         else:
-                            _set_error("")
-                            error_container.visible = True
-                            error_container.bgcolor = ft.Colors.with_opacity(0.1, ft.Colors.AMBER)
-                            error_container.border = ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.AMBER))
-                            error_container.content.color = ft.Colors.AMBER_300
-                            error_container.content.value = (
-                                f"Logged in as {user.get('full_name', email)}!\n"
-                                "No active subscription yet. Subscribe on our website to start monitoring."
+                            self.show_pricing_page(
+                                greeting=f"Welcome, {_user_name}! Choose a plan to start monitoring."
                             )
-                            self.page.update()
                     self._ui_queue.put(_ok)
                 except (APIError, Exception) as ex:
                     msg = getattr(ex, 'detail', None) or str(ex)
@@ -1762,7 +1756,7 @@ class TLSApp:
     # ==================================================================
     #  PRICING PAGE
     # ==================================================================
-    def show_pricing_page(self, expired=False):
+    def show_pricing_page(self, expired=False, greeting=""):
         self.page.controls.clear()
         self.page.scroll = None
 
@@ -1772,6 +1766,9 @@ class TLSApp:
         if expired:
             status_msg.value = "Your license has expired. Please renew to continue monitoring."
             status_msg.color = ft.Colors.ORANGE_400
+        elif greeting:
+            status_msg.value = greeting
+            status_msg.color = "#00D9FF"
 
         def start_trial(e):
             success, message = activate_trial()
