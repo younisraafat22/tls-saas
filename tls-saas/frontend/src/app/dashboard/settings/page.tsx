@@ -305,7 +305,7 @@ export default function SettingsPage() {
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold flex items-center gap-2">
                     <Shield className="w-4 h-4 text-primary-400" />
-                    {svcType === "legalization" ? ts.credLegalization : ts.credVisa}
+                    {ts.credVisa}
                   </h3>
                   {saved && (
                     <div className="flex items-center gap-2">
