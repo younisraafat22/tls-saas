@@ -55,9 +55,13 @@ class Settings(BaseSettings):
     CREDENTIAL_ENCRYPTION_KEY: str = "credential-encryption-key-change-this"
 
     # ── Pricing (EGP) ───────────────────────────────────
-    PRICE_LEGALIZATION_MONTHLY: float = 300.0
+    PRICE_LEGALIZATION_MONTHLY: float = 500.0
     PRICE_VISA_MONTHLY: float = 500.0
+    PRICE_PREMIUM_MONTHLY: float = 2500.0
     CURRENCY: str = "EGP"
+
+    # ── License Generation ───────────────────────────────
+    LICENSE_HMAC_SECRET: str = "TLS-CHECKER-2026-HMAC-SECRET-KEY-DONT-SHARE"
 
     # ── Desktop App Release ──────────────────────────────
     DESKTOP_APP_VERSION: str = "2.0.0"

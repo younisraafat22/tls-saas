@@ -272,4 +272,9 @@ export const adminApi = {
   // Test notifications
   testNotification: () => api.post("/api/admin/test-notification"),
   testAppointmentEmail: () => api.post("/api/admin/test-appointment-email"),
+  // Desktop license management
+  getDesktopPayments: (page?: number, status?: string) =>
+    api.get(`/api/admin/desktop-payments?page=${page || 1}${status ? `&status=${status}` : ""}`),
+  generateLicense: (paymentId: number) =>
+    api.post(`/api/admin/desktop-payments/${paymentId}/generate-license`),
 };

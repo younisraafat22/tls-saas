@@ -25,6 +25,7 @@ class PlanType(str, enum.Enum):
     LEGALIZATION = "legalization"
     VISA = "visa"
     ALL_IN_ONE = "all_in_one"
+    PREMIUM = "premium"
 
 
 class SubscriptionStatus(str, enum.Enum):
@@ -231,6 +232,11 @@ class Payment(Base):
 
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)  # Branch user wants to monitor
     screenshot_data = Column(Text, nullable=True)  # Base64-encoded payment screenshot
+    hardware_id = Column(String(100), nullable=True)  # Desktop app device binding
+    plan_key = Column(String(50), nullable=True)   # e.g. "legalization_monthly", "premium"
+    submitter_name = Column(String(255), nullable=True)  # For desktop submissions without account
+    submitter_email = Column(String(255), nullable=True)  # For desktop submissions without account
+    license_key = Column(String(255), nullable=True)  # Generated license key after approval
 
     user = relationship("User", back_populates="payments")
     subscription = relationship("Subscription", foreign_keys=[subscription_id])

@@ -45,7 +45,7 @@ async def seed_data():
             db.add(admin)
             logger.info(f"Admin user created: {settings.ADMIN_EMAIL}")
 
-        # Create plans if not exist — legalization + visa
+        # Create / upsert plans — legalization + visa + premium
         plans_data = [
             {
                 "plan_type": PlanType.LEGALIZATION,
@@ -76,10 +76,30 @@ async def seed_data():
                 ],
                 "sort_order": 2,
             },
+            {
+                "plan_type": PlanType.PREMIUM,
+                "display_name": "Premium — Server Monitored",
+                "description": "We run monitoring on our server — you don't need to leave your PC on",
+                "price_monthly": settings.PRICE_PREMIUM_MONTHLY,
+                "features": [
+                    "Server-based monitoring (no PC needed)",
+                    "All branches covered",
+                    "Real-time notifications",
+                    "Priority support",
+                    "30-minute check interval",
+                ],
+                "sort_order": 3,
+            },
         ]
         for pd in plans_data:
-            exists = await db.execute(select(Plan).where(Plan.plan_type == pd["plan_type"]))
-            if not exists.scalar_one_or_none():
+            result = await db.execute(select(Plan).where(Plan.plan_type == pd["plan_type"]))
+            existing_plan = result.scalar_one_or_none()
+            if existing_plan:
+                # Upsert: update price and features if plan already exists
+                existing_plan.price_monthly = pd["price_monthly"]
+                existing_plan.features = pd["features"]
+                existing_plan.display_name = pd["display_name"]
+            else:
                 db.add(Plan(**pd))
 
         # Create branches — Normal + Students legalization + visa for each location
@@ -128,6 +148,23 @@ async def lifespan(app: FastAPI):
             logger.info("Migration: added screenshot_data to payments table")
         except Exception:
             pass  # Column already exists
+
+    # New desktop-app payment columns
+    desktop_migrations = [
+        ("hardware_id", "VARCHAR(100)"),
+        ("plan_key", "VARCHAR(50)"),
+        ("submitter_name", "VARCHAR(255)"),
+        ("submitter_email", "VARCHAR(255)"),
+        ("license_key", "VARCHAR(255)"),
+    ]
+    async with async_session() as db:
+        for col, col_type in desktop_migrations:
+            try:
+                await db.execute(text(f"ALTER TABLE payments ADD COLUMN {col} {col_type}"))
+                await db.commit()
+                logger.info(f"Migration: added {col} to payments table")
+            except Exception:
+                pass  # Column already exists
 
     # Add source column to check_results (desktop vs server)
     async with async_session() as db:

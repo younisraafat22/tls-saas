@@ -6,13 +6,14 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import {
   LayoutDashboard, Users, CreditCard, Activity,
-  Settings, ArrowLeft, Shield, Terminal,
+  Settings, ArrowLeft, Shield, Terminal, KeyRound,
 } from "lucide-react";
 
 const adminNav = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/payments", label: "Payments", icon: CreditCard },
+  { href: "/admin/licenses", label: "Licenses", icon: KeyRound },
   { href: "/admin/monitoring", label: "Monitoring", icon: Activity },
   { href: "/admin/logs", label: "Logs", icon: Terminal },
   { href: "/admin/settings", label: "Settings", icon: Settings },

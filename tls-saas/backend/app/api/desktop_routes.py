@@ -1,12 +1,23 @@
 """
-Desktop App Routes — Version check, download info
+Desktop App Routes — Version check, download info, payment submission
 """
 
-from fastapi import APIRouter
-from app.schemas import AppVersionResponse
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.schemas import AppVersionResponse, DesktopPaymentSubmit
 from app.config import settings
+from app.database import get_db
+from app.models import Payment, User, PaymentMethod, PaymentStatus
 
 router = APIRouter(prefix="/api/app", tags=["desktop-app"])
+
+# ── Payment plan prices (EGP) ────────────────────────────────────────
+DESKTOP_PLAN_PRICES: dict[str, float] = {
+    "trial": 0.0,
+    "legalization_monthly": settings.PRICE_LEGALIZATION_MONTHLY,
+    "visa_monthly": settings.PRICE_VISA_MONTHLY,
+    "premium": settings.PRICE_PREMIUM_MONTHLY,
+}
 
 
 @router.get("/version", response_model=AppVersionResponse)
@@ -45,3 +56,66 @@ async def download_info():
             "Encrypted credential storage",
         ],
     }
+
+
+@router.post("/payments/submit")
+async def desktop_payment_submit(
+    body: DesktopPaymentSubmit,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Accept a payment submission from the desktop app.
+    No authentication required — users may not have a web account.
+    Stores screenshot, hardware_id, and contact info for admin review.
+    Admin can then generate a license key from the admin panel.
+    """
+    plan_key = body.plan_key.strip().lower()
+    if plan_key not in DESKTOP_PLAN_PRICES:
+        raise HTTPException(status_code=400, detail=f"Unknown plan: {plan_key}")
+
+    amount = DESKTOP_PLAN_PRICES[plan_key]
+    if amount == 0:
+        raise HTTPException(status_code=400, detail="Cannot submit payment for free trial plan")
+
+    # Map payment method string to enum
+    method_map = {
+        "vodafone_cash": PaymentMethod.VODAFONE_CASH,
+        "instapay": PaymentMethod.INSTAPAY,
+    }
+    method = method_map.get(body.payment_method.lower(), PaymentMethod.OTHER)
+
+    # Use a placeholder user_id=0 — admin will see submitter_name/email instead
+    # (SQLite FK not enforced, Postgres would need a real user; use admin user as placeholder)
+    from sqlalchemy import select as sa_select
+    admin_result = await db.execute(
+        sa_select(User).where(User.is_admin == True).limit(1)
+    )
+    admin_user = admin_result.scalar_one_or_none()
+    placeholder_user_id = admin_user.id if admin_user else 1
+
+    payment = Payment(
+        user_id=placeholder_user_id,
+        amount=amount,
+        currency=settings.CURRENCY,
+        method=method,
+        reference=body.reference,
+        status=PaymentStatus.PENDING,
+        screenshot_data=body.screenshot_b64 if body.screenshot_b64 else None,
+        hardware_id=body.hardware_id,
+        plan_key=plan_key,
+        submitter_name=body.full_name,
+        submitter_email=body.email,
+    )
+    db.add(payment)
+    await db.commit()
+    await db.refresh(payment)
+
+    return {
+        "success": True,
+        "payment_id": payment.id,
+        "message": (
+            "Payment submitted successfully! "
+            "Your license key will be sent to your email within a few hours after review."
+        ),
+    }
+

@@ -1759,138 +1759,229 @@ class TLSApp:
             terms_dlg.open = True
             self.page.update()
 
-        def show_payment_dialog(e):
-            """Show payment options dialog for lifetime plan"""
-            def close_payment(e):
-                payment_dlg.open = False
-                self.page.update()
+        def show_payment_dialog(plan_key):
+            """Show payment dialog for a subscription plan with screenshot upload."""
+            plan = PLANS.get(plan_key, {})
+            plan_name = plan.get("name", plan_key)
+            plan_price = plan.get("price", 0)
+            hw_id = get_hardware_id()
+
+            # Mutable state for screenshot and payment method
+            screenshot_state = {"path": None, "b64": ""}
+            selected_method = ["vodafone_cash"]
+
+            name_field = ft.TextField(
+                label="Your Full Name",
+                width=400,
+                border_radius=8,
+                bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
+                border_color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
+                hint_text="e.g. Ahmed Mohamed",
+            )
+            email_field = ft.TextField(
+                label="Your Email Address",
+                width=400,
+                border_radius=8,
+                bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
+                border_color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
+                hint_text="email@example.com",
+                keyboard_type=ft.KeyboardType.EMAIL,
+            )
+            ref_field = ft.TextField(
+                label="Transaction Reference (optional)",
+                width=400,
+                border_radius=8,
+                bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
+                border_color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
+                hint_text="Last 6 digits or transaction ID",
+            )
+            screenshot_label = ft.Text("No screenshot selected", size=12, color=ft.Colors.GREY_400)
+            submit_status = ft.Text("", size=13, text_align=ft.TextAlign.CENTER)
+
+            def on_screenshot_result(e: ft.FilePickerResultEvent):
+                if e.files:
+                    fpath = e.files[0].path
+                    screenshot_state["path"] = fpath
+                    try:
+                        with open(fpath, "rb") as f:
+                            screenshot_state["b64"] = base64.b64encode(f.read()).decode("utf-8")
+                        screenshot_label.value = f"✓ {e.files[0].name}"
+                        screenshot_label.color = ft.Colors.GREEN_400
+                    except Exception as ex:
+                        screenshot_label.value = f"Error reading file: {ex}"
+                        screenshot_label.color = ft.Colors.RED_400
+                    self.page.update()
+
+            file_picker = ft.FilePicker(on_result=on_screenshot_result)
+            self.page.overlay.append(file_picker)
+
+            def pick_screenshot(e):
+                file_picker.pick_files(
+                    allowed_extensions=["png", "jpg", "jpeg"],
+                    dialog_title="Select payment receipt screenshot",
+                )
 
             def copy_vodafone(e):
                 pyperclip.copy("01065080242")
+                selected_method[0] = "vodafone_cash"
                 self.page.snack_bar = ft.SnackBar(ft.Text("Vodafone Cash number copied!"), open=True)
                 self.page.update()
 
             def copy_instapay(e):
                 pyperclip.copy("01060263887")
+                selected_method[0] = "instapay"
                 self.page.snack_bar = ft.SnackBar(ft.Text("InstaPay number copied!"), open=True)
                 self.page.update()
 
-            def open_whatsapp(e):
-                """Open WhatsApp to contact support"""
-                webbrowser.open("https://wa.me/201060263887")
+            def close_payment(e):
+                payment_dlg.open = False
+                if file_picker in self.page.overlay:
+                    self.page.overlay.remove(file_picker)
+                self.page.update()
+
+            def do_submit(e):
+                if not name_field.value or not name_field.value.strip():
+                    submit_status.value = "✗ Please enter your full name."
+                    submit_status.color = ft.Colors.RED_400
+                    self.page.update()
+                    return
+                if not email_field.value or "@" not in email_field.value:
+                    submit_status.value = "✗ Please enter a valid email address."
+                    submit_status.color = ft.Colors.RED_400
+                    self.page.update()
+                    return
+                submit_status.value = "Submitting..."
+                submit_status.color = ft.Colors.GREY_400
+                self.page.update()
+
+                def _send():
+                    try:
+                        body = {
+                            "plan_key": plan_key,
+                            "hardware_id": hw_id,
+                            "full_name": name_field.value.strip(),
+                            "email": email_field.value.strip(),
+                            "payment_method": selected_method[0],
+                            "reference": ref_field.value.strip() if ref_field.value else "",
+                            "screenshot_b64": screenshot_state["b64"],
+                            "amount": float(plan_price),
+                        }
+                        resp = api_client._request("POST", "/api/app/payments/submit", body, auth=False)
+                        submit_status.value = resp.get("message", "✓ Submitted! You'll receive your license key by email.")
+                        submit_status.color = ft.Colors.GREEN_400
+                    except APIError as ex:
+                        submit_status.value = f"✗ Error: {ex.detail}"
+                        submit_status.color = ft.Colors.RED_400
+                    except Exception as ex:
+                        submit_status.value = f"✗ Error: {ex}"
+                        submit_status.color = ft.Colors.RED_400
+                    self.page.update()
+
+                threading.Thread(target=_send, daemon=True).start()
 
             payment_dlg = ft.AlertDialog(
                 modal=True,
                 title=ft.Column([
-                    ft.Icon(ft.Icons.MONETIZATION_ON, color=ft.Colors.AMBER_400, size=48),
-                    ft.Text("Payment Instructions", size=22, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
-                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+                    ft.Icon(ft.Icons.MONETIZATION_ON, color=ft.Colors.AMBER_400, size=44),
+                    ft.Text(f"Subscribe — {plan_name}", size=20, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+                    ft.Text(f"{plan_price:,} EGP / month · per device", size=13, color=ft.Colors.GREY_400, text_align=ft.TextAlign.CENTER),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=6),
                 content=ft.Container(
                     content=ft.Column([
-                        ft.Text(
-                            "Send 1,500 EGP via one of these methods:",
-                            size=14,
-                            color=ft.Colors.GREY_300,
-                            text_align=ft.TextAlign.CENTER,
-                        ),
-                        ft.Container(height=15),
-                        
+                        ft.Text("Step 1: Send payment via one of these methods:", size=13, color=ft.Colors.GREY_300),
+                        ft.Container(height=10),
                         # Vodafone Cash
                         ft.Container(
                             content=ft.Column([
                                 ft.Row([
-                                    ft.Icon(ft.Icons.PHONE_ANDROID, color=ft.Colors.RED_400, size=20),
-                                    ft.Text("Vodafone Cash", size=15, weight=ft.FontWeight.BOLD),
+                                    ft.Icon(ft.Icons.PHONE_ANDROID, color=ft.Colors.RED_400, size=18),
+                                    ft.Text("Vodafone Cash", size=14, weight=ft.FontWeight.BOLD),
                                 ], spacing=8),
-                                ft.Container(height=8),
-                                ft.Text("01065080242", size=20, weight=ft.FontWeight.BOLD, color="#00D9FF", selectable=True),
-                                ft.Container(height=8),
+                                ft.Container(height=6),
+                                ft.Text("01065080242", size=18, weight=ft.FontWeight.BOLD, color="#00D9FF", selectable=True),
+                                ft.Container(height=6),
                                 ft.FilledButton(
-                                    "Copy Number",
+                                    "Copy & Select",
                                     on_click=copy_vodafone,
                                     style=ft.ButtonStyle(
-                                        bgcolor="#00D9FF",
-                                        color="#0A0E27",
+                                        bgcolor="#00D9FF", color="#0A0E27",
                                         shape=ft.RoundedRectangleBorder(radius=6),
                                     ),
-                                    width=150,
-                                    height=35,
+                                    width=150, height=32,
                                 ),
                             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                            padding=15,
-                            border_radius=10,
+                            padding=12, border_radius=8,
                             bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
                             border=ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.RED)),
                         ),
-                        ft.Container(height=12),
-                        
+                        ft.Container(height=10),
                         # InstaPay
                         ft.Container(
                             content=ft.Column([
                                 ft.Row([
-                                    ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET, color=ft.Colors.BLUE_400, size=20),
-                                    ft.Text("Instapay", size=15, weight=ft.FontWeight.BOLD),
+                                    ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET, color=ft.Colors.BLUE_400, size=18),
+                                    ft.Text("InstaPay", size=14, weight=ft.FontWeight.BOLD),
                                 ], spacing=8),
-                                ft.Container(height=8),
-                                ft.Text("01060263887", size=20, weight=ft.FontWeight.BOLD, color="#00D9FF", selectable=True),
-                                ft.Container(height=8),
+                                ft.Container(height=6),
+                                ft.Text("01060263887", size=18, weight=ft.FontWeight.BOLD, color="#00D9FF", selectable=True),
+                                ft.Container(height=6),
                                 ft.FilledButton(
-                                    "Copy Number",
+                                    "Copy & Select",
                                     on_click=copy_instapay,
                                     style=ft.ButtonStyle(
-                                        bgcolor="#00D9FF",
-                                        color="#0A0E27",
+                                        bgcolor="#00D9FF", color="#0A0E27",
                                         shape=ft.RoundedRectangleBorder(radius=6),
                                     ),
-                                    width=150,
-                                    height=35,
+                                    width=150, height=32,
                                 ),
                             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                            padding=15,
-                            border_radius=10,
+                            padding=12, border_radius=8,
                             bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
                             border=ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.BLUE)),
                         ),
-                        ft.Container(height=18),
-                        
-                        # After Payment section
-                        ft.Container(
-                            content=ft.Column([
-                                ft.Row([
-                                    ft.Icon(ft.Icons.WARNING_AMBER, color=ft.Colors.AMBER_400, size=20),
-                                    ft.Text("After Payment:", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER_400),
-                                ], spacing=8),
-                                ft.Container(height=8),
-                                ft.Text("1. Take a screenshot of the payment receipt", size=12, color=ft.Colors.GREY_300),
-                                ft.Text("2. Click the WhatsApp button below", size=12, color=ft.Colors.GREY_300),
-                                ft.Text("3. Send your receipt + email address", size=12, color=ft.Colors.GREY_300),
-                                ft.Text("4. Receive your license key within 1 hour", size=12, color=ft.Colors.GREY_300),
-                            ], spacing=4),
-                            padding=12,
-                            border_radius=8,
-                            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.AMBER),
-                            border=ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.AMBER)),
-                        ),
-                        ft.Container(height=15),
-                        
-                        # WhatsApp button
+                        ft.Container(height=14),
+                        ft.Divider(height=1, color=ft.Colors.with_opacity(0.15, ft.Colors.WHITE)),
+                        ft.Container(height=10),
+                        ft.Text("Step 2: Fill in your details & upload receipt:", size=13, color=ft.Colors.GREY_300),
+                        ft.Container(height=8),
+                        name_field,
+                        ft.Container(height=8),
+                        email_field,
+                        ft.Container(height=8),
+                        ref_field,
+                        ft.Container(height=10),
+                        # Screenshot upload row
+                        ft.Row([
+                            ft.FilledButton(
+                                content=ft.Row([
+                                    ft.Icon(ft.Icons.ATTACH_FILE, size=16),
+                                    ft.Text("Upload Screenshot", size=13),
+                                ], spacing=6),
+                                on_click=pick_screenshot,
+                                style=ft.ButtonStyle(
+                                    bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.WHITE),
+                                    color=ft.Colors.WHITE,
+                                    shape=ft.RoundedRectangleBorder(radius=8),
+                                    side=ft.BorderSide(1, ft.Colors.with_opacity(0.3, ft.Colors.WHITE)),
+                                ),
+                                height=36,
+                            ),
+                            screenshot_label,
+                        ], spacing=10, alignment=ft.MainAxisAlignment.CENTER),
+                        ft.Container(height=10),
+                        submit_status,
+                        ft.Container(height=8),
                         ft.FilledButton(
-                            content=ft.Row([
-                                ft.Icon(ft.Icons.CHAT, size=20),
-                                ft.Text("Contact via WhatsApp", size=14, weight=ft.FontWeight.BOLD),
-                            ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
-                            on_click=open_whatsapp,
+                            "Submit Payment",
+                            on_click=do_submit,
                             style=ft.ButtonStyle(
-                                bgcolor=ft.Colors.GREEN_600,
+                                bgcolor=ft.Colors.AMBER_600,
                                 color=ft.Colors.WHITE,
                                 shape=ft.RoundedRectangleBorder(radius=8),
                             ),
-                            width=400,
-                            height=45,
+                            width=400, height=44,
                         ),
-                        ft.Container(height=10),
-                        
-                        # Close button
+                        ft.Container(height=8),
                         ft.OutlinedButton(
                             "Close",
                             on_click=close_payment,
@@ -1899,11 +1990,11 @@ class TLSApp:
                                 side=ft.BorderSide(1, ft.Colors.GREY_600),
                                 shape=ft.RoundedRectangleBorder(radius=8),
                             ),
-                            width=400,
-                            height=40,
+                            width=400, height=38,
                         ),
-                    ], spacing=0, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                    width=450,
+                    ], spacing=0, horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                       scroll=ft.ScrollMode.AUTO),
+                    width=450, height=520,
                 ),
                 bgcolor="#1A1F3A",
             )
@@ -1919,12 +2010,13 @@ class TLSApp:
         def create_plan_card(plan_key, highlight=False):
             plan = PLANS[plan_key]
             is_trial = plan_key == "trial"
-            is_lifetime = plan_key == "lifetime"
+            is_premium = plan_key == "premium"
 
             if is_trial:
                 price_text = "Free"
                 period_text = "1 day"
                 icon = ft.Icons.ROCKET_LAUNCH
+                accent = ft.Colors.GREEN_400
                 features = [
                     f"{plan['checks_per_day']} checks per day",
                     "Email notifications",
@@ -1934,63 +2026,110 @@ class TLSApp:
                 btn_click = start_trial
                 btn_bgcolor = ft.Colors.GREEN_600
                 btn_color = ft.Colors.WHITE
-            elif is_lifetime:
-                price_text = "1,500 EGP"
-                period_text = "one-time"
-                icon = ft.Icons.DIAMOND
+                badge = None
+            elif plan_key == "legalization_monthly":
+                price_text = "500 EGP"
+                period_text = "/month"
+                icon = ft.Icons.DESCRIPTION
+                accent = "#00D9FF"
                 features = [
-                    "Unlimited checks",
+                    "Unlimited daily checks",
                     "Check every hour",
                     "Email notifications",
+                    "All legalization branches",
+                    "PC must stay on",
+                ]
+                btn_text = "Subscribe"
+                btn_click = lambda e: show_payment_dialog("legalization_monthly")
+                btn_bgcolor = "#00D9FF"
+                btn_color = "#0A0E27"
+                badge = None
+            elif plan_key == "visa_monthly":
+                price_text = "500 EGP"
+                period_text = "/month"
+                icon = ft.Icons.CREDIT_CARD
+                accent = ft.Colors.CYAN_400
+                features = [
+                    "Unlimited daily checks",
+                    "Check every hour",
+                    "Email notifications",
+                    "All visa branches",
+                    "PC must stay on",
+                ]
+                btn_text = "Subscribe"
+                btn_click = lambda e: show_payment_dialog("visa_monthly")
+                btn_bgcolor = ft.Colors.CYAN_600
+                btn_color = ft.Colors.WHITE
+                badge = None
+            elif is_premium:
+                price_text = "2,500 EGP"
+                period_text = "/month"
+                icon = ft.Icons.CLOUD_DONE
+                accent = ft.Colors.AMBER_400
+                features = [
+                    "Server-based monitoring",
+                    "No PC required",
+                    "30-minute checks",
+                    "Email & push notifications",
                     "Priority support",
                 ]
-                btn_text = "Buy Now"
-                btn_click = show_payment_dialog
+                btn_text = "Subscribe"
+                btn_click = lambda e: show_payment_dialog("premium")
                 btn_bgcolor = ft.Colors.AMBER_600
                 btn_color = ft.Colors.WHITE
+                badge = "☁ No PC Needed"
+            else:
+                return ft.Container()
 
             feature_rows = []
             for f_text in features:
                 feature_rows.append(
                     ft.Row(
                         [
-                            ft.Icon(ft.Icons.CHECK_CIRCLE, size=14, color="#00D9FF"),
+                            ft.Icon(ft.Icons.CHECK_CIRCLE, size=14, color=accent),
                             ft.Text(f_text, size=12, color=ft.Colors.GREY_300),
                         ],
                         spacing=6,
                     )
                 )
 
-            border_color = "#00D9FF" if highlight else ft.Colors.with_opacity(0.2, ft.Colors.WHITE)
+            badge_widget = ft.Container()
+            if badge:
+                badge_widget = ft.Container(
+                    content=ft.Text(badge, size=11, weight=ft.FontWeight.BOLD, color="#0A0E27"),
+                    bgcolor=ft.Colors.AMBER_400,
+                    border_radius=12,
+                    padding=ft.Padding(left=10, right=10, top=4, bottom=4),
+                )
+
+            border_color = accent if highlight else ft.Colors.with_opacity(0.2, ft.Colors.WHITE)
             border_width = 2 if highlight else 1
 
             card = ft.Container(
                 content=ft.Column(
                     [
-                        ft.Icon(icon, size=40, color="#00D9FF" if not is_lifetime else ft.Colors.AMBER_400),
-                        ft.Container(height=10),
-                        ft.Text(plan['name'], size=18, weight=ft.FontWeight.BOLD),
-                        ft.Container(height=5),
+                        badge_widget,
+                        ft.Icon(icon, size=38, color=accent),
+                        ft.Container(height=8),
+                        ft.Text(plan['name'], size=17, weight=ft.FontWeight.BOLD),
+                        ft.Container(height=4),
                         ft.Row(
                             [
-                                ft.Text(
-                                    price_text, size=28, weight=ft.FontWeight.BOLD,
-                                    color="#00D9FF" if not is_lifetime else ft.Colors.AMBER_400,
-                                ),
+                                ft.Text(price_text, size=26, weight=ft.FontWeight.BOLD, color=accent),
                                 ft.Text(period_text, size=12, color=ft.Colors.GREY_400),
                             ],
                             spacing=4,
                             alignment=ft.MainAxisAlignment.CENTER,
                         ),
-                        ft.Container(height=15),
+                        ft.Container(height=12),
                         ft.Divider(height=1, color=ft.Colors.with_opacity(0.15, ft.Colors.WHITE)),
-                        ft.Container(height=10),
-                        ft.Column(feature_rows, spacing=8),
-                        ft.Container(height=15),
+                        ft.Container(height=8),
+                        ft.Column(feature_rows, spacing=7),
+                        ft.Container(height=12),
                         ft.FilledButton(
                             btn_text,
                             width=200,
-                            height=42,
+                            height=40,
                             on_click=btn_click,
                             style=ft.ButtonStyle(
                                 bgcolor=btn_bgcolor,
@@ -2002,34 +2141,36 @@ class TLSApp:
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     spacing=0,
                 ),
-                width=280,
-                height=380,
+                width=260,
                 border_radius=18,
                 bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
                 border=ft.Border.all(border_width, border_color),
-                padding=20,
+                padding=18,
             )
 
             if highlight:
                 card.shadow = ft.BoxShadow(
                     spread_radius=0, blur_radius=20,
-                    color=ft.Colors.with_opacity(0.2, "#00D9FF"),
+                    color=ft.Colors.with_opacity(0.2, accent if isinstance(accent, str) else "#00D9FF"),
                     offset=ft.Offset(0, 4),
                 )
             return card
 
         trial_card = create_plan_card("trial")
-        lifetime_card = create_plan_card("lifetime", highlight=True)
+        legalization_card = create_plan_card("legalization_monthly", highlight=True)
+        visa_card = create_plan_card("visa_monthly", highlight=True)
+        premium_card = create_plan_card("premium", highlight=True)
 
-        # Early Access Banner
-        early_access_banner = ft.Container(
+        # Per-device info banner
+        per_device_banner = ft.Container(
             content=ft.Row(
                 [
-                    ft.Icon(ft.Icons.WARNING, size=24, color=ft.Colors.AMBER_400),
+                    ft.Icon(ft.Icons.DEVICES, size=22, color="#00D9FF"),
                     ft.Text(
-                        "EARLY ACCESS: This app is in early development. Computer must stay on for monitoring. Cloud-based monitoring coming soon.",
+                        "Each subscription is bound to one device only.  "
+                        "Premium plan runs on our server — your PC does not need to stay on.",
                         size=13,
-                        color=ft.Colors.AMBER_200,
+                        color=ft.Colors.BLUE_200,
                         weight=ft.FontWeight.W_500,
                         text_align=ft.TextAlign.CENTER,
                         expand=True,
@@ -2040,8 +2181,8 @@ class TLSApp:
             ),
             padding=ft.Padding(left=20, right=20, top=12, bottom=12),
             border_radius=12,
-            bgcolor=ft.Colors.with_opacity(0.15, ft.Colors.AMBER),
-            border=ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.AMBER)),
+            bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.BLUE),
+            border=ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.BLUE)),
         )
 
         self.page.add(
@@ -2062,7 +2203,7 @@ class TLSApp:
                             padding=ft.Padding(left=20, right=20, top=0, bottom=0),
                         ),
                         ft.Container(height=5),
-                        early_access_banner,
+                        per_device_banner,
                         ft.Container(height=15),
                         ft.Text(
                             "Get Started",
@@ -2080,9 +2221,10 @@ class TLSApp:
                         status_msg,
                         ft.Container(height=20),
                         ft.Row(
-                            [trial_card, lifetime_card],
+                            [trial_card, legalization_card, visa_card, premium_card],
                             alignment=ft.MainAxisAlignment.CENTER,
-                            spacing=30,
+                            spacing=16,
+                            wrap=True,
                         ),
                         ft.Container(height=25),
                         ft.Row(
@@ -2142,7 +2284,7 @@ class TLSApp:
             prefix_icon=ft.Icons.VPN_KEY,
             bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
             border_color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
-            hint_text="e.g. LIFETIME-1A2B3C4D-ABCD1234-SIG12345",
+            hint_text="e.g. LEGALIZATION_MONTHLY-1A2B3C4D-ABCD1234-SIG12345",
             capitalization=ft.TextCapitalization.CHARACTERS,
         )
 
@@ -2899,13 +3041,22 @@ class TLSApp:
         # ---- Plan badge ----
         if license_status and license_status['valid']:
             plan_info = license_status['plan_info']
-            if license_status['plan'] == 'lifetime':
-                badge_text = "Lifetime"
+            plan_key_curr = license_status['plan']
+            if plan_key_curr == 'premium':
+                badge_text = "Premium ☁"
                 badge_border = ft.Colors.AMBER_600
                 badge_bg = ft.Colors.with_opacity(0.15, ft.Colors.AMBER)
                 badge_color = ft.Colors.AMBER_400
                 badge_icon_color = ft.Colors.AMBER_400
-            elif license_status['plan'] == 'trial':
+            elif plan_key_curr in ('legalization_monthly', 'visa_monthly', 'lifetime'):
+                days = license_status.get('days_remaining', 0)
+                pname = plan_info.get('name', plan_key_curr.replace('_', ' ').title())
+                badge_text = f"{pname} · {days}d left"
+                badge_border = ft.Colors.AMBER_600
+                badge_bg = ft.Colors.with_opacity(0.15, ft.Colors.AMBER)
+                badge_color = ft.Colors.AMBER_400
+                badge_icon_color = ft.Colors.AMBER_400
+            elif plan_key_curr == 'trial':
                 secs_left = (license_status['expires_at'] - datetime.now(timezone.utc)).total_seconds()
                 hrs = max(0, int(secs_left / 3600))
                 badge_text = f"Trial Â· {hrs}h left"

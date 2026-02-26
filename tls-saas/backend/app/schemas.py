@@ -196,11 +196,29 @@ class PaymentPublic(BaseModel):
     admin_notes: str
     branch_id: Optional[int] = None
     branch_name: Optional[str] = None
+    # Desktop submission fields
+    hardware_id: Optional[str] = None
+    plan_key: Optional[str] = None
+    submitter_name: Optional[str] = None
+    submitter_email: Optional[str] = None
+    license_key: Optional[str] = None
     created_at: datetime
     processed_at: Optional[datetime]
 
     class Config:
         from_attributes = True
+
+
+class DesktopPaymentSubmit(BaseModel):
+    """Submit a payment from the desktop app (no JWT required)."""
+    plan_key: str = Field(description="e.g. legalization_monthly, visa_monthly, premium")
+    hardware_id: str = Field(min_length=1, max_length=100, description="Unique device fingerprint")
+    full_name: str = Field(min_length=1, max_length=255)
+    email: str = Field(min_length=1, max_length=255)
+    payment_method: str = Field(description="vodafone_cash or instapay")
+    reference: str = Field(default="", max_length=255, description="Transaction reference / number")
+    screenshot_b64: str = Field(default="", description="Base64-encoded payment screenshot")
+    amount: float
 
 
 class PaymentApproveRequest(BaseModel):

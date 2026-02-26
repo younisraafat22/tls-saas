@@ -31,14 +31,32 @@ PLANS = {
         "price": 0,
         "max_emails": 1,           # Trial: 1 email only
     },
-    "lifetime": {
-        "name": "Lifetime",
+    "legalization_monthly": {
+        "name": "Legalization",
         "checks_per_day": 999999,
         "min_interval": 60,        # 1 hour
-        "duration_days": 36500,    # ~100 years
-        "price": 1500,
+        "duration_days": 30,
+        "price": 500,
         "currency": "EGP",
-        "max_emails": 2,           # 2 emails per device
+        "max_emails": 2,
+    },
+    "visa_monthly": {
+        "name": "Visa",
+        "checks_per_day": 999999,
+        "min_interval": 60,        # 1 hour
+        "duration_days": 30,
+        "price": 500,
+        "currency": "EGP",
+        "max_emails": 2,
+    },
+    "premium": {
+        "name": "Premium",
+        "checks_per_day": 999999,
+        "min_interval": 30,        # 30 minutes
+        "duration_days": 30,
+        "price": 2500,
+        "currency": "EGP",
+        "max_emails": 3,
     },
 }
 

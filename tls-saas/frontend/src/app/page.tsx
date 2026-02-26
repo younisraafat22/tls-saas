@@ -449,8 +449,9 @@ function Pricing() {
     subscriptionApi.getPlans().then(setPlans).catch(() => {
       // Fallback plans if API not reachable
       setPlans([
-        { id: 1, plan_type: "legalization", display_name: "Legalization Monitor", price_monthly: 300, currency: "EGP", features: ["One branch of your choice (Sheikh Zayed or Hurghada)", "Email notifications", "Web push notifications", "Real-time dashboard", "30-minute check interval"], sort_order: 1 },
-        { id: 2, plan_type: "visa", display_name: "Visa Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice (El-Sheikh Zayed, Hurghada, New Cairo or Alexandria)", "Individual check using your TLS credentials", "Email notifications", "Web push notifications", "Real-time dashboard"], sort_order: 2 },
+        { id: 1, plan_type: "legalization", display_name: "Legalization Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice (Sheikh Zayed or Hurghada)", "Email notifications", "Web push notifications", "Real-time dashboard", "30-minute check interval", "PC must stay on"], sort_order: 1 },
+        { id: 2, plan_type: "visa", display_name: "Visa Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice (El-Sheikh Zayed, Hurghada, New Cairo or Alexandria)", "Individual check using your TLS credentials", "Email notifications", "Web push notifications", "Real-time dashboard", "PC must stay on"], sort_order: 2 },
+        { id: 3, plan_type: "premium", display_name: "Premium — Server Monitored", price_monthly: 2500, currency: "EGP", features: ["Server-based monitoring (no PC needed)", "All branches covered", "Real-time notifications", "Priority support", "30-minute check interval"], sort_order: 3 },
       ]);
     });
   }, []);
@@ -468,28 +469,35 @@ function Pricing() {
           </motion.p>
         </AnimatedSection>
 
-        <AnimatedSection className="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+        <AnimatedSection className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
           {plans.sort((a, b) => a.sort_order - b.sort_order).map((plan) => {
+            const isPremium = plan.plan_type === "premium";
             return (
               <motion.div
                 key={plan.id}
                 variants={scaleIn}
-                className="glass-card p-8 relative border-primary-500/30 ring-1 ring-primary-500/20"
+                className={`glass-card p-8 relative ${isPremium ? "border-amber-500/50 ring-2 ring-amber-500/30" : "border-primary-500/30 ring-1 ring-primary-500/20"}`}
               >
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-primary-500 to-blue-600 text-white text-xs font-bold px-4 py-1 rounded-full">
-                  EARLY ACCESS
-                </div>
+                {isPremium ? (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-4 py-1 rounded-full whitespace-nowrap">
+                    ☁ SERVER MONITORED
+                  </div>
+                ) : (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-primary-500 to-blue-600 text-white text-xs font-bold px-4 py-1 rounded-full whitespace-nowrap">
+                    DESKTOP APP
+                  </div>
+                )}
 
                 <h3 className="font-display font-bold text-xl mb-2">{t.planNames?.[plan.plan_type] ?? plan.display_name}</h3>
                 <div className="flex items-baseline gap-1 mb-6">
-                  <span className="text-4xl font-display font-bold">{plan.price_monthly}</span>
+                  <span className={`text-4xl font-display font-bold ${isPremium ? "text-amber-400" : ""}`}>{plan.price_monthly}</span>
                   <span className="text-gray-400 text-sm">{plan.currency}{t.pricing.perMonth}</span>
                 </div>
 
                 <ul className="space-y-3 mb-8">
                   {(t.planFeaturesMap?.[plan.plan_type] ?? plan.features ?? t.planFeatures).map((feat: string) => (
                     <li key={feat} className="flex items-start gap-2 text-sm">
-                      <Check className="w-4 h-4 text-accent-green mt-0.5 shrink-0" />
+                      <Check className={`w-4 h-4 mt-0.5 shrink-0 ${isPremium ? "text-amber-400" : "text-accent-green"}`} />
                       <span className="text-gray-300">{feat}</span>
                     </li>
                   ))}
@@ -497,7 +505,7 @@ function Pricing() {
 
                 <Link
                   href="/register"
-                  className="block w-full text-center py-3 rounded-xl font-semibold transition-all btn-gradient"
+                  className={`block w-full text-center py-3 rounded-xl font-semibold transition-all ${isPremium ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white" : "btn-gradient"}`}
                 >
                   {t.pricing.getStarted}
                 </Link>
