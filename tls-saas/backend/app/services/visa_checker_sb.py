@@ -69,19 +69,28 @@ class VisaCheckerSB:
             from seleniumbase import Driver
 
             # IMPORTANT: UC mode CANNOT bypass Cloudflare/Turnstile in headless=True.
-            # On Linux servers with no display, we start a virtual Xvfb display and
-            # point DISPLAY at it — Chrome thinks it's headed, CF bypass works.
-            if sys.platform != "win32" and not os.environ.get("DISPLAY"):
-                try:
-                    subprocess.Popen(["Xvfb", ":99", "-screen", "0", "1920x1080x24"],
-                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    time.sleep(1)
-                    os.environ["DISPLAY"] = ":99"
-                    log("Started Xvfb virtual display :99")
-                except Exception as _xe:
-                    log(f"Xvfb start warning: {_xe}", "warn")
+            # Use the real desktop display (:0) if available, otherwise Xvfb.
+            if sys.platform != "win32":
+                # Prefer real desktop session (much better for CF bypass)
+                real_display = None
+                for d in [":0", ":1"]:
+                    if os.path.exists(f"/tmp/.X11-unix/X{d[1:]}"):
+                        real_display = d
+                        break
+                if real_display:
+                    os.environ["DISPLAY"] = real_display
+                    log(f"Using real display {real_display}")
+                elif not os.environ.get("DISPLAY"):
+                    try:
+                        subprocess.Popen(["Xvfb", ":99", "-screen", "0", "1920x1080x24"],
+                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        time.sleep(1)
+                        os.environ["DISPLAY"] = ":99"
+                        log("Started Xvfb virtual display :99")
+                    except Exception as _xe:
+                        log(f"Xvfb start warning: {_xe}", "warn")
 
-            log("Opening TLS Visa website (SeleniumBase UC mode, headed via Xvfb)...")
+            log("Opening TLS Visa website (SeleniumBase UC mode)...")
             driver = Driver(
                 uc=True,
                 headless=False,   # Must be False — headless is detectable by Cloudflare
@@ -94,18 +103,32 @@ class VisaCheckerSB:
             # Navigate — uc_open_with_reconnect disconnects devtools during CF
             # challenge so Cloudflare cannot detect automation, then reconnects.
             log("Navigating with uc_open_with_reconnect...")
-            driver.uc_open_with_reconnect(branch_url, reconnect_time=5)
+            driver.uc_open_with_reconnect(branch_url, reconnect_time=6)
             _wait(2, 3)
 
-            # If CF is still showing, retry with longer reconnect
+            # If Turnstile checkbox is present, click it
             if self._has_cloudflare(driver):
-                log("Cloudflare still present, retrying with longer reconnect...")
-                driver.uc_open_with_reconnect(branch_url, reconnect_time=10)
-                _wait(3, 5)
+                log("Cloudflare/Turnstile still present, clicking captcha checkbox...")
+                try:
+                    driver.uc_gui_click_captcha()
+                    _wait(3, 5)
+                except Exception as ce:
+                    log(f"uc_gui_click_captcha failed: {ce}", "warn")
+
+            # If STILL present, try reconnect + click again
+            if self._has_cloudflare(driver):
+                log("Retrying: reconnect + click captcha...")
+                try:
+                    driver.uc_open_with_reconnect(branch_url, reconnect_time=10)
+                    _wait(2, 3)
+                    driver.uc_gui_click_captcha()
+                    _wait(3, 5)
+                except Exception as ce:
+                    log(f"Retry failed: {ce}", "warn")
 
             if self._has_cloudflare(driver):
-                log("Cloudflare still present after retries — waiting up to 60s...")
-                self._wait_cloudflare(driver, log, max_wait=60)
+                log("Cloudflare still present after all attempts — waiting up to 30s...")
+                self._wait_cloudflare(driver, log, max_wait=30)
 
             # Accept cookies
             self._accept_cookies(driver)
