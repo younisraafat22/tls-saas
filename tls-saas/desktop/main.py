@@ -1025,7 +1025,7 @@ class TLSApp:
                         ft.Container(
                             content=card,
                             expand=True,
-                            alignment=ft.alignment.center,
+                            alignment=ft.Alignment(0, 0),
                         ),
                         ft.Container(
                             content=ft.TextButton(
@@ -1035,7 +1035,7 @@ class TLSApp:
                                 ], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
                                 on_click=lambda e: webbrowser.open(Config.WEBSITE_URL),
                             ),
-                            alignment=ft.alignment.center,
+                            alignment=ft.Alignment(0, 0),
                             padding=ft.Padding(left=0, right=0, top=0, bottom=16),
                         ),
                     ],
@@ -1258,7 +1258,7 @@ class TLSApp:
                                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                             ),
                             expand=True,
-                            alignment=ft.alignment.top_center,
+                            alignment=ft.Alignment(0, -1),
                             padding=ft.Padding(left=0, right=0, top=20, bottom=20),
                         ),
                     ],
