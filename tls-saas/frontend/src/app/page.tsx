@@ -305,6 +305,8 @@ function Hero() {
                 {[
                   { name: t.branchNames["Sheikh Zayed"], type: t.serviceTypes.legalization, status: t.hero.checking, color: "text-primary-400" },
                   { name: t.branchNames["Hurghada"], type: t.serviceTypes.legalization, status: t.hero.noSlots, color: "text-gray-400" },
+                  { name: t.branchNames["New Cairo"], type: t.serviceTypes.visa, status: t.hero.noSlots, color: "text-gray-400" },
+                  { name: t.branchNames["Alexandria"], type: t.serviceTypes.visa, status: t.hero.noSlots, color: "text-gray-400" },
                 ].map((branch, i) => (
                   <motion.div
                     key={branch.name}
@@ -441,6 +443,7 @@ function Pricing() {
       // Fallback plans if API not reachable
       setPlans([
         { id: 1, plan_type: "legalization", display_name: "Legalization Monitor", price_monthly: 500, currency: "EGP", features: ["Sheikh Zayed & Hurghada branches", "Email notifications", "Web push notifications", "Real-time dashboard", "30-minute check interval"], sort_order: 1 },
+        { id: 2, plan_type: "visa", display_name: "Visa Monitor", price_monthly: 500, currency: "EGP", features: ["New Cairo & Alexandria branches", "Individual check using your TLS credentials", "Email notifications", "Web push notifications", "Real-time dashboard"], sort_order: 2 },
       ]);
     });
   }, []);
@@ -477,7 +480,7 @@ function Pricing() {
                 </div>
 
                 <ul className="space-y-3 mb-8">
-                  {t.planFeatures.map((feat) => (
+                  {(plan.features?.length > 0 ? plan.features : t.planFeatures).map((feat: string) => (
                     <li key={feat} className="flex items-start gap-2 text-sm">
                       <Check className="w-4 h-4 text-accent-green mt-0.5 shrink-0" />
                       <span className="text-gray-300">{feat}</span>

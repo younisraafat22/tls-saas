@@ -159,7 +159,7 @@ export const translations = {
       selectBranchDesc_visa: "Choose the visa branch closest to you.",
     },
     planFeatures: ["Sheikh Zayed & Hurghada branches", "Individual appointment monitoring", "Email notifications", "Web push notifications", "Real-time dashboard"],
-    branchNames: { "Sheikh Zayed": "Sheikh Zayed", "Hurghada": "Hurghada" } as Record<string, string>,
+    branchNames: { "Sheikh Zayed": "Sheikh Zayed", "Hurghada": "Hurghada", "New Cairo": "New Cairo", "Alexandria": "Alexandria" } as Record<string, string>,
     planNames: { "legalization": "Legalization Monitor", "visa": "Visa Monitor" } as Record<string, string>,
     planDesc: { "legalization": "Monitor legalization branches for appointment availability", "visa": "Individual per-user check for your personal TLS visa appointment" } as Record<string, string>,
     login: {
@@ -503,7 +503,7 @@ export const translations = {
       selectBranchDesc_visa: "اختر فرع الفيزا الأقرب منك.",
     },
     planFeatures: ["فروع الشيخ زايد والغردقة", "مراقبة مواعيد فردية", "تنبيهات بريد إلكتروني", "إشعارات الويب", "لوحة تحكم لحظية"],
-    branchNames: { "Sheikh Zayed": "الشيخ زايد", "Hurghada": "الغردقة" } as Record<string, string>,
+    branchNames: { "Sheikh Zayed": "الشيخ زايد", "Hurghada": "الغردقة", "New Cairo": "القاهرة الجديدة", "Alexandria": "الإسكندرية" } as Record<string, string>,
     planNames: { "legalization": "مراقبة التوثيق", "visa": "مراقبة الفيزا" } as Record<string, string>,
     planDesc: { "legalization": "مراقبة فروع التوثيق لتوفر المواعيد", "visa": "فحص فردي لكل مستخدم باستخدام بيانات TLS الخاصة به" } as Record<string, string>,
     login: {
@@ -847,7 +847,7 @@ export const translations = {
       selectBranchDesc_visa: "Wähle die Visum-Filiale in deiner Nähe.",
     },
     planFeatures: ["Sheikh Zayed & Hurghada Filialen", "Individuelle Terminüberwachung", "E-Mail-Benachrichtigungen", "Web-Push-Benachrichtigungen", "Echtzeit-Dashboard"],
-    branchNames: { "Sheikh Zayed": "Sheikh Zayed", "Hurghada": "Hurghada" } as Record<string, string>,
+    branchNames: { "Sheikh Zayed": "Sheikh Zayed", "Hurghada": "Hurghada", "New Cairo": "Neu-Kairo", "Alexandria": "Alexandria" } as Record<string, string>,
     planNames: { "legalization": "Beglaubigungs-Monitor", "visa": "Visum-Monitor" } as Record<string, string>,
     planDesc: { "legalization": "Überwache Beglaubigungsfilialen auf Terminverfügbarkeit", "visa": "Individuelle Prüfung für deinen persönlichen TLS-Visumtermin" } as Record<string, string>,
     login: {

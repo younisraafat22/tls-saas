@@ -67,7 +67,7 @@ async def seed_data():
                 "description": "Monitor your personal TLS visa appointment — individual per-user check",
                 "price_monthly": settings.PRICE_VISA_MONTHLY,
                 "features": [
-                    "Your personal TLS visa appointment",
+                    "New Cairo & Alexandria branches",
                     "Individual check using your TLS credentials",
                     "Email notifications",
                     "Web push notifications",
