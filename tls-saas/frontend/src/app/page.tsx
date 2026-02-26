@@ -478,7 +478,7 @@ function Pricing() {
                   EARLY ACCESS
                 </div>
 
-                <h3 className="font-display font-bold text-xl mb-2">{plan.display_name}</h3>
+                <h3 className="font-display font-bold text-xl mb-2">{t.planNames?.[plan.plan_type] ?? plan.display_name}</h3>
                 <div className="flex items-baseline gap-1 mb-6">
                   <span className="text-4xl font-display font-bold">{plan.price_monthly}</span>
                   <span className="text-gray-400 text-sm">{plan.currency}{t.pricing.perMonth}</span>

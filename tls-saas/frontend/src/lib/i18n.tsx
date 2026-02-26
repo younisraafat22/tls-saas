@@ -46,7 +46,7 @@ export const translations = {
       items: [
         { title: "Instant Notifications", desc: "Email and browser push — get alerted the second a slot opens, even on your phone." },
         { title: "Secure & Private", desc: "Your data stays safe. Encrypted credentials, secure auth, and no data sharing. Ever." },
-        { title: "Both Branches", desc: "Monitor legalization branches (Sheikh Zayed & Hurghada) and visa branches (New Cairo & Alexandria) — real-time status updates for each branch independently." },
+        { title: "Both Branches", desc: "Monitor legalization branches (Sheikh Zayed & Hurghada) and visa branches (El-Sheikh Zayed, Hurghada, New Cairo & Alexandria) — real-time status updates for each branch independently." },
         { title: "Lightning Fast", desc: "Our server checks every 30 minutes. When slots appear, you know within seconds." },
         { title: "24/7 Monitoring", desc: "Our server never sleeps. It checks around the clock so you don't have to." },
         { title: "Mobile Friendly", desc: "Check your dashboard from any device. Your phone, tablet, or computer." },
@@ -394,7 +394,7 @@ export const translations = {
       items: [
         { title: "تنبيهات فورية", desc: "بريد إلكتروني ونوتيفيكيشن — تعرف في اللحظة التي يُفتح فيها موعد، حتى على هاتفك." },
         { title: "آمن وخاص", desc: "بياناتك في أمان. بيانات اعتماد مشفرة، مصادقة آمنة، وبدون مشاركة البيانات أبدًا." },
-        { title: "جميع الفروع", desc: "راقب فروع التوثيق (الشيخ زايد والغردقة) وفروع الفيزا (القاهرة الجديدة والإسكندرية) — تحديثات الحالة لحظية لكل فرع على حدة." },
+        { title: "جميع الفروع", desc: "راقب فروع التوثيق (الشيخ زايد والغردقة) وفروع الفيزا (الشيخ زايد، الغردقة، القاهرة الجديدة والإسكندرية) — تحديثات الحالة لحظية لكل فرع على حدة." },
         { title: "سرعة فائقة", desc: "يفحص سيرفرنا كل 30 دقيقة. حين تظهر المواعيد، تعلم خلال ثوانٍ." },
         { title: "مراقبة 24/7", desc: "سيرفرنا لا ينام. يعمل على مدار الساعة حتى لا تضطر للسهر." },
         { title: "متوافق مع الجوال", desc: "تابع لوحة التحكم من أي جهاز — هاتفك أو تابلت أو كمبيوتر." },
@@ -742,7 +742,7 @@ export const translations = {
       items: [
         { title: "Sofortige Benachrichtigungen", desc: "E-Mail und Browser-Push — du wirst sofort benachrichtigt, sobald ein Termin frei wird, auch auf deinem Handy." },
         { title: "Sicher & Privat", desc: "Deine Daten sind sicher. Verschlüsselte Zugangsdaten, sichere Authentifizierung, keine Datenweitergabe. Niemals." },
-        { title: "Alle Filialen", desc: "Überwache Beglaubigungsfilialen (Sheikh Zayed & Hurghada) und Visumfilialen (Neu-Kairo & Alexandria) — Echtzeit-Status unabhängig für jede Filiale." },
+        { title: "Alle Filialen", desc: "Überwache Beglaubigungsfilialen (Sheikh Zayed & Hurghada) und Visumfilialen (Sheikh Zayed, Hurghada, Neu-Kairo & Alexandria) — Echtzeit-Status unabhängig für jede Filiale." },
         { title: "Blitzschnell", desc: "Unser Server prüft alle 30 Minuten. Wenn Termine erscheinen, weißt du es innerhalb von Sekunden." },
         { title: "24/7 Überwachung", desc: "Unser Server schläft nie. Er überprüft rund um die Uhr, damit du das nicht musst." },
         { title: "Mobil-freundlich", desc: "Überprüfe dein Dashboard von jedem Gerät aus — Handy, Tablet oder Computer." },
