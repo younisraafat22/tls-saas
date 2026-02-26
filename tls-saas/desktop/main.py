@@ -10,8 +10,9 @@ from database import init_db, SessionLocal, UserSettings, CheckHistory
 from license_service import (
     get_license_status, activate_license, activate_trial,
     get_hardware_id, PLANS, can_check, increment_check_count,
-    deactivate_license,
+    deactivate_license, get_combined_license_status,
 )
+from api_client import api_client, APIError
 from config import Config
 from datetime import datetime, timedelta, timezone
 import os
