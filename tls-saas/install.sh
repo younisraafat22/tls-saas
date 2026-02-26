@@ -31,10 +31,10 @@ echo ""
 info "Installing system dependencies..."
 sudo apt-get update -y
 sudo apt-get install -y \
-    python3.11 python3.11-venv python3-pip git curl openssh-server \
-    wget gnupg2 libnss3 libxss1 libasound2 libatk-bridge2.0-0 \
+    python3.12 python3.12-venv python3-pip git curl openssh-server \
+    wget gnupg2 libnss3 libxss1 libasound2t64 libatk-bridge2.0-0t64 \
     libdrm2 libxcomposite1 libxdamage1 libxrandr2 libgbm1 \
-    libpango-1.0-0 libcairo2 libatspi2.0-0 \
+    libpango-1.0-0 libcairo2 libatspi2.0-0t64 \
     fonts-liberation fonts-noto-color-emoji
 sudo systemctl enable ssh && sudo systemctl start ssh
 success "System packages installed | SSH enabled"
@@ -52,7 +52,7 @@ success "Repository ready"
 # ── 3. Python virtual environment ─────────────────────────────────────────────
 info "Setting up Python 3.11 virtual environment..."
 cd "$BACKEND_DIR"
-python3.11 -m venv venv
+python3.12 -m venv venv
 source "$VENV/bin/activate"
 pip install --upgrade pip -q
 pip install -r requirements.txt -q
@@ -102,7 +102,7 @@ Type=simple
 User=$USERNAME
 WorkingDirectory=$BACKEND_DIR
 EnvironmentFile=$BACKEND_DIR/.env
-ExecStart=$VENV/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+ExecStart=$VENV/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
 StandardOutput=journal
