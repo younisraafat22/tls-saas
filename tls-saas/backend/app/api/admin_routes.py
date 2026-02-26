@@ -888,6 +888,28 @@ async def checker_logs(limit: int = 100, admin=Depends(get_current_admin)):
     return get_recent_logs(min(limit, 200))
 
 
+@router.get("/system-logs")
+async def system_logs(lines: int = 200, admin=Depends(get_current_admin)):
+    """Return recent backend process logs from journalctl."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["journalctl", "-u", "tls-backend", "--no-pager",
+             "-n", str(min(lines, 500)), "--output=short-iso"],
+            capture_output=True, text=True, timeout=10
+        )
+        raw = result.stdout.strip() or result.stderr.strip()
+        log_lines = raw.split("\n") if raw else []
+        return {"lines": log_lines, "total": len(log_lines), "source": "journalctl"}
+    except FileNotFoundError:
+        # journalctl not available — return process logs from stderr capture
+        return {"lines": ["[journalctl not available on this system]"], "total": 1, "source": "unavailable"}
+    except subprocess.TimeoutExpired:
+        return {"lines": ["[journalctl timed out]"], "total": 1, "source": "timeout"}
+    except Exception as e:
+        return {"lines": [f"[error: {e}]"], "total": 1, "source": "error"}
+
+
 # ── Admin WebSocket ──────────────────────────────────────────────────
 
 @router.websocket("/ws")

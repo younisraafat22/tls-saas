@@ -264,6 +264,7 @@ export const adminApi = {
   stopChecker: () => api.post("/api/admin/checker/stop"),
   getCheckerStatus: () => api.get("/api/admin/checker/status"),
   getCheckerLogs: (limit?: number) => api.get(`/api/admin/checker/logs?limit=${limit || 100}`),
+  getSystemLogs: (lines?: number) => api.get(`/api/admin/system-logs?lines=${lines || 200}`),
   runCheckNow: (branchId: number) => api.post(`/api/admin/checker/run-now/${branchId}`),
   // Headless mode toggle
   getHeadlessMode: () => api.get("/api/admin/checker/headless"),
