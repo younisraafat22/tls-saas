@@ -52,9 +52,23 @@ class TelegramService:
         slot_details: dict | None = None,
     ) -> bool:
         """Send a formatted appointment alert via Telegram."""
+        booking_url = (
+            "https://visas-de.tlscontact.com"
+            if service_type.lower() == "visa"
+            else "https://legalization-de.tlscontact.com"
+        )
         details = ""
-        if slot_details and slot_details.get("message"):
-            details = f"\n📋 {slot_details['message']}"
+        if slot_details:
+            slots = slot_details.get("slots", [])
+            if slots:
+                preview_lines = [
+                    f"  {s['day']}: {', '.join(s['times'][:3])}{'...' if len(s['times']) > 3 else ''}"
+                    for s in slots[:5]
+                ]
+                more = f"\n  ...+{len(slots)-5} more days" if len(slots) > 5 else ""
+                details = "\n📋 <b>Available slots:</b>\n" + "\n".join(preview_lines) + more
+            elif slot_details.get("message"):
+                details = f"\n📋 {slot_details['message']}"
 
         text = (
             f"🎉 <b>Appointment Available!</b>\n\n"
@@ -62,7 +76,7 @@ class TelegramService:
             f"📄 <b>Service:</b> {service_type.title()}\n"
             f"{details}\n\n"
             f"⚡ <b>Act fast — slots fill up within minutes!</b>\n\n"
-            f"🔗 <a href='https://legalization-de.tlscontact.com'>Book Now</a>"
+            f"🔗 <a href='{booking_url}'>Book Now</a>"
         )
         return await self.send_message(chat_id, text)
 

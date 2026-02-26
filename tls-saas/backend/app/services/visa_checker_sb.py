@@ -634,17 +634,19 @@ class VisaCheckerSB:
                         months_to_check.append((f"{month_names[m-1]} {y}", url))
 
             if not months_to_check:
-                body = driver.page_source.lower()
+                body = driver.execute_script("return document.body.innerText;").lower()
                 if any(p in body for p in ["don't have any", "no slot", "not available"]):
                     log("━━━ NO APPOINTMENTS AVAILABLE (page content)")
                     return False, None, "No appointments"
                 slots = self._find_available_dates(driver)
                 if slots:
-                    return True, {"available_dates": slots}, str(slots)
+                    total_times = sum(len(s.get("times", [])) for s in slots)
+                    msg = f"{len(slots)} day(s) with {total_times} slot(s) available"
+                    return True, {"slots": slots, "message": msg, "months_checked": 1}, msg
                 return False, None, "No month selectors found"
 
             log(f"Starting with {len(months_to_check)} month(s)")
-            found_slots: list[str] = []
+            found_slots: list[dict] = []
 
             while months_to_check:
                 month_name, month_url = months_to_check.pop(0)
@@ -674,7 +676,8 @@ class VisaCheckerSB:
                 # Find available dates
                 slots = self._find_available_dates(driver)
                 if slots:
-                    log(f"{month_name}: SLOTS FOUND — {slots}")
+                    total_times = sum(len(s.get("times", [])) for s in slots)
+                    log(f"{month_name}: SLOTS FOUND — {len(slots)} day(s), {total_times} time(s)")
                     found_slots.extend(slots)
                 else:
                     log(f"{month_name}: No available dates")
@@ -684,8 +687,16 @@ class VisaCheckerSB:
                         months_to_check.append((nm, nl))
 
             if found_slots:
-                unique = list(dict.fromkeys(found_slots))
-                return True, {"available_dates": unique, "message": f"Slots: {', '.join(unique[:5])}"}, str(unique)
+                total_times = sum(len(s.get("times", [])) for s in found_slots)
+                preview = ", ".join(
+                    f"{s['day']}: {', '.join(s['times'][:2])}" for s in found_slots[:3]
+                )
+                msg = f"{len(found_slots)} day(s) with {total_times} slot(s) available — {preview}{'...' if len(found_slots) > 3 else ''}"
+                return True, {
+                    "slots": found_slots,
+                    "message": msg,
+                    "months_checked": len(checked_months),
+                }, msg
             return False, None, "No appointments in any checked month"
 
         except Exception as e:
@@ -807,19 +818,17 @@ class VisaCheckerSB:
             pass
         return months
 
-    def _find_available_dates(self, driver) -> list[str]:
+    def _find_available_dates(self, driver) -> list[dict]:
         """Find available appointment slot buttons.
-        Primary: TLS's exact data-testid attribute.
-        Fallback: day groups + time buttons.
+        Returns list of dicts: [{day, times, appointment_type}, ...]
+        Button text format: "Standard appointment\\n08:30" (type on line 1, time on line 2).
         """
-        available: list[str] = []
+        available: list[dict] = []
         try:
-            # ── Primary: exact TLS selector from original app ──────────
             slot_btns = driver.find_elements(
                 By.CSS_SELECTOR, "button[data-testid='btn-available-slot-default']"
             )
             if slot_btns:
-                # Try to pair with day labels for richer detail
                 day_groups = driver.find_elements(
                     By.CSS_SELECTOR,
                     ".AppointmentDay_appointment-day__1Qnz1, .appointment-day",
@@ -837,19 +846,39 @@ class VisaCheckerSB:
                                 By.CSS_SELECTOR,
                                 "button[data-testid='btn-available-slot-default']",
                             )
-                            times = [b.text.strip() for b in btns if b.text.strip()]
+                            times = []
+                            appt_type = "Standard appointment"
+                            for b in btns:
+                                raw = b.text.strip()
+                                if not raw:
+                                    continue
+                                # Button text: "Standard appointment\n08:30" or just "08:30"
+                                parts = raw.split("\n")
+                                if len(parts) >= 2:
+                                    appt_type = parts[0].strip()
+                                    times.append(parts[-1].strip())
+                                else:
+                                    times.append(raw)
                             if times:
-                                available.append(f"{day_label}: {', '.join(times)}")
+                                available.append({"day": day_label, "times": times, "appointment_type": appt_type})
                         except Exception:
                             continue
                 else:
+                    # No day groups — collect individually, group by appointment_type
                     for btn in slot_btns:
-                        txt = btn.text.strip()
-                        if txt and txt not in available:
-                            available.append(txt)
+                        raw = btn.text.strip()
+                        if not raw:
+                            continue
+                        parts = raw.split("\n")
+                        t = parts[-1].strip() if len(parts) >= 2 else raw
+                        if not available:
+                            available.append({"day": "Available", "times": [t], "appointment_type": parts[0].strip() if len(parts) >= 2 else "Standard appointment"})
+                        else:
+                            available[-1]["times"].append(t)
                 return available
 
             # ── Fallback: generic enabled date/time buttons ────────────
+            fallback_times: list[str] = []
             for sel in [
                 "button[aria-label*='Available']:not([disabled])",
                 "button.available:not([disabled])",
@@ -866,11 +895,12 @@ class VisaCheckerSB:
                                 or el.get_attribute("title")
                                 or ""
                             )
-                            if txt and txt not in available:
-                                available.append(txt)
+                            if txt and txt not in fallback_times:
+                                fallback_times.append(txt)
                     except Exception:
                         continue
-                if available:
+                if fallback_times:
+                    available.append({"day": "Available", "times": fallback_times, "appointment_type": "Appointment"})
                     break
         except Exception:
             pass

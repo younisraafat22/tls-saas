@@ -48,9 +48,31 @@ class EmailService:
     ) -> bool:
         """Send a formatted appointment availability alert."""
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        booking_url = (
+            "https://visas-de.tlscontact.com"
+            if service_type.lower() == "visa"
+            else "https://legalization-de.tlscontact.com"
+        )
         details_html = ""
         if slot_details:
-            details_html = f'<p style="color: #00d9ff; font-size: 16px;">{slot_details.get("message", "")}</p>'
+            slots = slot_details.get("slots", [])
+            message = slot_details.get("message", "")
+            if slots:
+                grid_items = "".join(
+                    f'<div style="background:#00ff8820;border:1px solid #00ff8840;border-radius:8px;padding:8px 10px;margin:4px;">'
+                    f'<div style="color:#00ff88;font-weight:600;font-size:13px;">{s["day"]}</div>'
+                    f'<div style="color:#ccc;font-size:11px;">{" · ".join(s["times"][:6])}{" ..." if len(s["times"]) > 6 else ""}</div>'
+                    f'</div>'
+                    for s in slots[:12]
+                )
+                more = f'<p style="color:#888;font-size:12px;margin-top:4px;">+{len(slots)-12} more days</p>' if len(slots) > 12 else ""
+                details_html = (
+                    f'<p style="color:#00d9ff;font-size:15px;margin-bottom:8px;">'
+                    f'{len(slots)} day(s) with available slots:</p>'
+                    f'<div style="display:flex;flex-wrap:wrap;margin-bottom:4px;">{grid_items}</div>{more}'
+                )
+            elif message:
+                details_html = f'<p style="color: #00d9ff; font-size: 16px;">{message}</p>'
 
         html = f"""
         <!DOCTYPE html>
@@ -95,7 +117,7 @@ class EmailService:
                     </div>
                     <p style="margin-top: 20px; color: #ffaa00;">⚡ Act fast — slots fill up within minutes!</p>
                     <div style="text-align: center;">
-                        <a href="https://legalization-de.tlscontact.com" class="cta">Book Now →</a>
+                        <a href="{booking_url}" class="cta">Book Now →</a>
                     </div>
                 </div>
                 <div class="footer">
@@ -122,6 +144,11 @@ class EmailService:
     ) -> bool:
         """Send a 12-hour follow-up reminder to book the appointment."""
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        booking_url = (
+            "https://visas-de.tlscontact.com"
+            if service_type.lower() == "visa"
+            else "https://legalization-de.tlscontact.com"
+        )
 
         html = f"""
         <!DOCTYPE html>
@@ -152,7 +179,7 @@ class EmailService:
                     <p style="color: #ffaa00; font-size: 16px;">⚠️ Have you booked yet? Slots can disappear at any time!</p>
                     <p>If you haven't already, head to the TLS website now and secure your appointment before it's too late.</p>
                     <div style="text-align: center;">
-                        <a href="https://legalization-de.tlscontact.com" class="cta">Book Now →</a>
+                        <a href="{booking_url}" class="cta">Book Now →</a>
                     </div>
                     <p style="color: #8892b0; font-size: 13px; margin-top: 20px;">This is your final reminder for this alert. No further emails will be sent for this detection.</p>
                 </div>
