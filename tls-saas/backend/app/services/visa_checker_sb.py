@@ -214,16 +214,24 @@ class VisaCheckerSB:
     # ── Cloudflare ────────────────────────────────────────────────────
 
     _CF_INDICATORS = [
-        "just a moment", "checking your browser",
-        "cf-browser-verification", "challenge-platform",
-        "turnstile",
+        "just a moment",
+        "checking your browser",
+        "cf-browser-verification",
+        "challenge-platform",
     ]
 
     def _has_cloudflare(self, driver) -> bool:
-        """Quick check if CF challenge page is still showing."""
+        """Return True only if a real CF challenge page is active (not just CF scripts on a normal page)."""
         try:
-            body = driver.page_source.lower()
-            return any(ind in body for ind in self._CF_INDICATORS)
+            # Title is the most reliable signal — CF challenge page is titled "Just a moment..."
+            title = driver.title.lower()
+            if "just a moment" in title:
+                return True
+            # Only check body text for actual challenge phrases, excluding script content
+            body_text = driver.execute_script(
+                "return document.body ? document.body.innerText.toLowerCase() : '';"
+            )
+            return any(ind in body_text for ind in self._CF_INDICATORS)
         except Exception:
             return False
 
