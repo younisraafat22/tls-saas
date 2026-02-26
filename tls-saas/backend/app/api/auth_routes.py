@@ -4,11 +4,14 @@ Auth API Routes — Register, Login, Refresh, Profile
 
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import HTMLResponse
+from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from sqlalchemy.orm import selectinload
-from app.models import User, Subscription
+from app.models import User, Subscription, UserBranchMonitor
+from app.config import settings
 from app.auth import (
     hash_password, verify_password,
     create_access_token, create_refresh_token,
@@ -205,3 +208,46 @@ async def save_push_subscription(
     user.push_subscription = body.subscription
     await db.commit()
     return MessageResponse(message="Push subscription saved")
+
+
+@router.get("/unsubscribe", response_class=HTMLResponse)
+async def unsubscribe_email(token: str, db: AsyncSession = Depends(get_db)):
+    """One-click unsubscribe from appointment alerts for a specific branch."""
+    _error_page = """
+    <!DOCTYPE html><html><head><title>Unsubscribe — Error</title>
+    <style>body{font-family:Arial,sans-serif;background:#0a0e27;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+    .box{background:#141832;padding:40px;border-radius:16px;max-width:480px;text-align:center}
+    h2{color:#ff4444}p{color:#8892b0}</style></head>
+    <body><div class="box"><h2>❌ Invalid Link</h2>
+    <p>This unsubscribe link is invalid or has expired (links are valid for 30 days).</p></div></body></html>
+    """
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        if payload.get("type") != "unsubscribe":
+            raise ValueError("wrong token type")
+        user_id = int(payload["sub"])
+        branch_id = int(payload["branch_id"])
+    except Exception:
+        return HTMLResponse(_error_page, status_code=400)
+
+    result = await db.execute(
+        select(UserBranchMonitor).where(
+            UserBranchMonitor.user_id == user_id,
+            UserBranchMonitor.branch_id == branch_id,
+        )
+    )
+    monitor = result.scalar_one_or_none()
+    if monitor and monitor.is_active:
+        monitor.is_active = False
+        await db.commit()
+
+    return HTMLResponse("""
+    <!DOCTYPE html><html><head><title>Unsubscribed</title>
+    <style>body{font-family:Arial,sans-serif;background:#0a0e27;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+    .box{background:#141832;padding:40px;border-radius:16px;max-width:480px;text-align:center}
+    h2{color:#00ff88}p{color:#8892b0}small{color:#555}</style></head>
+    <body><div class="box"><h2>✅ Unsubscribed</h2>
+    <p>You will no longer receive appointment alert emails for this branch.</p>
+    <p>You can re-enable monitoring any time from your dashboard.</p>
+    <small>TLS Appointment Checker</small></div></body></html>
+    """)

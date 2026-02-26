@@ -25,6 +25,7 @@ from apscheduler.triggers.date import DateTrigger
 from sqlalchemy import select
 
 from app.config import settings
+from app.auth import create_unsubscribe_token
 from app.database import async_session
 from app.models import (
     Branch, CheckResult, ServiceAccount, UserBranchMonitor, UserCredential,
@@ -176,12 +177,16 @@ async def _notify_user_email(db, scheduler, user, check_result, branch, slot_det
             logger.info(f"[{branch.name}] Skipping email for {user.email} — already notified within 13h")
             return
 
+        unsubscribe_token = create_unsubscribe_token(user.id, branch.id)
+        unsubscribe_url = f"{settings.BACKEND_URL}/api/auth/unsubscribe?token={unsubscribe_token}"
+
         success = email_service.send_appointment_alert(
             to_email=user.email,
             branch_name=branch.name,
             service_type=branch.service_type.value,
             slot_details=slot_details,
             user_name=user.full_name,
+            unsubscribe_url=unsubscribe_url,
         )
         db.add(NotificationLog(
             user_id=user.id,
@@ -200,18 +205,19 @@ async def _notify_user_email(db, scheduler, user, check_result, branch, slot_det
                 _send_reminder_email,
                 trigger=DateTrigger(run_date=reminder_time),
                 id=f"reminder_{user.id}_{branch.id}",
-                args=[user.email, user.full_name, branch.name, branch.service_type.value],
+                args=[user.email, user.full_name, branch.name, branch.service_type.value, unsubscribe_url],
                 replace_existing=True,
             )
     except Exception as e:
         logger.error(f"Email notification failed for {user.email}: {e}")
 
 
-async def _send_reminder_email(to_email: str, user_name: str, branch_name: str, service_type: str):
+async def _send_reminder_email(to_email: str, user_name: str, branch_name: str, service_type: str, unsubscribe_url: str = ""):
     try:
         email_service.send_appointment_reminder(
             to_email=to_email, branch_name=branch_name,
             service_type=service_type, user_name=user_name,
+            unsubscribe_url=unsubscribe_url,
         )
     except Exception as e:
         logger.error(f"12h reminder failed for {to_email}: {e}")

@@ -52,6 +52,18 @@ def decode_token(token: str) -> dict:
         )
 
 
+def create_unsubscribe_token(user_id: int, branch_id: int) -> str:
+    """Create a signed 30-day token for one-click email unsubscribe."""
+    expire = datetime.now(timezone.utc) + timedelta(days=30)
+    data = {
+        "sub": str(user_id),
+        "branch_id": branch_id,
+        "exp": expire,
+        "type": "unsubscribe",
+    }
+    return jwt.encode(data, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),

@@ -45,6 +45,7 @@ class EmailService:
         service_type: str,
         slot_details: dict | None = None,
         user_name: str = "",
+        unsubscribe_url: str = "",
     ) -> bool:
         """Send a formatted appointment availability alert."""
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -123,6 +124,7 @@ class EmailService:
                 <div class="footer">
                     <p>TLS Appointment Checker — You received this because you subscribed to monitoring alerts.</p>
                     <p>This is a time-sensitive notification. Do not share — slots may already be taken.</p>
+                    {f'<p style="margin-top:12px;"><a href="{unsubscribe_url}" style="color:#555;font-size:11px;text-decoration:underline;">Stop receiving alerts for this branch</a></p>' if unsubscribe_url else ''}
                 </div>
             </div>
         </body>
@@ -141,6 +143,7 @@ class EmailService:
         branch_name: str,
         service_type: str,
         user_name: str = "",
+        unsubscribe_url: str = "",
     ) -> bool:
         """Send a 12-hour follow-up reminder to book the appointment."""
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -185,6 +188,7 @@ class EmailService:
                 </div>
                 <div class="footer">
                     <p>TLS Appointment Checker — Automated reminder.</p>
+                    {f'<p style="margin-top:12px;"><a href="{unsubscribe_url}" style="color:#555;font-size:11px;text-decoration:underline;">Stop receiving alerts for this branch</a></p>' if unsubscribe_url else ''}
                 </div>
             </div>
         </body>
