@@ -156,6 +156,26 @@ async def _save_screenshot(result: dict, branch_name: str) -> str:
 
 async def _notify_user_email(db, scheduler, user, check_result, branch, slot_details):
     try:
+        # ── Deduplication: only send once per slots-available window ──────────
+        # If a successful email was sent for this user+branch within the last 13h
+        # (initial alert + 12h reminder), skip — the reminder handles the follow-up.
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=13)
+        recent_r = await db.execute(
+            select(NotificationLog)
+            .join(CheckResult, NotificationLog.check_result_id == CheckResult.id)
+            .where(
+                NotificationLog.user_id == user.id,
+                CheckResult.branch_id == branch.id,
+                NotificationLog.sent_at > cutoff,
+                NotificationLog.status == NotificationLogStatus.SENT,
+                NotificationLog.channel == NotificationChannel.EMAIL,
+            )
+            .limit(1)
+        )
+        if recent_r.scalar_one_or_none():
+            logger.info(f"[{branch.name}] Skipping email for {user.email} — already notified within 13h")
+            return
+
         success = email_service.send_appointment_alert(
             to_email=user.email,
             branch_name=branch.name,
