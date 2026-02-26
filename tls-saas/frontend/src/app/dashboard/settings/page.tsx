@@ -156,16 +156,16 @@ export default function SettingsPage() {
       </div>
 
       {/* Tab navigation */}
-      <div className="flex gap-1 bg-dark-800 p-1 rounded-xl overflow-x-auto">
+      <div className="grid gap-1 bg-dark-800 p-1 rounded-xl" style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+            className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-1 py-2 rounded-lg text-xs font-medium transition-all ${
               activeTab === tab.id ? "bg-primary-500 text-white" : "text-gray-400 hover:text-gray-200"
             }`}
           >
-            {tab.icon} {tab.label}
+            {tab.icon} <span className="leading-tight text-center">{tab.label}</span>
           </button>
         ))}
       </div>

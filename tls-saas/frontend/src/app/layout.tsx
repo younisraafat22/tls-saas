@@ -44,7 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
       </head>
-      <body className="bg-dark-800 text-white antialiased">
+      <body className="bg-dark-800 text-white antialiased overflow-x-hidden">
         <LanguageProvider>
           <AuthProvider>{children}</AuthProvider>
         </LanguageProvider>
