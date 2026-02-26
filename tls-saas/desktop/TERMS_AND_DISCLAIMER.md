@@ -1,209 +1,158 @@
-# TLS Appointment Checker - Terms & Disclaimer
+﻿# TLS Appointment Checker  Terms & Disclaimer
 
-**Version:** 1.0.0 (Early Access)  
-**Last Updated:** February 11, 2026
-
----
-
-## 🚧 EARLY ACCESS NOTICE
-
-**This application is currently in early development phase.** By using this software, you acknowledge and agree that:
-
-- This is an **early access release** and may contain bugs or incomplete features
-- The software is provided **"AS IS"** without warranty of any kind
-- Features, functionality, and pricing may change during the development process
-- We are actively testing and improving the application based on user feedback
+**Version:** 2.0.0
+**Last Updated:** February 2026
 
 ---
 
-## ⚠️ IMPORTANT SYSTEM REQUIREMENTS
+##  EARLY ACCESS NOTICE
 
-### Your Computer Must Remain Running
+**This application is in early access.** By using this software you acknowledge:
 
-**TLS Appointment Checker runs on your local computer and requires:**
-
-✅ **Active Internet Connection**
-- A stable, reliable internet connection is **required at all times**
-- Monitoring will stop if internet is disconnected
-- We recommend a connection with minimum 5 Mbps speed
-
-✅ **Computer Must Stay Powered On**
-- Your computer **must remain running** for monitoring to continue
-- Putting your computer to sleep or hibernation will stop monitoring
-- We recommend:
-  - Adjusting power settings to never sleep while plugged in
-  - Using a UPS (Uninterrupted Power Supply) if possible
-  - Keeping the app running on a dedicated machine
-
-✅ **Windows Operating System**
-- Windows 10 (64-bit) or Windows 11 required
-- Minimum 4GB RAM recommended
-- At least 500MB free disk space
+- This is an early release and may contain bugs or incomplete features
+- The software is provided **"AS IS"** without warranty
+- Features and pricing may change during this period
+- We are actively improving the application based on user feedback
 
 ---
 
-## 🔮 PLANNED FUTURE FEATURES
+##  SUBSCRIPTION PLANS
 
-We are working on the following improvements:
+### Visa Plan
+- Monitors TLS visa appointment slots using **your own TLS account credentials**
+- Your TLS email and password are **encrypted and stored locally on your device only**
+- Credentials are **never uploaded to our servers**
+- **Your computer must remain powered on and connected to the internet**
 
-### Cloud-Based Monitoring (Coming Soon)
-- **Run monitoring on our servers** instead of your computer
-- No need to keep your computer on 24/7
-- More reliable monitoring with 99.9% uptime
-- Access from any device (Windows, Mac, Linux, mobile)
-- **This will be a separate paid tier when released**
+### Legalization Plan
+- Monitors legalization appointment slots
+- **No TLS credentials required**
+- **Your computer must remain powered on and connected to the internet**
 
-### Additional Planned Features
-- Mobile app notifications (push notifications to your phone)
-- Multi-account monitoring (manage multiple TLS accounts)
-- Advanced scheduling (set specific times for checks)
-- Historical appointment availability data
-- Browser extension for quick access
-
-**Note:** These features are planned but not yet available. Current version requires your computer to remain running.
+### Premium Plan
+- Monitors both visa and legalization appointments
+- Monitoring runs **on our servers**  your PC does **not** need to stay on
+- **No TLS credentials required**
+- More reliable 24/7 monitoring uptime
 
 ---
 
-## 📋 TERMS OF USE
+##  SYSTEM REQUIREMENTS (Visa & Legalization plans)
+
+ Stable internet connection required at all times
+ Computer must remain powered on  sleep/hibernate stops monitoring
+ Windows 10 (64-bit) or Windows 11
+ Minimum 4 GB RAM, 500 MB free disk space
+
+*(Premium subscribers are exempt from the always-on requirement.)*
+
+---
+
+##  TERMS OF USE
 
 ### 1. License Grant
-By purchasing a license, you are granted a non-exclusive, non-transferable license to use TLS Appointment Checker on a single device (identified by Hardware ID).
+Your subscription grants a non-exclusive, non-transferable right to use the
+software on one device (identified by Hardware ID). Each user requires their
+own subscription and license key.
 
 ### 2. Acceptable Use
 You agree to:
-- Use the software only with **your own TLS account**
-- Provide accurate credentials and information
+- Use the software only with your own TLS account (Visa plan)
+- Provide accurate information during registration and payment
 - Comply with TLS Contact's terms of service
-- Not attempt to reverse engineer, modify, or distribute the software
-- Not use the software for commercial resale or competitive purposes
+- Not reverse-engineer, modify, or redistribute the software
+- Not share your license key or account with others
 
 ### 3. Credentials & Security
-- Your TLS email and password are **encrypted locally** on your device
-- We **never store your password** on our servers
-- Credentials are only used to log into TLS on your behalf
-- You are responsible for the security of your TLS account
+- Visa plan: your TLS email and password are encrypted and stored
+  locally on your device only  never sent to our servers
+- You are solely responsible for the security of your TLS account
 
 ### 4. No Guarantee of Appointments
-- This software **monitors** for appointments but does not guarantee you will get one
-- Availability depends on TLS Contact's booking system
-- We are not affiliated with or endorsed by TLS Contact
-- You must still book appointments manually when notified
+- This software monitors availability  it does not guarantee you will
+  obtain an appointment
+- You must still book manually when notified
+- Availability depends entirely on TLS Contact's booking system
+- We are not affiliated with TLS Contact
 
 ### 5. Service Availability
-- We aim for 99% uptime but cannot guarantee uninterrupted service
-- The TLS website may block or limit automated access
-- Features may change as TLS Contact updates their website
-- We reserve the right to modify or discontinue features
+- We aim for maximum uptime but cannot guarantee uninterrupted service
+- TLS Contact may limit or block automated access at any time
+- We reserve the right to modify or discontinue features with notice
 
-### 6. Refund Policy
-- **No refunds** after license activation
-- If technical issues prevent usage, contact support for assistance
-- Trial period (1 day free) is provided to test before purchasing
+### 6. Subscription & Refund Policy
+- Subscriptions renew monthly; cancel before the next billing date
+- No refunds after a subscription period has been activated
+- Contact support if technical issues prevent use
 
 ### 7. Updates & Support
-- Lifetime license includes **all future updates** to version 1.x
-- Major version upgrades (2.0, 3.0) may require new license
-- Email support provided to all paying customers
-- Response time: 24-48 hours on business days
+- Active subscribers receive app updates during their subscription
+- Email support provided to all paying subscribers
+- Response time: 2448 hours on business days
 
 ---
 
-## 🛡️ DISCLAIMER OF WARRANTIES
+##  DISCLAIMER OF WARRANTIES
 
-### AS-IS Provision
-THIS SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO:
-- MERCHANTABILITY
-- FITNESS FOR A PARTICULAR PURPOSE
-- NON-INFRINGEMENT
-- COMPATIBILITY WITH YOUR SYSTEM
+THIS SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND.
+WE ARE NOT AFFILIATED WITH, ENDORSED BY, OR CONNECTED TO TLS CONTACT GMBH,
+THE GERMAN EMBASSY IN EGYPT, OR ANY GOVERNMENT ENTITY.
 
-### No Liability
-TO THE MAXIMUM EXTENT PERMITTED BY LAW, WE SHALL NOT BE LIABLE FOR:
-- Loss of data or appointments
-- Damage to your computer or device
+TO THE MAXIMUM EXTENT PERMITTED BY LAW WE SHALL NOT BE LIABLE FOR:
+- Loss of data or missed appointments
+- Damage to your device
 - Indirect, incidental, or consequential damages
-- Loss of profits or business opportunities
-- Any damages arising from use or inability to use the software
-
-### Third-Party Services
-- TLS Contact is a third-party service not affiliated with us
-- We are not responsible for changes to their website or systems
-- Google reCAPTCHA solving uses third-party APIs
-- Internet connectivity is provided by your ISP
+- Changes to the TLS Contact website or systems
 
 ---
 
-## 🔐 PRIVACY POLICY
+##  PRIVACY POLICY
 
-### Data Collection
-We collect:
-- **Hardware ID** (for license validation)
-- **Email address** (for notifications and account recovery)
-- **Usage statistics** (checks performed, success rates)
-- **Error logs** (for debugging and improvements)
+### What We Collect
+| Data              | Purpose                            |
+|-------------------|------------------------------------|
+| Hardware ID       | License validation                 |
+| Email address     | Account management & notifications |
+| Payment name/email| Subscription verification          |
+| Plan & sub info   | Service delivery                   |
 
-We **DO NOT** collect:
-- Your TLS password (encrypted locally only)
+### What We Do NOT Collect
+- Your TLS password (Visa plan: stored encrypted locally on your device only)
 - Browsing history
 - Personal documents
-- Payment information (handled by payment processor)
+- Any data beyond the table above
 
-### Data Storage
-- License keys stored on our secure server
-- Usage data retained for 90 days
+### Data Retention
+- Account data retained while subscription is active + 30 days
 - Logs automatically deleted after 30 days
-- No data shared with third parties except payment processor
-
-### Your Rights
-You have the right to:
-- Request deletion of your account data
-- Export your usage history
-- Opt-out of usage analytics
-- Contact us for privacy concerns: tlsappointmentchecker@gmail.com
+- No data sold or shared with third parties
 
 ---
 
-## 📞 SUPPORT & CONTACT
+##  SUPPORT & CONTACT
 
-### Getting Help
 - **Email:** tlsappointmentchecker@gmail.com
-- **In-App Support:** Click "Contact Support" button in the app
-- **Response Time:** 24-48 hours (business days)
+- **Response Time:** 2448 hours (business days)
 
-### Before Contacting Support
-Please provide:
-- Your Hardware ID (shown in app)
-- Description of the issue
-- Screenshots if applicable
-- Steps to reproduce the problem
+When contacting support please include your Hardware ID, a description
+of the issue, and any relevant screenshots.
 
 ---
 
-## ✅ AGREEMENT
+##  AGREEMENT
 
-**By installing, activating, or using TLS Appointment Checker, you acknowledge that:**
+By installing, activating, or using TLS Appointment Checker you confirm:
 
 1. You have read and understood these terms
 2. You agree to all conditions stated above
 3. You understand this is early access software
-4. You accept the system requirements (always-on computer, internet)
-5. You know that future cloud-based monitoring will be a separate feature
-6. You understand there are no refunds after activation
-7. You will use the software responsibly and ethically
+4. You accept the system requirements applicable to your plan
+5. You understand no refunds are issued after activation
+6. You will use the software responsibly and ethically
 
 ---
 
-## 📄 LEGAL
+TLS Contact is a trademark of TLS Contact GmbH. All other trademarks belong
+to their respective owners.
 
-This software is developed and operated independently. We are not affiliated with, endorsed by, or connected to:
-- TLS Contact GmbH
-- German Embassy in Egypt
-- Any government entity
-
-TLS Contact is a trademark of TLS Contact GmbH. All other trademarks are property of their respective owners.
-
----
-
-**Questions?** Contact us at tlsappointmentchecker@gmail.com
-
-**Fair Use:** This tool is designed to help legitimate applicants monitor appointments fairly. Please use responsibly.
+Questions? Contact us at tlsappointmentchecker@gmail.com
