@@ -321,25 +321,33 @@ class TLSCheckerService:
                 original_cwd = os.getcwd()
                 os.chdir(str(BASE_DIR))
                 try:
-                    # Clean stale UC patcher cache before creating driver
+                    # Patcher.data_path was already redirected by _redirect_driver_paths_for_frozen()
+                    # above. Clear the stale UC binary from whatever path Patcher actually uses
+                    # (frozen app: AppData/TLSAppointmentChecker/downloaded_files;
+                    #  dev:         ./downloaded_files)
+                    # Also clear the legacy %APPDATA%\undetected_chromedriver location.
                     try:
-                        import shutil
-                        uc_appdata = os.path.join(
+                        from seleniumbase.undetected.patcher import Patcher as _Patcher
+                        uc_exe = os.path.join(_Patcher.data_path, "undetected_chromedriver.exe")
+                        if os.path.exists(uc_exe):
+                            os.remove(uc_exe)
+                            self._log(f"[DEBUG] Cleared patcher binary: {uc_exe}")
+                        legacy_exe = os.path.join(
                             os.environ.get("APPDATA", ""),
-                            "undetected_chromedriver",
+                            "undetected_chromedriver", "undetected_chromedriver.exe"
                         )
-                        if os.path.isdir(uc_appdata):
-                            shutil.rmtree(uc_appdata, ignore_errors=True)
-                            self._log("[DEBUG] Cleared UC patcher cache")
-                    except Exception:
-                        pass
+                        if os.path.exists(legacy_exe):
+                            os.remove(legacy_exe)
+                            self._log("[DEBUG] Cleared legacy UC binary")
+                    except Exception as _e:
+                        self._log(f"[DEBUG] Cache clear skipped: {_e}")
 
-                    # Detect Chrome version — the UC patcher MUST receive a
-                    # numeric version_main or it will fetch the latest (wrong)
-                    # chromedriver from the internet.
+                    # Detect Chrome version and pass it as a numeric version_main.
+                    # Passing "keep" or None causes the patcher to fetch the latest
+                    # chromedriver version from the internet (ignoring installed Chrome).
                     chrome_ver = _get_chrome_major_version()
                     driver_ver = str(chrome_ver) if chrome_ver else "keep"
-                    self._log(f"[DEBUG] Chrome v{chrome_ver}, driver_version={driver_ver}")
+                    self._log(f"[DEBUG] Chrome v{chrome_ver}, using driver_version={driver_ver}")
 
                     driver_kwargs = {
                         "uc": True,
