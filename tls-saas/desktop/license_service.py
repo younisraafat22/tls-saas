@@ -417,7 +417,7 @@ def get_license_status() -> dict | None:
             if server_url:
                 payload = json.dumps({"license_key": data["key"]}).encode()
                 req = urllib.request.Request(
-                    f"{server_url.rstrip('/')}/api/license/verify",
+                    f"{server_url.rstrip('/')}/api/monitoring/license/verify",
                     data=payload,
                     headers={"Content-Type": "application/json"},
                     method="POST",
@@ -506,7 +506,7 @@ def deactivate_license():
                     "hardware_id": hw_id,
                 }).encode()
                 req = urllib.request.Request(
-                    f"{server_url.rstrip('/')}/api/license/deactivate",
+                    f"{server_url.rstrip('/')}/api/monitoring/license/deactivate",
                     data=payload,
                     headers={"Content-Type": "application/json"},
                     method="POST",

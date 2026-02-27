@@ -1,12 +1,16 @@
 """
-Monitoring Routes — Check results, live status for user dashboard, desktop app reporting
+Monitoring Routes — Check results, live status for user dashboard, desktop app reporting,
+and license verification / deactivation for the desktop app.
 """
 
+import logging
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
+from app.config import settings
 from app.models import (
     User, Branch, CheckResult, UserBranchMonitor,
     NotificationLog, SubscriptionStatus, Subscription, Payment, PaymentStatus,
@@ -15,7 +19,142 @@ from app.models import (
 from app.auth import get_current_user
 from app.schemas import CheckResultPublic, NotificationLogPublic, DesktopCheckReport
 
+logger = logging.getLogger("monitoring")
+
 router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
+
+
+# ── License verification / deactivation (public, no auth) ────────────
+
+class LicenseVerifyRequest(BaseModel):
+    license_key: str = ""
+    hardware_id: str = ""
+
+class LicenseDeactivateRequest(BaseModel):
+    license_key: str
+    hardware_id: str
+
+
+def _validate_license_signature(plan: str, hw_short: str, rand: str, sig: str) -> bool:
+    """Verify HMAC-SHA256 signature of a license key."""
+    import hashlib, hmac as _hmac
+    secret = settings.LICENSE_HMAC_SECRET
+    payload = f"{plan}:{hw_short}:{rand}"
+    expected = _hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16].upper()
+    return sig.upper() == expected
+
+
+def _parse_license_key(key: str) -> dict | None:
+    """Parse a license key into its components. Returns dict or None."""
+    key = key.strip().upper()
+    parts = key.split("-")
+    if len(parts) == 4:
+        plan_raw, hw, rand, sig = parts
+    elif len(parts) == 5:
+        plan_raw = f"{parts[0]}_{parts[1]}"
+        hw, rand, sig = parts[2], parts[3], parts[4]
+    else:
+        return None
+    plan = plan_raw.lower()
+    if not _validate_license_signature(plan, hw, rand, sig):
+        return None
+    return {"plan": plan, "hw_prefix": hw, "random": rand, "signature": sig, "raw_key": key}
+
+
+@router.post("/license/verify")
+async def license_verify(
+    body: LicenseVerifyRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Verify a license key and/or check if a hardware_id has a license.
+    Used by the desktop app for:
+      1. Revocation check (sends license_key) — returns is_active status
+      2. Payment polling (sends hardware_id) — returns found + license_key
+    """
+    # ── Case 1: Verify a specific license key ───────────────────────
+    if body.license_key:
+        parsed = _parse_license_key(body.license_key)
+        if not parsed:
+            return {"found": False, "error": "Invalid license key format"}
+
+        # Look up in the payments table
+        result = await db.execute(
+            select(Payment).where(Payment.license_key == parsed["raw_key"]).limit(1)
+        )
+        payment = result.scalar_one_or_none()
+
+        if not payment:
+            # Key is valid (HMAC checks out) but not in DB — might be
+            # generated outside this system. Allow it.
+            return {"found": True, "is_active": True, "plan": parsed["plan"]}
+
+        is_active = payment.status == PaymentStatus.APPROVED
+        return {
+            "found": True,
+            "is_active": is_active,
+            "plan": payment.plan_key or parsed["plan"],
+            "license_key": payment.license_key,
+        }
+
+    # ── Case 2: Look up by hardware_id (payment polling) ───────────
+    if body.hardware_id:
+        hw_id = body.hardware_id.strip()
+        result = await db.execute(
+            select(Payment)
+            .where(
+                Payment.hardware_id == hw_id,
+                Payment.license_key.isnot(None),
+                Payment.license_key != "",
+                Payment.status == PaymentStatus.APPROVED,
+            )
+            .order_by(Payment.processed_at.desc())
+            .limit(1)
+        )
+        payment = result.scalar_one_or_none()
+        if payment:
+            return {
+                "found": True,
+                "is_active": True,
+                "license_key": payment.license_key,
+                "plan": payment.plan_key or "",
+            }
+        return {"found": False}
+
+    return {"found": False, "error": "Provide license_key or hardware_id"}
+
+
+@router.post("/license/deactivate")
+async def license_deactivate(
+    body: LicenseDeactivateRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Deactivate a license key (called when user uninstalls / changes device).
+    Marks the payment record's license_key as revoked.
+    """
+    parsed = _parse_license_key(body.license_key)
+    if not parsed:
+        return {"success": False, "error": "Invalid license key"}
+
+    result = await db.execute(
+        select(Payment).where(Payment.license_key == parsed["raw_key"]).limit(1)
+    )
+    payment = result.scalar_one_or_none()
+
+    if not payment:
+        return {"success": True, "message": "License not found in database (already inactive)"}
+
+    # Verify hardware_id matches
+    if payment.hardware_id and payment.hardware_id != body.hardware_id:
+        return {"success": False, "error": "Hardware ID mismatch"}
+
+    payment.status = PaymentStatus.REJECTED
+    payment.admin_notes = (payment.admin_notes or "") + f"\nDeactivated by user at {datetime.now(timezone.utc).isoformat()}"
+    await db.commit()
+
+    logger.info(f"License deactivated: {parsed['raw_key']} by hardware {body.hardware_id}")
+    return {"success": True, "message": "License deactivated"}
 
 
 @router.get("/status")

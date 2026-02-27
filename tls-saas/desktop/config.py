@@ -62,9 +62,10 @@ class Config:
     SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
     SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
     
-    # Trial & License (offline fallback)
+    # Trial & License
     TRIAL_DAYS = int(os.getenv("TRIAL_DAYS", "3"))
-    LICENSE_SERVER_URL = os.getenv("LICENSE_SERVER_URL", os.getenv("BACKEND_URL", "http://192.168.1.108:8000"))
+    # License server URL — defaults to BACKEND_URL (unified server)
+    LICENSE_SERVER_URL = os.getenv("LICENSE_SERVER_URL", BACKEND_URL)
     
     # AI Vision CAPTCHA Solver (Google Gemini)
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")

@@ -15,8 +15,13 @@ router = APIRouter(prefix="/api/app", tags=["desktop-app"])
 DESKTOP_PLAN_PRICES: dict[str, float] = {
     "trial": 0.0,
     "legalization_monthly": settings.PRICE_LEGALIZATION_MONTHLY,
+    "legalization_quarterly": settings.PRICE_LEGALIZATION_MONTHLY * 3 * 0.85,
     "visa_monthly": settings.PRICE_VISA_MONTHLY,
+    "visa_quarterly": settings.PRICE_VISA_MONTHLY * 3 * 0.85,
     "premium": settings.PRICE_PREMIUM_MONTHLY,
+    "premium_monthly": settings.PRICE_PREMIUM_MONTHLY,
+    "premium_quarterly": settings.PRICE_PREMIUM_MONTHLY * 3 * 0.8,
+    "premium_annual": settings.PRICE_PREMIUM_MONTHLY * 12 * 0.65,
 }
 
 

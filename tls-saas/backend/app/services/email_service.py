@@ -201,6 +201,36 @@ class EmailService:
             html_body=html,
         )
 
+    def send_license_key(self, to_email: str, customer_name: str, license_key: str, plan_name: str) -> bool:
+        """Send a license key to the customer after admin approval."""
+        html = f"""
+        <div style="font-family: 'Segoe UI', Arial; max-width: 600px; margin: 0 auto; background: #0a0e27; color: #fff; padding: 0;">
+            <div style="background: linear-gradient(135deg, #00d9ff 0%, #0066ff 100%); padding: 30px; border-radius: 16px 16px 0 0; text-align: center;">
+                <h1 style="margin: 0; font-size: 24px; color: #fff;">🔑 Your License Key</h1>
+            </div>
+            <div style="background: #141832; padding: 30px; border-radius: 0 0 16px 16px;">
+                <p>Hi {customer_name or 'there'},</p>
+                <p>Your payment has been approved! Here is your license key for <strong>{plan_name}</strong>:</p>
+                <div style="background: #0a0e27; border: 2px solid #00d9ff; border-radius: 12px; padding: 20px; text-align: center; margin: 20px 0;">
+                    <code style="font-size: 18px; color: #00ff88; letter-spacing: 2px; word-break: break-all;">{license_key}</code>
+                </div>
+                <h3 style="color: #00d9ff;">How to activate:</h3>
+                <ol style="color: #ccc; line-height: 1.8;">
+                    <li>Open the TLS Appointment Checker app</li>
+                    <li>Go to the Pricing / Activation page</li>
+                    <li>Paste the license key above</li>
+                    <li>Click <strong>Activate</strong></li>
+                </ol>
+                <p style="color: #ffaa00; margin-top: 20px;">⚠️ This key is bound to your device. Do not share it.</p>
+            </div>
+            <div style="text-align: center; padding: 20px; color: #8892b0; font-size: 12px;">
+                <p>TLS Appointment Checker — Thank you for your purchase!</p>
+                <p>Need help? Reply to this email or contact support.</p>
+            </div>
+        </div>
+        """
+        return self.send(to_email, f"🔑 Your TLS Checker License Key — {plan_name}", html)
+
     def send_subscription_activated(self, to_email: str, user_name: str, plan_name: str, expires_at: str) -> bool:
         """Send subscription activation confirmation."""
         html = f"""

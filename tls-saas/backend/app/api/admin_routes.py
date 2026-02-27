@@ -538,13 +538,29 @@ async def generate_license(
     ))
     await db.commit()
 
+    # Auto-email the license key to the customer
+    email_sent = False
+    if payment.submitter_email:
+        try:
+            from app.services.email_service import email_service
+            email_sent = email_service.send_license_key(
+                to_email=payment.submitter_email,
+                customer_name=payment.submitter_name or "",
+                license_key=license_key,
+                plan_name=payment.plan_key or "Premium",
+            )
+        except Exception as exc:
+            import logging
+            logging.getLogger("admin").warning(f"Failed to email license to {payment.submitter_email}: {exc}")
+
     return {
         "success": True,
         "license_key": license_key,
         "plan_key": payment.plan_key,
         "hardware_id": payment.hardware_id,
         "submitter_email": payment.submitter_email or "",
-        "message": f"License key generated and payment approved. Send the key to: {payment.submitter_email or 'buyer'}",
+        "email_sent": email_sent,
+        "message": f"License key generated and payment approved.{' Email sent to ' + payment.submitter_email + '.' if email_sent else ' Could not email — please send manually.'}",
     }
 
 
@@ -600,6 +616,21 @@ async def create_license_directly(
     await db.commit()
     await db.refresh(payment)
 
+    # Auto-email the license key to the customer
+    email_sent = False
+    if customer_email:
+        try:
+            from app.services.email_service import email_service
+            email_sent = email_service.send_license_key(
+                to_email=customer_email,
+                customer_name=customer_name or "",
+                license_key=license_key,
+                plan_name=plan_key,
+            )
+        except Exception as exc:
+            import logging
+            logging.getLogger("admin").warning(f"Failed to email license to {customer_email}: {exc}")
+
     return {
         "success": True,
         "license_key": license_key,
@@ -607,7 +638,8 @@ async def create_license_directly(
         "plan_key": plan_key,
         "hardware_id": hardware_id,
         "customer_email": customer_email,
-        "message": "License created successfully.",
+        "email_sent": email_sent,
+        "message": f"License created successfully.{' Email sent to ' + customer_email + '.' if email_sent else ''}",
     }
 
 
