@@ -1344,8 +1344,18 @@ class TLSApp:
         )
 
         # ---- Inline configuration card ----
-        # Determine service type from DB
-        current_service_type = getattr(settings, 'service_type', 'legalization') if settings else 'legalization'
+        # Determine service type from license plan (locked for paid licenses)
+        license_plan = license_status.get('plan', 'trial') if license_status else 'trial'
+        service_locked = False  # Whether the user can change service type
+        if license_plan.startswith('visa'):
+            current_service_type = 'visa'
+            service_locked = True
+        elif license_plan.startswith('legalization'):
+            current_service_type = 'legalization'
+            service_locked = True
+        else:
+            # Trial — use whatever is saved in DB, allow changing
+            current_service_type = getattr(settings, 'service_type', 'legalization') if settings else 'legalization'
         if not current_service_type:
             current_service_type = 'legalization'
 
@@ -1398,15 +1408,17 @@ class TLSApp:
             self.page.update()
 
         config_service_dropdown = ft.Dropdown(
-            label="Service Type",
+            label="Service Type" + (" (locked by license)" if service_locked else ""),
             value=current_service_type,
             width=620, border_radius=12,
+            disabled=service_locked,
             options=[
                 ft.dropdown.Option("legalization", "Document Legalization"),
                 ft.dropdown.Option("visa", "Visa Process"),
             ],
         )
-        config_service_dropdown.on_change = _on_service_type_change
+        if not service_locked:
+            config_service_dropdown.on_change = _on_service_type_change
 
         # Interval options restricted by plan
         min_interval = license_status['min_interval'] if license_status and license_status.get('valid') else 120

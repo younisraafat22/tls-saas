@@ -321,18 +321,30 @@ class TLSCheckerService:
                 original_cwd = os.getcwd()
                 os.chdir(str(BASE_DIR))
                 try:
-                    # IMPORTANT: Do NOT use headless=True with uc=True!
-                    # SeleniumBase UC Mode is detectable in headless mode.
-                    # Instead, we start headed and position the window out of sight.
-                    
-                    # Use bundled chromedriver ("keep") to avoid slow downloads at runtime.
-                    # The correct chromedriver is bundled via collect_all('seleniumbase') in .spec
-                    
-                    # For frozen apps, ensure Chrome binary is findable
+                    # Clean stale UC patcher cache before creating driver
+                    try:
+                        import shutil
+                        uc_appdata = os.path.join(
+                            os.environ.get("APPDATA", ""),
+                            "undetected_chromedriver",
+                        )
+                        if os.path.isdir(uc_appdata):
+                            shutil.rmtree(uc_appdata, ignore_errors=True)
+                            self._log("[DEBUG] Cleared UC patcher cache")
+                    except Exception:
+                        pass
+
+                    # Detect Chrome version — the UC patcher MUST receive a
+                    # numeric version_main or it will fetch the latest (wrong)
+                    # chromedriver from the internet.
+                    chrome_ver = _get_chrome_major_version()
+                    driver_ver = str(chrome_ver) if chrome_ver else "keep"
+                    self._log(f"[DEBUG] Chrome v{chrome_ver}, driver_version={driver_ver}")
+
                     driver_kwargs = {
                         "uc": True,
                         "headless": False,
-                        "driver_version": "keep",
+                        "driver_version": driver_ver,
                     }
                     
                     # If running as frozen app, explicitly set binary location
