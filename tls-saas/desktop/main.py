@@ -513,8 +513,17 @@ class TLSApp:
     def check_license_and_route(self):
         """Decide which page to show based on offline license."""
         status = get_license_status()
-        if status and status['valid']:
-            self.show_monitoring_page()
+        if status and status.get('valid'):
+            # Block premium plans from using the desktop app
+            if status.get('plan', '').startswith('premium'):
+                from license_service import deactivate_license
+                deactivate_license()
+                self.show_activation_page(
+                    message="Premium plans are managed via the web dashboard.\n"
+                            "Please visit the website to use your Premium subscription."
+                )
+            else:
+                self.show_monitoring_page()
         else:
             self.show_activation_page()
 
@@ -642,7 +651,6 @@ class TLSApp:
         # Gate: only premium plans get server monitoring
         if not self._is_premium_plan():
             self.update_status_log("ℹ️ Local monitoring active — keep your PC on while checking.")
-            self.update_status_log("ℹ️ Upgrade to Premium for server-side monitoring (no PC needed).")
             return False
 
         server_url = Config.LICENSE_SERVER_URL
@@ -779,7 +787,7 @@ class TLSApp:
             status_msg.color = ft.Colors.RED_400
             self.page.update()
 
-    def show_activation_page(self):
+    def show_activation_page(self, message: str = None):
         self.page.controls.clear()
         self.page.scroll = None
 
@@ -796,7 +804,9 @@ class TLSApp:
             capitalization=ft.TextCapitalization.CHARACTERS,
         )
 
-        status_msg = ft.Text("", size=14, text_align=ft.TextAlign.CENTER)
+        _initial_msg = message or ""
+        _initial_color = ft.Colors.ORANGE_400 if message else ft.Colors.WHITE
+        status_msg = ft.Text(_initial_msg, size=14, text_align=ft.TextAlign.CENTER, color=_initial_color)
 
         def do_activate(e):
             if not key_field.value or not key_field.value.strip():
@@ -805,8 +815,33 @@ class TLSApp:
                 self.page.update()
                 return
 
-            success, message = activate_license(key_field.value.strip())
+            entered_key = key_field.value.strip().upper()
+
+            # Reject premium licenses — premium users should use the website dashboard
+            if entered_key.startswith("PREMIUM"):
+                status_msg.value = (
+                    "Premium plans are managed via the web dashboard.\n"
+                    "Please visit the website to use your Premium subscription."
+                )
+                status_msg.color = ft.Colors.ORANGE_400
+                self.page.update()
+                return
+
+            success, message = activate_license(entered_key)
             if success:
+                # Double-check plan in case key was parsed as premium
+                lic = get_license_status()
+                if lic and lic.get('plan', '').startswith('premium'):
+                    # Deactivate it and tell the user
+                    from license_service import deactivate_license
+                    deactivate_license()
+                    status_msg.value = (
+                        "Premium plans are managed via the web dashboard.\n"
+                        "Please visit the website to use your Premium subscription."
+                    )
+                    status_msg.color = ft.Colors.ORANGE_400
+                    self.page.update()
+                    return
                 # Save the selected service type to DB
                 self._save_service_type_to_db()
                 self.show_monitoring_page()

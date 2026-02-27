@@ -321,6 +321,28 @@ class TLSCheckerService:
                 original_cwd = os.getcwd()
                 os.chdir(str(BASE_DIR))
                 try:
+                    # Clean up stale cached undetected_chromedriver that may
+                    # be a different version than the installed Chrome browser.
+                    try:
+                        import shutil
+                        uc_appdata = os.path.join(
+                            os.environ.get("APPDATA", ""),
+                            "undetected_chromedriver",
+                        )
+                        if os.path.isdir(uc_appdata):
+                            for item in os.listdir(uc_appdata):
+                                item_path = os.path.join(uc_appdata, item)
+                                try:
+                                    if os.path.isdir(item_path):
+                                        shutil.rmtree(item_path, ignore_errors=True)
+                                    else:
+                                        os.remove(item_path)
+                                except Exception:
+                                    pass
+                            self._log("[DEBUG] Cleared stale UC chromedriver cache")
+                    except Exception:
+                        pass
+
                     # IMPORTANT: Do NOT use headless=True with uc=True!
                     # SeleniumBase UC Mode is detectable in headless mode.
                     # Instead, we start headed and position the window out of sight.
