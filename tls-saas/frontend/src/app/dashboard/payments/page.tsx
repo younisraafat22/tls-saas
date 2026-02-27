@@ -72,7 +72,7 @@ export default function PaymentsPage() {
 
   const handleSubmitPayment = async () => {
     if (!selectedPlan) {
-      setToast({ type: "error", msg: t.payment.errSelectPlan ?? t.payment.errSelectPlanBranch });
+      setToast({ type: "error", msg: t.payment.errSelectPlanBranch });
       setTimeout(() => setToast(null), 4000);
       return;
     }
