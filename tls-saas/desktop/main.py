@@ -40,7 +40,7 @@ if sys.platform == "win32":
 # App version
 VERSION = "2.0.0"
 
-# Update check URL â€” fetched from backend /api/app/version
+# Update check URL — fetched from backend /api/app/version
 UPDATE_CHECK_URL = f"{Config.BACKEND_URL}/api/app/version"
 
 # Fixed single-user ID for all DB operations (desktop app, no auth)
@@ -1464,11 +1464,31 @@ class TLSApp:
     # ==================================================================
     #  CLOUD MONITORING HELPERS
     # ==================================================================
+    def _is_premium_plan(self) -> bool:
+        """Check if the current license is a premium plan (server monitoring eligible)."""
+        try:
+            status = get_license_status()
+            if status and status.get('valid'):
+                plan = status.get('plan', '')
+                return plan.startswith('premium')
+        except Exception:
+            pass
+        return False
+
     def _try_cloud_start(self, settings) -> bool:
         """Try to start cloud monitoring on the server.
-        Returns True if cloud monitoring was started, False to fall back to local."""
+        Returns True if cloud monitoring was started, False to fall back to local.
+        Only premium plans are eligible for server-side monitoring."""
+
+        # Gate: only premium plans get server monitoring
+        if not self._is_premium_plan():
+            self.update_status_log("ℹ️ Local monitoring active — keep your PC on while checking.")
+            self.update_status_log("ℹ️ Upgrade to Premium for server-side monitoring (no PC needed).")
+            return False
+
         server_url = Config.LICENSE_SERVER_URL
         if not server_url:
+            self.update_status_log("ℹ️ Server URL not configured — starting local monitoring. Keep your PC on.")
             return False
         try:
             license_status = get_license_status()
@@ -1498,26 +1518,26 @@ class TLSApp:
                 result = json.loads(resp.read())
                 if result.get("success"):
                     self._cloud_monitoring = True
-                    self.update_status_log("â˜ï¸ Cloud monitoring started!")
-                    self.update_status_log("â„¹ï¸ Your PC does NOT need to stay on â€” the server handles checking.")
-                    self.update_status_log("â„¹ï¸ You'll receive an email notification when appointments are found.")
+                    self.update_status_log("☁️ Cloud monitoring started!")
+                    self.update_status_log("ℹ️ Your PC does NOT need to stay on — the server handles checking.")
+                    self.update_status_log("ℹ️ You'll receive an email notification when appointments are found.")
                     # Start polling for status
                     self._start_cloud_polling()
                     return True
                 else:
-                    self.update_status_log(f"âš ï¸ Server: {result.get('error', 'Unknown error')}")
+                    self.update_status_log(f"⚠️ Server: {result.get('error', 'Unknown error')}")
+                    self.update_status_log("ℹ️ Starting local monitoring instead. Keep your PC on.")
                     return False
         except urllib.error.HTTPError as e:
             body = e.read().decode(errors='ignore')[:200]
-            self.update_status_log(f"âš ï¸ Server HTTP {e.code} on {e.url}")
-            self.update_status_log(f"   {body}")
-            self.update_status_log(f"â„¹ï¸ Falling back to local monitoring")
+            self.update_status_log(f"⚠️ Server HTTP {e.code} — could not start cloud monitoring")
+            self.update_status_log("ℹ️ Starting local monitoring instead. Keep your PC on.")
             return False
         except urllib.error.URLError as e:
-            self.update_status_log(f"â„¹ï¸ Server unavailable â€” using local monitoring")
+            self.update_status_log("ℹ️ Server unavailable — starting local monitoring. Keep your PC on.")
             return False
         except Exception as e:
-            self.update_status_log(f"â„¹ï¸ Server unavailable ({type(e).__name__}) â€” using local monitoring")
+            self.update_status_log(f"ℹ️ Server unavailable ({type(e).__name__}) — starting local monitoring. Keep your PC on.")
             return False
 
     def _try_cloud_stop(self) -> bool:
@@ -1539,7 +1559,7 @@ class TLSApp:
                 if result.get("success"):
                     self._cloud_monitoring = False
                     self._stop_cloud_polling()
-                    self.update_status_log("â˜ï¸ Cloud monitoring stopped")
+                    self.update_status_log("☁️ Cloud monitoring stopped")
                     return True
         except Exception:
             pass
@@ -1565,7 +1585,7 @@ class TLSApp:
                     with urllib.request.urlopen(req, timeout=10) as resp:
                         result = json.loads(resp.read())
                         if not result.get("active"):
-                            self.update_status_log("â˜ï¸ Cloud monitoring has stopped")
+                            self.update_status_log("☁️ Cloud monitoring has stopped")
                             self._cloud_poll_active = False
                             break
                         # Show recent logs
@@ -1573,7 +1593,7 @@ class TLSApp:
                         for log_entry in logs[-5:]:
                             msg = log_entry.get("message", "")
                             if msg and not any(msg == h[0] for h in self._log_history[-10:]):
-                                self.update_status_log(f"â˜ï¸ {msg}")
+                                self.update_status_log(f"☁️ {msg}")
                 except Exception:
                     pass
                 # Poll every 30 seconds
@@ -1602,7 +1622,7 @@ class TLSApp:
             return
 
         # ---- 1. Create checkout URL ----
-        status_msg.value = "Creating checkout sessionâ€¦"
+        status_msg.value = "Creating checkout session…"
         status_msg.color = ft.Colors.GREY_300
         self.page.update()
 
@@ -1647,7 +1667,7 @@ class TLSApp:
 
         spinner = ft.ProgressRing(width=40, height=40, color="#00D9FF")
         msg = ft.Text(
-            "Waiting for payment confirmationâ€¦",
+            "Waiting for payment confirmation…",
             size=16, color=ft.Colors.GREY_300, text_align=ft.TextAlign.CENTER,
         )
         sub = ft.Text(
@@ -2776,7 +2796,7 @@ class TLSApp:
             # Check license first
             allowed, reason = can_check()
             if not allowed:
-                self.update_status_log(f"âš ï¸ {reason}")
+                self.update_status_log(f"⚠️ {reason}")
                 return
 
             db = SessionLocal()
@@ -2810,8 +2830,8 @@ class TLSApp:
 
             if unsaved_changes:
                 db.close()
-                self.update_status_log(f"âš ï¸ You have unsaved changes in: {', '.join(unsaved_changes)}")
-                self.update_status_log("âš ï¸ Please click 'Save Configuration' first before starting monitoring")
+                self.update_status_log(f"⚠️ You have unsaved changes in: {', '.join(unsaved_changes)}")
+                self.update_status_log("⚠️ Please click 'Save Configuration' first before starting monitoring")
                 return
 
             first_check_done = settings.first_check_done
@@ -3435,7 +3455,7 @@ class TLSApp:
                                 ],
                             ),
 
-                            # Right column â€” activity log (expands to fill)
+                            # Right column — activity log (expands to fill)
                             ft.Container(
                                 content=self.create_glass_container(
                                     ft.Column(
@@ -3502,8 +3522,8 @@ class TLSApp:
                 db.close()
 
                 if not first_check_done:
-                    self.update_status_log("â„¹ï¸ You'll watch the first check to verify everything works correctly")
-                    self.update_status_log("â„¹ï¸ After that, checks will run in the background")
+                    self.update_status_log("ℹ️ You'll watch the first check to verify everything works correctly")
+                    self.update_status_log("ℹ️ After that, checks will run in the background")
 
                 self.checker.start_monitoring()
                 update_toggle_button()
@@ -3726,7 +3746,7 @@ class TLSApp:
 
         error_dialog = ft.AlertDialog(
             modal=True,
-            title=ft.Text("âŒ Invalid TLS Credentials", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_400),
+            title=ft.Text("❌ Invalid TLS Credentials", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_400),
             content=ft.Column([
                 ft.Text("Your TLS email or password is incorrect.", size=16),
                 ft.Container(height=10),
@@ -3857,9 +3877,9 @@ class TLSApp:
                     size=14, color=ft.Colors.GREY_400,
                 ),
                 ft.Container(height=5),
-                ft.Text("â€¢ License was manually revoked", size=13, color=ft.Colors.GREY_300),
-                ft.Text("â€¢ License expired", size=13, color=ft.Colors.GREY_300),
-                ft.Text("â€¢ License is being used on another device", size=13, color=ft.Colors.GREY_300),
+                ft.Text("• License was manually revoked", size=13, color=ft.Colors.GREY_300),
+                ft.Text("• License expired", size=13, color=ft.Colors.GREY_300),
+                ft.Text("• License is being used on another device", size=13, color=ft.Colors.GREY_300),
                 ft.Container(height=10),
                 ft.Text(
                     "Monitoring has been stopped.",
@@ -3895,7 +3915,7 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    # Determine base directory â€” handles both source and frozen (.exe) mode
+    # Determine base directory — handles both source and frozen (.exe) mode
     if getattr(sys, 'frozen', False):
         # PyInstaller unpacks data to sys._MEIPASS
         app_dir = sys._MEIPASS
