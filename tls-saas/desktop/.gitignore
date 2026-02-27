@@ -1,0 +1,9 @@
+﻿
+dist/
+build/
+installer_output/
+__pycache__/
+*.pyc
+downloaded_files/
+downloads/
+Logos/

@@ -2,9 +2,9 @@
 ; Inno Setup Configuration
 
 #define MyAppName "TLS Appointment Checker"
-#define MyAppVersion "2.0.0"
+#define MyAppVersion "1.0.0"
 #define MyAppPublisher "TLS Appointment Checker"
-#define MyAppURL "https://tls-saas.vercel.app"
+#define MyAppURL "https://tls-appointment-checker.netlify.app"
 #define MyAppExeName "TLSAppointmentChecker.exe"
 #define MyAppSupportEmail "tlsappointmentchecker@gmail.com"
 
@@ -35,8 +35,8 @@ SolidCompression=yes
 WizardStyle=modern
 MinVersion=10.0.17763
 PrivilegesRequired=admin
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed=x64
+ArchitecturesInstallIn64BitMode=x64
 
 ; License and Info Files
 LicenseFile=LICENSE.txt
@@ -47,14 +47,12 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 6.1; Check: not IsAdminInstallMode
 
 [Files]
 ; Main Application (from PyInstaller onedir output)
 Source: "dist\TLSAppointmentChecker\TLSAppointmentChecker.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\TLSAppointmentChecker\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-; Environment configuration (backend URL, website URL, etc.)
-Source: ".env"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Documentation
 Source: "LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion isreadme
@@ -67,6 +65,9 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 
 ; Desktop Icon
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\_internal\Logos\icon_BLACK.ico"; WorkingDir: "{app}"; Tasks: desktopicon
+
+; Quick Launch (for older Windows versions)
+Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: quicklaunchicon
 
 [Run]
 ; Launch app after installation
@@ -89,6 +90,8 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
 begin
   if CurStep = ssPostInstall then
   begin

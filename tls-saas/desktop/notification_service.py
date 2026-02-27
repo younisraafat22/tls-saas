@@ -1,6 +1,6 @@
 """
 Notification Service
-Handles email, Windows toast notifications, and backend result reporting
+Handles email and Windows toast notifications
 """
 import smtplib
 from email.mime.text import MIMEText
@@ -9,7 +9,6 @@ from email.mime.base import MIMEBase
 from email import encoders
 from datetime import datetime
 import os
-import threading
 from config import Config
 
 # Cross-platform notifications
@@ -56,7 +55,8 @@ The {Config.APP_NAME} Team
     def send_verification_email(self, user_email: str, full_name: str, token: str) -> bool:
         """Send email verification email"""
         subject = f"Verify your {Config.APP_NAME} account"
-        verification_link = f"{Config.BACKEND_URL}/verify?token={token}"
+        # In a real app, this would be a link to your website
+        verification_link = f"http://localhost:8080/verify?token={token}"
         
         body = f"""
 Hello {full_name},
@@ -81,7 +81,8 @@ The {Config.APP_NAME} Team
     def send_password_reset_email(self, user_email: str, full_name: str, token: str) -> bool:
         """Send password reset email"""
         subject = f"Reset your {Config.APP_NAME} password"
-        reset_link = f"{Config.BACKEND_URL}/reset?token={token}"
+        # In a real app, this would be a link to your website
+        reset_link = f"http://localhost:8080/reset?token={token}"
         
         body = f"""
 Hello {full_name},
@@ -242,43 +243,6 @@ Thank you for using {Config.APP_NAME}!
         
         self.send_email(user_email, title, email_body)
         self.send_windows_notification(title, message)
-
-    def report_to_backend(self, branch_name: str, service_type: str,
-                          slots_available: bool, slot_details: str = "",
-                          screenshot_path: str = None, duration_seconds: float = 0,
-                          error: str = ""):
-        """
-        Report check result to the backend API (fire-and-forget).
-        Only reports if the user is logged in via API.
-        """
-        def _report():
-            try:
-                from api_client import api_client
-                if not api_client.is_logged_in:
-                    return
-
-                screenshot_b64 = ""
-                if screenshot_path and os.path.exists(screenshot_path):
-                    try:
-                        import base64
-                        with open(screenshot_path, "rb") as f:
-                            screenshot_b64 = base64.b64encode(f.read()).decode("utf-8")
-                    except Exception:
-                        pass
-
-                api_client.report_check_result(
-                    branch_name=branch_name,
-                    service_type=service_type,
-                    slots_available=slots_available,
-                    slot_details=slot_details,
-                    screenshot_b64=screenshot_b64,
-                    duration_seconds=duration_seconds,
-                    error=error,
-                )
-            except Exception as e:
-                print(f"[NOTIFY] Backend report failed: {e}")
-
-        threading.Thread(target=_report, daemon=True).start()
 
 
 # Global notification service instance

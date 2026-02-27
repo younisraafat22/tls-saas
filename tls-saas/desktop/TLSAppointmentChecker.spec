@@ -27,8 +27,6 @@ hiddenimports = [
     # Notifications & utilities
     'plyer', 'plyer.platforms.win', 'plyer.platforms.win.notification',
     'dotenv', 'requests', 'urllib3', 'pyperclip',
-    # API client for backend communication
-    'api_client',
 ]
 
 # Only collect data for packages that actually need bundled assets

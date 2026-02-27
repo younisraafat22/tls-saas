@@ -268,9 +268,8 @@ class TLSCheckerService:
         writable_drivers = os.path.join(str(BASE_DIR), "drivers")
         os.makedirs(writable_drivers, exist_ok=True)
 
-        # Redirect SeleniumBase paths to writable directory so it can
-        # download the correct driver version there (don't copy bundled
-        # driver which may be a different version than installed Chrome).
+        # Redirect SeleniumBase paths to writable directory and pre-seed with
+        # bundled chromedriver so no internet download is needed on first run.
         try:
             from seleniumbase.core import browser_launcher
             browser_launcher.DRIVER_DIR = writable_drivers
@@ -280,6 +279,26 @@ class TLSCheckerService:
             browser_launcher.LOCAL_UC_DRIVER = os.path.join(
                 writable_drivers, "uc_driver.exe"
             )
+
+            # Always overwrite writable driver dir with the bundled chromedriver.exe.
+            # This ensures any stale/wrong-version driver from a previous install
+            # is replaced with the correct version bundled for this Chrome release.
+            import shutil as _shutil
+            bundled_cd = None
+            for _search in [
+                os.path.join(getattr(sys, "_MEIPASS", ""), "seleniumbase", "drivers", "chromedriver.exe"),
+                os.path.join(os.path.dirname(sys.executable), "_internal", "seleniumbase", "drivers", "chromedriver.exe"),
+            ]:
+                if os.path.exists(_search):
+                    bundled_cd = _search
+                    break
+            if bundled_cd:
+                for _dest in [browser_launcher.LOCAL_CHROMEDRIVER, browser_launcher.LOCAL_UC_DRIVER]:
+                    try:
+                        _shutil.copy2(bundled_cd, _dest)
+                        print(f"[Checker] Seeded driver from bundle: {_dest}")
+                    except Exception as _ce:
+                        print(f"[Checker] Could not seed driver to {_dest}: {_ce}")
         except Exception as e:
             print(f"[Checker] Warning: driver path redirect failed: {e}")
 
@@ -302,6 +321,7 @@ class TLSCheckerService:
         """Setup Selenium driver"""
         try:
             # Browser initialization (silent)
+            self._log(f"[DEBUG] _setup_driver called. SELENIUMBASE_AVAILABLE={SELENIUMBASE_AVAILABLE}, frozen={getattr(sys, 'frozen', False)}")
             
             # For installed app: redirect driver paths to writable AppData
             self._redirect_driver_paths_for_frozen()
@@ -420,7 +440,17 @@ class TLSCheckerService:
                 except Exception:
                     pass
 
-                self.driver = uc.Chrome(options=options)
+                chrome_ver_uc = _get_chrome_major_version()
+                self._log(f"[DEBUG] UC fallback: Chrome v{chrome_ver_uc}")
+                # Clear any stale uc binary that may be wrong version
+                try:
+                    from seleniumbase.undetected.patcher import Patcher as _P2
+                    _stale = os.path.join(_P2.data_path, "undetected_chromedriver.exe")
+                    if os.path.exists(_stale):
+                        os.remove(_stale)
+                except Exception:
+                    pass
+                self.driver = uc.Chrome(options=options, version_main=chrome_ver_uc)
                 self.driver.maximize_window()
                 return True
             
