@@ -159,6 +159,12 @@ export const authApi = {
   changePassword: (data: { current_password: string; new_password: string }) =>
     api.post("/api/auth/change-password", data),
 
+  forgotPassword: (email: string) =>
+    api.post("/api/auth/forgot-password", { email }, true),
+
+  resetPassword: (token: string, new_password: string) =>
+    api.post("/api/auth/reset-password", { token, new_password }, true),
+
   savePushSubscription: (subscription: any) =>
     api.post("/api/auth/push-subscription", { subscription }),
 };

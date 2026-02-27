@@ -113,7 +113,13 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="text-center text-gray-500 text-sm mt-6">
+          <div className="flex items-center justify-between mt-4">
+            <Link href="/forgot-password" className="text-primary-400 hover:text-primary-300 text-sm">
+              Forgot password?
+            </Link>
+          </div>
+
+          <p className="text-center text-gray-500 text-sm mt-4">
             {tl.noAccount}{" "}
             <Link href="/register" className="text-primary-400 hover:text-primary-300 font-medium">
               {tl.signUp}

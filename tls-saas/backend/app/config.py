@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "CHANGE-THIS-TO-A-RANDOM-64-CHAR-STRING-IN-PRODUCTION"
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
     BACKEND_URL: str = "http://localhost:8000"
+    FRONTEND_URL: str = "https://tls-saas.vercel.app"
 
     # ── Database ─────────────────────────────────────────
     # For development: SQLite; for production: PostgreSQL

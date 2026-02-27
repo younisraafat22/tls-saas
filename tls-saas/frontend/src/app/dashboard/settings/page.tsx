@@ -3,11 +3,11 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
-import { authApi } from "@/lib/api";
+import { authApi, credentialApi } from "@/lib/api";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import {
-  User, Lock, Bell, Save,
-  Eye, EyeOff, Loader2,
+  User, Lock, Bell, Save, Key,
+  Eye, EyeOff, Loader2, Trash2, Plus,
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
 
@@ -83,6 +83,7 @@ export default function SettingsPage() {
 
   const tabs = [
     { id: "profile", label: ts.tabProfile, icon: <User className="w-4 h-4" /> },
+    { id: "credentials", label: "TLS Credentials", icon: <Key className="w-4 h-4" /> },
     { id: "password", label: ts.tabPassword, icon: <Lock className="w-4 h-4" /> },
     { id: "notifications", label: ts.tabNotifications, icon: <Bell className="w-4 h-4" /> },
   ];
@@ -225,6 +226,11 @@ export default function SettingsPage() {
         </motion.div>
       )}
 
+      {/* TLS Credentials tab */}
+      {activeTab === "credentials" && (
+        <TLSCredentialsTab showToast={showToast} />
+      )}
+
       {/* Notifications tab */}
       {activeTab === "notifications" && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-card p-6 space-y-5">
@@ -336,5 +342,172 @@ function PushNotifToggle() {
         }`} />
       </button>
     </div>
+  );
+}
+
+
+function TLSCredentialsTab({ showToast }: { showToast: (type: "success" | "error", msg: string) => void }) {
+  const [credentials, setCredentials] = useState<Array<{ service_type: string; tls_email: string }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Form state
+  const [serviceType, setServiceType] = useState("legalization");
+  const [tlsEmail, setTlsEmail] = useState("");
+  const [tlsPassword, setTlsPassword] = useState("");
+
+  const fetchCredentials = async () => {
+    try {
+      const data = await credentialApi.getAll();
+      setCredentials(data || []);
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCredentials();
+  }, []);
+
+  const handleSave = async () => {
+    if (!tlsEmail || !tlsPassword) {
+      showToast("error", "Please fill in both email and password");
+      return;
+    }
+    setSaving(true);
+    try {
+      await credentialApi.save({ service_type: serviceType, tls_email: tlsEmail, tls_password: tlsPassword });
+      showToast("success", "TLS credentials saved successfully");
+      setTlsEmail("");
+      setTlsPassword("");
+      setShowForm(false);
+      await fetchCredentials();
+    } catch (err: any) {
+      showToast("error", err?.detail || "Failed to save credentials");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemove = async (serviceType: string) => {
+    try {
+      await credentialApi.remove(serviceType);
+      showToast("success", "Credentials removed");
+      await fetchCredentials();
+    } catch (err: any) {
+      showToast("error", err?.detail || "Failed to remove credentials");
+    }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-card p-6 space-y-5">
+      <h2 className="font-semibold flex items-center gap-2">
+        <Key className="w-5 h-5 text-primary-400" /> TLS Website Credentials
+      </h2>
+      <p className="text-sm text-gray-400">
+        Enter your TLS website login credentials for server-side monitoring. Your credentials are encrypted and stored securely.
+        This is required for premium plans where the server checks appointments on your behalf.
+      </p>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="w-6 h-6 animate-spin text-primary-400" />
+        </div>
+      ) : (
+        <>
+          {/* Existing credentials */}
+          {credentials.length > 0 && (
+            <div className="space-y-3">
+              {credentials.map((cred) => (
+                <div key={cred.service_type} className="flex items-center justify-between p-4 bg-dark-800 rounded-xl">
+                  <div>
+                    <div className="text-sm font-medium capitalize">{cred.service_type}</div>
+                    <div className="text-xs text-gray-500">{cred.tls_email}</div>
+                  </div>
+                  <button
+                    onClick={() => handleRemove(cred.service_type)}
+                    className="text-red-400 hover:text-red-300 p-2 rounded-lg hover:bg-red-500/10 transition"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add/Edit form */}
+          {showForm ? (
+            <div className="space-y-4 p-4 bg-dark-800 rounded-xl">
+              <div>
+                <label className="text-sm text-gray-400 mb-1.5 block">Service Type</label>
+                <select
+                  value={serviceType}
+                  onChange={(e) => setServiceType(e.target.value)}
+                  className="input-field"
+                >
+                  <option value="legalization">Legalization</option>
+                  <option value="visa">Visa</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm text-gray-400 mb-1.5 block">TLS Email</label>
+                <input
+                  type="email"
+                  value={tlsEmail}
+                  onChange={(e) => setTlsEmail(e.target.value)}
+                  placeholder="your-tls-email@example.com"
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-gray-400 mb-1.5 block">TLS Password</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={tlsPassword}
+                    onChange={(e) => setTlsPassword(e.target.value)}
+                    placeholder="Your TLS website password"
+                    className="input-field pr-10"
+                  />
+                  <button
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="btn-gradient flex items-center gap-2 disabled:opacity-50"
+                >
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Credentials
+                </button>
+                <button
+                  onClick={() => setShowForm(false)}
+                  className="px-4 py-2 text-sm text-gray-400 hover:text-white rounded-lg border border-white/10 hover:border-white/20 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowForm(true)}
+              className="btn-gradient flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" /> Add TLS Credentials
+            </button>
+          )}
+        </>
+      )}
+    </motion.div>
   );
 }

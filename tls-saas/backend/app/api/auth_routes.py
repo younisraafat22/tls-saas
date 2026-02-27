@@ -16,12 +16,14 @@ from app.auth import (
     hash_password, verify_password,
     create_access_token, create_refresh_token,
     decode_token, get_current_user,
+    create_password_reset_token,
 )
 from app.schemas import (
     RegisterRequest, LoginRequest, TokenResponse,
     RefreshRequest, UserPublic, UserUpdate,
     ChangePasswordRequest, MessageResponse,
     PushSubscriptionRequest,
+    ForgotPasswordRequest, ResetPasswordRequest,
 )
 from app.websocket import ws_manager
 from app.services.email_service import EmailService
@@ -251,3 +253,57 @@ async def unsubscribe_email(token: str, db: AsyncSession = Depends(get_db)):
     <p>You can re-enable monitoring any time from your dashboard.</p>
     <small>TLS Appointment Checker</small></div></body></html>
     """)
+
+
+# ── Forgot / Reset Password ─────────────────────────────────────────
+
+@router.post("/forgot-password", response_model=MessageResponse)
+async def forgot_password(body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+    """Request a password reset email. Always returns 200 to prevent email enumeration."""
+    email = body.email.strip().lower()
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    if user and user.is_active:
+        token = create_password_reset_token(user.id)
+        reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
+        svc = EmailService()
+
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            _email_executor,
+            svc.send_password_reset,
+            user.email,
+            user.full_name or user.email,
+            reset_url,
+        )
+
+    # Always return success to prevent enumeration
+    return {"message": "If an account with that email exists, a password reset link has been sent."}
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+async def reset_password(body: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    """Reset password using a valid reset token."""
+    try:
+        payload = jwt.decode(body.token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link")
+
+    if payload.get("type") != "password_reset":
+        raise HTTPException(status_code=400, detail="Invalid reset link")
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Invalid reset link")
+
+    result = await db.execute(select(User).where(User.id == int(user_id)))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid reset link")
+
+    user.password_hash = hash_password(body.new_password)
+    await db.commit()
+
+    return {"message": "Your password has been reset successfully. You can now log in."}

@@ -1,6 +1,6 @@
 ﻿"""
 TLS Appointment Checker - Main Application
-License-based desktop app with service selection, pricing & activation flow
+License-based desktop app - enter license key to activate monitoring
 """
 import flet as ft
 import sys
@@ -10,9 +10,8 @@ from database import init_db, SessionLocal, UserSettings, CheckHistory
 from license_service import (
     get_license_status, activate_license, activate_trial,
     get_hardware_id, PLANS, can_check, increment_check_count,
-    deactivate_license, get_combined_license_status,
+    deactivate_license,
 )
-from api_client import api_client, APIError
 from config import Config
 from datetime import datetime, timedelta, timezone
 import os
@@ -512,25 +511,12 @@ class TLSApp:
             pass
 
     def check_license_and_route(self):
-        """Decide which page to show based on API auth or offline license."""
-        # Try API subscription first
-        if api_client.is_logged_in:
-            try:
-                status = get_combined_license_status()
-                if status and status.get('valid'):
-                    self.show_monitoring_page()
-                    return
-            except Exception:
-                pass
-
-        # Fall back to offline license
+        """Decide which page to show based on offline license."""
         status = get_license_status()
         if status and status['valid']:
             self.show_monitoring_page()
-        elif status and status.get('expired'):
-            self.show_pricing_page(expired=True)
         else:
-            self.show_welcome_page()
+            self.show_activation_page()
 
     def _save_service_type_to_db(self):
         """Persist the selected service_type from flow_data into the DB."""
@@ -633,833 +619,6 @@ class TLSApp:
             bgcolor=bg_color,
             border=ft.Border.all(1, ft.Colors.with_opacity(0.1, icon_color)),
         )
-
-    # ==================================================================
-    #  WELCOME PAGE
-    # ==================================================================
-    def show_welcome_page(self):
-        self.page.controls.clear()
-        self.page.scroll = None
-
-        def continue_to_service(e):
-            self.show_service_selection_page()
-
-        def open_website(e):
-            """Open website in browser"""
-            webbrowser.open("https://tls-saas.vercel.app")
-
-        def show_terms_inline(e):
-            """Show Terms & Disclaimer in a dialog"""
-            try:
-                if getattr(sys, 'frozen', False):
-                    app_dir = sys._MEIPASS
-                else:
-                    app_dir = os.path.dirname(os.path.abspath(__file__))
-                terms_path = os.path.join(app_dir, "TERMS_AND_DISCLAIMER.md")
-                with open(terms_path, "r", encoding="utf-8") as f:
-                    terms_content = f.read()
-            except Exception:
-                terms_content = "Unable to load terms and disclaimer."
-
-            def close_terms(e):
-                terms_dlg.open = False
-                self.page.update()
-
-            terms_dlg = ft.AlertDialog(
-                modal=True,
-                title=ft.Row([
-                    ft.Icon(ft.Icons.DESCRIPTION, color="#00D9FF", size=28),
-                    ft.Text("Terms & Disclaimer", size=20, weight=ft.FontWeight.BOLD)
-                ]),
-                content=ft.Container(
-                    content=ft.Column(
-                        [ft.Text(terms_content, size=12, color=ft.Colors.GREY_300, selectable=True)],
-                        scroll=ft.ScrollMode.AUTO,
-                        spacing=0,
-                    ),
-                    width=700,
-                    height=500,
-                ),
-                actions=[ft.TextButton("Close", on_click=close_terms)],
-                actions_alignment=ft.MainAxisAlignment.END,
-                bgcolor="#1A1F3A",
-            )
-            self.page.overlay.append(terms_dlg)
-            terms_dlg.open = True
-            self.page.update()
-
-        # Welcome content
-        welcome_items = [
-            ("Real-Time Monitoring", "Automatic checking for available TLS appointments at regular intervals", ft.Icons.SCHEDULE),
-            ("Instant Email Alerts", "Get notified immediately when appointment slots open up", ft.Icons.EMAIL),
-            ("Secure & Private", "Your TLS credentials are encrypted locally on your device", ft.Icons.LOCK),
-            ("All Egypt Branches", "Monitor Legalization and Visa appointments across all branches", ft.Icons.LOCATION_ON),
-        ]
-
-        feature_chips = []
-        for title, desc, icon in welcome_items:
-            feature_chips.append(
-                ft.Container(
-                    content=ft.Row(
-                        [
-                            ft.Icon(icon, size=28, color="#00D9FF"),
-                            ft.Column(
-                                [
-                                    ft.Text(title, size=14, weight=ft.FontWeight.BOLD),
-                                    ft.Text(desc, size=11, color=ft.Colors.GREY_400),
-                                ],
-                                spacing=2,
-                                expand=True,
-                            ),
-                        ],
-                        spacing=12,
-                    ),
-                    padding=ft.Padding(left=16, right=16, top=12, bottom=12),
-                    border_radius=12,
-                    bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
-                    border=ft.Border.all(1, ft.Colors.with_opacity(0.15, "#00D9FF")),
-                    width=500,
-                )
-            )
-
-        # Important terms notice
-        terms_notice = ft.Container(
-            content=ft.Column(
-                [
-                    ft.Row(
-                        [
-                            ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, size=22, color=ft.Colors.AMBER_400),
-                            ft.Text(
-                                "Important - Please Read",
-                                size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER_300,
-                            ),
-                        ],
-                        spacing=8,
-                    ),
-                    ft.Text(
-                        "Before using this application, please read our Terms & Disclaimer carefully. "
-                        "By continuing, you acknowledge that you understand and accept the terms of use.",
-                        size=12, color=ft.Colors.AMBER_200, no_wrap=False,
-                    ),
-                    ft.Container(height=5),
-                    ft.TextButton(
-                        "📋 Read Terms & Disclaimer",
-                        on_click=show_terms_inline,
-                        style=ft.ButtonStyle(color="#00D9FF"),
-                    ),
-                ],
-                spacing=6,
-            ),
-            padding=ft.Padding(left=20, right=20, top=14, bottom=14),
-            border_radius=12,
-            bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.AMBER),
-            border=ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.AMBER)),
-            width=500,
-        )
-
-        self.page.add(
-            ft.Container(
-                content=ft.Column(
-                    [
-                        ft.Container(height=30),
-                        ft.Image(
-                            src=self._logo_src or "Logos/LOGO_H_W.png",
-                            width=400, height=100,
-                        ),
-                        ft.Container(height=10),
-                        ft.Text(
-                            "Welcome to TLS Appointment Checker",
-                            size=26, weight=ft.FontWeight.BOLD,
-                            text_align=ft.TextAlign.CENTER,
-                        ),
-                        ft.Container(height=4),
-                        ft.Text(
-                            "Automated monitoring for German visa and legalization\nappointments in Egypt",
-                            size=13, color=ft.Colors.GREY_400,
-                            text_align=ft.TextAlign.CENTER,
-                        ),
-                        ft.Container(height=20),
-                        ft.Column(feature_chips, spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                        ft.Container(height=20),
-                        terms_notice,
-                        ft.Container(height=25),
-                        # Primary: Login with Account
-                        ft.FilledButton(
-                            content=ft.Row([
-                                ft.Icon(ft.Icons.LOGIN, size=18, color="#0A0E27"),
-                                ft.Text("Login with Account", size=14, weight=ft.FontWeight.BOLD, color="#0A0E27"),
-                            ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
-                            width=260,
-                            height=48,
-                            on_click=lambda e: self.show_login_page(),
-                            style=ft.ButtonStyle(
-                                bgcolor="#00D9FF",
-                                shape=ft.RoundedRectangleBorder(radius=14),
-                            ),
-                        ),
-                        ft.Container(height=10),
-                        # Secondary: Offline license key
-                        ft.OutlinedButton(
-                            content=ft.Row([
-                                ft.Icon(ft.Icons.VPN_KEY, size=18),
-                                ft.Text("Use License Key", size=14),
-                            ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
-                            width=260,
-                            height=42,
-                            on_click=continue_to_service,
-                            style=ft.ButtonStyle(
-                                color="#00D9FF",
-                                side=ft.BorderSide(1, ft.Colors.with_opacity(0.5, "#00D9FF")),
-                                shape=ft.RoundedRectangleBorder(radius=14),
-                            ),
-                        ),
-                        ft.Container(height=10),
-                        ft.TextButton(
-                            content=ft.Row([
-                                ft.Icon(ft.Icons.LANGUAGE, size=16, color=ft.Colors.GREY_400),
-                                ft.Text("Visit Our Website", size=12, color=ft.Colors.GREY_400),
-                            ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
-                            on_click=open_website,
-                        ),
-                        ft.Container(height=8),
-                        ft.Text(
-                            f"Version {VERSION}",
-                            size=11, color=ft.Colors.GREY_600,
-                            text_align=ft.TextAlign.CENTER,
-                        ),
-                    ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    scroll=ft.ScrollMode.AUTO,
-                    expand=True,
-                ),
-                expand=True,
-            )
-        )
-        self.page.update()
-
-    # ==================================================================
-    #  LOGIN PAGE (API-based authentication)
-    # ==================================================================
-    def show_login_page(self):
-        self.page.controls.clear()
-        self.page.scroll = None
-
-        # ── fields ──────────────────────────────────────────────────
-        _field_style = dict(
-            border_radius=12,
-            bgcolor=ft.Colors.with_opacity(0.07, ft.Colors.WHITE),
-            border_color=ft.Colors.with_opacity(0.25, ft.Colors.WHITE),
-            focused_border_color="#00D9FF",
-            text_size=14,
-            content_padding=ft.Padding(left=16, right=16, top=14, bottom=14),
-        )
-
-        email_field = ft.TextField(
-            hint_text="you@example.com",
-            keyboard_type=ft.KeyboardType.EMAIL,
-            **_field_style,
-        )
-        password_field = ft.TextField(
-            hint_text="••••••••",
-            password=True,
-            can_reveal_password=True,
-            **_field_style,
-        )
-
-        # ── state ────────────────────────────────────────────────────
-        error_container = ft.Container(
-            content=ft.Text("", size=13, text_align=ft.TextAlign.CENTER, color="#F87171"),
-            bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.RED),
-            border=ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.RED)),
-            border_radius=12,
-            padding=ft.Padding(left=16, right=16, top=10, bottom=10),
-            visible=False,
-        )
-
-        def _set_error(msg: str):
-            error_container.content.value = msg
-            error_container.visible = bool(msg)
-            self.page.update()
-
-        login_btn = ft.FilledButton(
-            content="Log In",
-            width=420,
-            height=50,
-            style=ft.ButtonStyle(
-                bgcolor="#00D9FF",
-                color="#0A0E27",
-                text_style=ft.TextStyle(size=15, weight=ft.FontWeight.BOLD),
-                shape=ft.RoundedRectangleBorder(radius=14),
-            ),
-        )
-        loading_row = ft.Row(
-            [ft.ProgressRing(width=18, height=18, stroke_width=2, color="#00D9FF"),
-             ft.Text("Logging in…", size=13, color=ft.Colors.GREY_400)],
-            alignment=ft.MainAxisAlignment.CENTER,
-            visible=False,
-        )
-
-        def do_login(e):
-            email = (email_field.value or "").strip()
-            password = password_field.value or ""
-            if not email or not password:
-                _set_error("Please enter both email and password")
-                return
-            _set_error("")
-            login_btn.disabled = True
-            loading_row.visible = True
-            self.page.update()
-
-            def _thread():
-                try:
-                    user = api_client.login(email, password)
-                    active_plan = user.get("active_plan")
-                    _user_name = user.get('full_name') or email
-                    def _ok():
-                        login_btn.disabled = False
-                        loading_row.visible = False
-                        if active_plan:
-                            self.show_monitoring_page()
-                        else:
-                            self.show_pricing_page(
-                                greeting=f"Welcome, {_user_name}! Choose a plan to start monitoring."
-                            )
-                    self._ui_queue.put(_ok)
-                except (APIError, Exception) as ex:
-                    msg = getattr(ex, 'detail', None) or str(ex)
-                    def _err():
-                        login_btn.disabled = False
-                        loading_row.visible = False
-                        _set_error(msg)
-                    self._ui_queue.put(_err)
-
-            threading.Thread(target=_thread, daemon=True).start()
-
-        login_btn.on_click = do_login
-        password_field.on_submit = do_login
-
-        # ── glass card layout ─────────────────────────────────────────
-        card = ft.Container(
-            content=ft.Column(
-                [
-                    # Logo
-                    ft.Image(src=self._logo_src or "Logos/LOGO_H_W.png", width=220, height=55),
-                    ft.Container(height=4),
-                    ft.Text("Welcome Back", size=22, weight=ft.FontWeight.BOLD,
-                            text_align=ft.TextAlign.CENTER),
-                    ft.Text("Log in to your monitoring dashboard", size=13,
-                            color=ft.Colors.GREY_400, text_align=ft.TextAlign.CENTER),
-                    ft.Container(height=20),
-                    error_container,
-                    ft.Container(height=4),
-                    ft.Text("Email", size=13, color=ft.Colors.GREY_400),
-                    ft.Container(height=4),
-                    email_field,
-                    ft.Container(height=14),
-                    ft.Text("Password", size=13, color=ft.Colors.GREY_400),
-                    ft.Container(height=4),
-                    password_field,
-                    ft.Container(height=20),
-                    login_btn,
-                    loading_row,
-                    ft.Container(height=16),
-                    ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.WHITE)),
-                    ft.Container(height=12),
-                    ft.Row([
-                        ft.Text("Don't have an account?", size=12, color=ft.Colors.GREY_400),
-                        ft.TextButton("Sign Up",
-                                      on_click=lambda e: self.show_register_page(),
-                                      style=ft.ButtonStyle(color="#00D9FF")),
-                    ], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
-                    ft.Container(height=4),
-                    ft.TextButton(
-                        content=ft.Row([
-                            ft.Icon(ft.Icons.VPN_KEY, size=14, color=ft.Colors.GREY_500),
-                            ft.Text("Use License Key Instead", size=12, color=ft.Colors.GREY_500),
-                        ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
-                        on_click=lambda e: self.show_service_selection_page(),
-                    ),
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=0,
-                tight=True,
-            ),
-            width=460,
-            padding=ft.Padding(left=40, right=40, top=36, bottom=32),
-            border_radius=20,
-            gradient=ft.LinearGradient(
-                begin=ft.alignment.Alignment(-1, -1),
-                end=ft.alignment.Alignment(1, 1),
-                colors=["#1A1F3A", "#0F1525"],
-            ),
-            border=ft.Border.all(1, ft.Colors.with_opacity(0.2, "#00D9FF")),
-            shadow=ft.BoxShadow(
-                spread_radius=0, blur_radius=30,
-                color=ft.Colors.with_opacity(0.15, "#00D9FF"),
-                offset=ft.Offset(0, 8),
-            ),
-        )
-
-        top_bar = ft.Container(
-            content=ft.Row([
-                ft.TextButton("← Back", on_click=lambda e: self.show_welcome_page(),
-                              style=ft.ButtonStyle(color="#00D9FF")),
-                ft.Container(expand=True),
-                self.create_website_icon_button(),
-            ]),
-            padding=ft.Padding(left=20, right=20, top=12, bottom=0),
-        )
-
-        self.page.add(
-            ft.Container(
-                content=ft.Column(
-                    [
-                        top_bar,
-                        ft.Container(
-                            content=card,
-                            expand=True,
-                            alignment=ft.Alignment(0, 0),
-                        ),
-                        ft.Container(
-                            content=ft.TextButton(
-                                content=ft.Row([
-                                    ft.Icon(ft.Icons.LANGUAGE, size=14, color=ft.Colors.GREY_600),
-                                    ft.Text("Subscribe at our website", size=11, color=ft.Colors.GREY_600),
-                                ], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
-                                on_click=lambda e: webbrowser.open(Config.WEBSITE_URL),
-                            ),
-                            alignment=ft.Alignment(0, 0),
-                            padding=ft.Padding(left=0, right=0, top=0, bottom=16),
-                        ),
-                    ],
-                    spacing=0,
-                    expand=True,
-                ),
-                expand=True,
-            )
-        )
-        self.page.update()
-
-    #  REGISTER PAGE (API-based)
-    # ==================================================================
-    def show_register_page(self):
-        self.page.controls.clear()
-        self.page.scroll = None
-
-        _field_style = dict(
-            border_radius=12,
-            bgcolor=ft.Colors.with_opacity(0.07, ft.Colors.WHITE),
-            border_color=ft.Colors.with_opacity(0.25, ft.Colors.WHITE),
-            focused_border_color="#00D9FF",
-            text_size=14,
-            content_padding=ft.Padding(left=16, right=16, top=14, bottom=14),
-        )
-
-        name_field = ft.TextField(hint_text="Ahmed Mohamed", **_field_style)
-        email_field = ft.TextField(hint_text="you@example.com",
-                                   keyboard_type=ft.KeyboardType.EMAIL, **_field_style)
-        phone_field = ft.TextField(hint_text="+20 1X XXXX XXXX (optional)",
-                                   keyboard_type=ft.KeyboardType.PHONE, **_field_style)
-        password_field = ft.TextField(hint_text="At least 6 characters",
-                                      password=True, can_reveal_password=True, **_field_style)
-
-        error_container = ft.Container(
-            content=ft.Text("", size=13, text_align=ft.TextAlign.CENTER, color="#F87171"),
-            bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.RED),
-            border=ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.RED)),
-            border_radius=12,
-            padding=ft.Padding(left=16, right=16, top=10, bottom=10),
-            visible=False,
-        )
-
-        def _set_error(msg: str, amber: bool = False):
-            error_container.content.value = msg
-            if amber:
-                error_container.bgcolor = ft.Colors.with_opacity(0.1, ft.Colors.AMBER)
-                error_container.border = ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.AMBER))
-                error_container.content.color = ft.Colors.AMBER_300
-            else:
-                error_container.bgcolor = ft.Colors.with_opacity(0.1, ft.Colors.RED)
-                error_container.border = ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.RED))
-                error_container.content.color = "#F87171"
-            error_container.visible = bool(msg)
-            self.page.update()
-
-        register_btn = ft.FilledButton(
-            content="Create Account",
-            width=420,
-            height=50,
-            style=ft.ButtonStyle(
-                bgcolor="#00D9FF",
-                color="#0A0E27",
-                text_style=ft.TextStyle(size=15, weight=ft.FontWeight.BOLD),
-                shape=ft.RoundedRectangleBorder(radius=14),
-            ),
-        )
-        loading_row = ft.Row(
-            [ft.ProgressRing(width=18, height=18, stroke_width=2, color="#00D9FF"),
-             ft.Text("Creating account…", size=13, color=ft.Colors.GREY_400)],
-            alignment=ft.MainAxisAlignment.CENTER,
-            visible=False,
-        )
-
-        def do_register(e):
-            name = (name_field.value or "").strip()
-            email = (email_field.value or "").strip()
-            phone = (phone_field.value or "").strip()
-            password = password_field.value or ""
-            if not name or not email or not password:
-                _set_error("Name, email and password are required")
-                return
-            if len(password) < 6:
-                _set_error("Password must be at least 6 characters")
-                return
-            _set_error("")
-            register_btn.disabled = True
-            loading_row.visible = True
-            self.page.update()
-
-            def _thread():
-                try:
-                    user = api_client.register(email, password, name, phone)
-                    def _ok():
-                        register_btn.disabled = False
-                        loading_row.visible = False
-                        _set_error(
-                            f"Account created! Welcome, {user.get('full_name', name)}!\n"
-                            "Subscribe on our website to activate your plan.",
-                            amber=True,
-                        )
-                        import time; time.sleep(1.5)
-                        if user.get("active_plan"):
-                            self.show_monitoring_page()
-                        # stay on register page so user reads the subscribe message
-                    self._ui_queue.put(_ok)
-                except (APIError, Exception) as ex:
-                    msg = getattr(ex, 'detail', None) or str(ex)
-                    def _err():
-                        register_btn.disabled = False
-                        loading_row.visible = False
-                        _set_error(msg)
-                    self._ui_queue.put(_err)
-
-            threading.Thread(target=_thread, daemon=True).start()
-
-        register_btn.on_click = do_register
-        password_field.on_submit = do_register
-
-        # ── benefits row ────────────────────────────────────────────
-        def _mini_benefit(label: str, icon) -> ft.Container:
-            return ft.Container(
-                content=ft.Column(
-                    [ft.Icon(icon, size=18, color="#00D9FF"),
-                     ft.Text(label, size=10, color=ft.Colors.GREY_400,
-                             text_align=ft.TextAlign.CENTER)],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=3,
-                ),
-                padding=ft.Padding(left=12, right=12, top=8, bottom=8),
-                border_radius=10,
-                bgcolor=ft.Colors.with_opacity(0.06, ft.Colors.WHITE),
-                border=ft.Border.all(1, ft.Colors.with_opacity(0.1, "#00D9FF")),
-            )
-
-        benefits = ft.Row(
-            [
-                _mini_benefit("24/7 monitoring", ft.Icons.SCHEDULE),
-                _mini_benefit("Instant alerts", ft.Icons.NOTIFICATIONS),
-                _mini_benefit("Secure & private", ft.Icons.LOCK),
-            ],
-            alignment=ft.MainAxisAlignment.CENTER,
-            spacing=12,
-        )
-
-        card = ft.Container(
-            content=ft.Column(
-                [
-                    ft.Image(src=self._logo_src or "Logos/LOGO_H_W.png", width=220, height=55),
-                    ft.Container(height=2),
-                    ft.Text("Create Account", size=22, weight=ft.FontWeight.BOLD,
-                            text_align=ft.TextAlign.CENTER),
-                    ft.Text("Start monitoring TLS appointments today", size=13,
-                            color=ft.Colors.GREY_400, text_align=ft.TextAlign.CENTER),
-                    ft.Container(height=12),
-                    benefits,
-                    ft.Container(height=16),
-                    error_container,
-                    ft.Container(height=4),
-                    ft.Text("Full Name", size=13, color=ft.Colors.GREY_400),
-                    ft.Container(height=4), name_field,
-                    ft.Container(height=12),
-                    ft.Text("Email", size=13, color=ft.Colors.GREY_400),
-                    ft.Container(height=4), email_field,
-                    ft.Container(height=12),
-                    ft.Text("Phone", size=13, color=ft.Colors.GREY_400),
-                    ft.Container(height=4), phone_field,
-                    ft.Container(height=12),
-                    ft.Text("Password", size=13, color=ft.Colors.GREY_400),
-                    ft.Container(height=4), password_field,
-                    ft.Container(height=20),
-                    register_btn,
-                    loading_row,
-                    ft.Container(height=14),
-                    ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.WHITE)),
-                    ft.Container(height=10),
-                    ft.Row([
-                        ft.Text("Already have an account?", size=12, color=ft.Colors.GREY_400),
-                        ft.TextButton("Log In", on_click=lambda e: self.show_login_page(),
-                                      style=ft.ButtonStyle(color="#00D9FF")),
-                    ], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=0, tight=True,
-            ),
-            width=460,
-            padding=ft.Padding(left=40, right=40, top=32, bottom=28),
-            border_radius=20,
-            gradient=ft.LinearGradient(
-                begin=ft.alignment.Alignment(-1, -1),
-                end=ft.alignment.Alignment(1, 1),
-                colors=["#1A1F3A", "#0F1525"],
-            ),
-            border=ft.Border.all(1, ft.Colors.with_opacity(0.2, "#00D9FF")),
-            shadow=ft.BoxShadow(
-                spread_radius=0, blur_radius=30,
-                color=ft.Colors.with_opacity(0.15, "#00D9FF"),
-                offset=ft.Offset(0, 8),
-            ),
-        )
-
-        top_bar = ft.Container(
-            content=ft.Row([
-                ft.TextButton("← Back to Login", on_click=lambda e: self.show_login_page(),
-                              style=ft.ButtonStyle(color="#00D9FF")),
-                ft.Container(expand=True),
-                self.create_website_icon_button(),
-            ]),
-            padding=ft.Padding(left=20, right=20, top=12, bottom=0),
-        )
-
-        self.page.add(
-            ft.Container(
-                content=ft.Column(
-                    [
-                        top_bar,
-                        ft.Container(
-                            content=ft.Column(
-                                [card],
-                                scroll=ft.ScrollMode.AUTO,
-                                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                            ),
-                            expand=True,
-                            alignment=ft.Alignment(0, -1),
-                            padding=ft.Padding(left=0, right=0, top=20, bottom=20),
-                        ),
-                    ],
-                    spacing=0,
-                    expand=True,
-                ),
-                expand=True,
-            )
-        )
-        self.page.update()
-
-    # ==================================================================
-    #  SERVICE SELECTION PAGE
-    # ==================================================================
-    def show_service_selection_page(self):
-        self.page.controls.clear()
-        self.page.scroll = None
-
-        def _confirm_and_proceed(service_type):
-            """Show confirmation popup asking if user has an application on TLS website."""
-            def on_confirm(e):
-                confirm_dlg.open = False
-                self.page.update()
-                self.flow_data['service_type'] = service_type
-                # If user already has a valid license, go to dashboard
-                status = get_license_status()
-                if status and status.get('valid'):
-                    self._save_service_type_to_db()
-                    self.show_monitoring_page()
-                else:
-                    self.show_pricing_page()
-
-            def on_cancel(e):
-                confirm_dlg.open = False
-                self.page.update()
-
-            svc_label = "Legalization" if service_type == "legalization" else "Visa Process"
-            confirm_dlg = ft.AlertDialog(
-                modal=True,
-                title=ft.Row([
-                    ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=ft.Colors.AMBER_400, size=28),
-                    ft.Text("Confirm Application", size=20, weight=ft.FontWeight.BOLD),
-                ]),
-                content=ft.Column([
-                    ft.Text(
-                        f"Do you already have an existing account and an application group created on the TLS {svc_label} website?",
-                        size=14, color="#CCCCCC", no_wrap=False,
-                    ),
-                    ft.Container(height=10),
-                    ft.Text(
-                        "This app requires an existing application on the TLS website to monitor appointments. "
-                        "If you don't have one, please create it on the TLS website first.",
-                        size=12, color=ft.Colors.GREY_500, no_wrap=False,
-                    ),
-                ], tight=True, spacing=8),
-                actions=[
-                    ft.TextButton("No, I don't have one", on_click=on_cancel),
-                    ft.FilledButton(
-                        "Yes, I have an application",
-                        on_click=on_confirm,
-                        style=ft.ButtonStyle(bgcolor="#00D9FF", color="#0A0E27"),
-                    ),
-                ],
-                actions_alignment=ft.MainAxisAlignment.END,
-                bgcolor="#1A1F3A",
-            )
-            self.page.overlay.append(confirm_dlg)
-            confirm_dlg.open = True
-            self.page.update()
-
-        def select_legalization(e):
-            _confirm_and_proceed('legalization')
-
-        def select_visa(e):
-            _confirm_and_proceed('visa')
-
-        legalization_card = ft.Container(
-            content=ft.Column(
-                [
-                    ft.Icon(ft.Icons.DESCRIPTION, size=60, color="#00D9FF"),
-                    ft.Container(height=15),
-                    ft.Text("Legalization", size=22, weight=ft.FontWeight.BOLD),
-                    ft.Container(height=8),
-                    ft.Text(
-                        "Appointment monitoring for\ndocument legalization",
-                        size=13, color=ft.Colors.GREY_400,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    ft.Container(height=20),
-                    ft.FilledButton(
-                        "Select",
-                        width=160,
-                        height=45,
-                        on_click=select_legalization,
-                        style=ft.ButtonStyle(
-                            bgcolor="#00D9FF",
-                            color="#0A0E27",
-                            shape=ft.RoundedRectangleBorder(radius=12),
-                        ),
-                    ),
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=0,
-            ),
-            width=280,
-            height=300,
-            border_radius=20,
-            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
-            border=ft.Border.all(1, ft.Colors.with_opacity(0.3, "#00D9FF")),
-            padding=30,
-            ink=True,
-            on_click=select_legalization,
-            shadow=ft.BoxShadow(
-                spread_radius=0, blur_radius=15,
-                color=ft.Colors.with_opacity(0.15, "#00D9FF"),
-                offset=ft.Offset(0, 4),
-            ),
-        )
-
-        visa_card = ft.Container(
-            content=ft.Column(
-                [
-                    ft.Icon(ft.Icons.FLIGHT, size=60, color="#FF6B9D"),
-                    ft.Container(height=15),
-                    ft.Text("Visa Process", size=22, weight=ft.FontWeight.BOLD),
-                    ft.Container(height=8),
-                    ft.Text(
-                        "Appointment monitoring for\nvisa applications",
-                        size=13, color=ft.Colors.GREY_400,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    ft.Container(height=20),
-                    ft.FilledButton(
-                        "Select",
-                        width=160,
-                        height=45,
-                        on_click=select_visa,
-                        style=ft.ButtonStyle(
-                            bgcolor="#FF6B9D",
-                            color="#0A0E27",
-                            shape=ft.RoundedRectangleBorder(radius=12),
-                        ),
-                    ),
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=0,
-            ),
-            width=280,
-            height=300,
-            border_radius=20,
-            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
-            border=ft.Border.all(1, ft.Colors.with_opacity(0.3, "#FF6B9D")),
-            padding=30,
-            ink=True,
-            on_click=select_visa,
-            shadow=ft.BoxShadow(
-                spread_radius=0, blur_radius=15,
-                color=ft.Colors.with_opacity(0.15, "#FF6B9D"),
-                offset=ft.Offset(0, 4),
-            ),
-        )
-
-        # Important note for users - removed, now shown as popup confirmation
-
-        self.page.add(
-            ft.Container(
-                content=ft.Column(
-                    [
-                        ft.Container(
-                            content=ft.Row([
-                                ft.Container(expand=True),
-                                self.create_website_icon_button(),
-                            ]),
-                            padding=ft.Padding(left=20, right=20, top=15, bottom=0),
-                        ),
-                        ft.Image(
-                            src=self._logo_src or "Logos/LOGO_H_W.png",
-                            width=400, height=100,
-                        ),
-                        ft.Container(height=10),
-                        ft.Text(
-                            "Choose your service",
-                            size=28, weight=ft.FontWeight.BOLD,
-                            text_align=ft.TextAlign.CENTER,
-                        ),
-                        ft.Container(height=5),
-                        ft.Text(
-                            "Select the TLS service you want to monitor",
-                            size=14, color=ft.Colors.GREY_400,
-                            text_align=ft.TextAlign.CENTER,
-                        ),
-                        ft.Container(height=15),
-                        ft.Row(
-                            [legalization_card, visa_card],
-                            alignment=ft.MainAxisAlignment.CENTER,
-                            spacing=30,
-                        ),
-                        ft.Container(height=20),
-                    ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    expand=True,
-                ),
-                expand=True,
-            )
-        )
-        self.page.update()
 
     # ==================================================================
     #  CLOUD MONITORING HELPERS
@@ -1607,623 +766,19 @@ class TLSApp:
         self._cloud_poll_active = False
 
     # ==================================================================
-    #  PRICING PAGE
-    # ==================================================================
-    def show_pricing_page(self, expired=False, greeting=""):
-        self.page.controls.clear()
-        self.page.scroll = None
-
-        status_msg = ft.Text("", size=14, text_align=ft.TextAlign.CENTER)
-        hw_id = get_hardware_id()
-
-        if expired:
-            status_msg.value = "Your license has expired. Please renew to continue monitoring."
-            status_msg.color = ft.Colors.ORANGE_400
-        elif greeting:
-            status_msg.value = greeting
-            status_msg.color = "#00D9FF"
-
-        def start_trial(e):
-            success, message = activate_trial()
-            if success:
-                # Save the selected service type to DB
-                self._save_service_type_to_db()
-                self.show_monitoring_page()
-            else:
-                status_msg.value = message
-                status_msg.color = ft.Colors.RED_400
-                self.page.update()
-
-        def show_activation(e):
-            self.show_activation_page()
-
-        def go_to_dashboard(e):
-            self.show_monitoring_page()
-
-        # Dashboard button (visible when user has an active license)
-        _license_status = get_license_status()
-        _has_license = _license_status and _license_status.get('valid')
-
-        dashboard_btn = ft.OutlinedButton(
-            content=ft.Row([
-                ft.Icon(ft.Icons.DASHBOARD, size=18),
-                ft.Text("Go to Dashboard", size=14),
-            ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
-            width=240,
-            height=42,
-            on_click=go_to_dashboard,
-            visible=_has_license,
-            style=ft.ButtonStyle(
-                color="#00D9FF",
-                side=ft.BorderSide(2, "#00D9FF"),
-                shape=ft.RoundedRectangleBorder(radius=14),
-            ),
-        )
-
-        def go_back(e):
-            self.show_service_selection_page()
-
-        def show_terms_dialog(e):
-            """Show Terms & Disclaimer in a dialog"""
-            # Read the terms file
-            try:
-                if getattr(sys, 'frozen', False):
-                    app_dir = sys._MEIPASS
-                else:
-                    app_dir = os.path.dirname(os.path.abspath(__file__))
-                terms_path = os.path.join(app_dir, "TERMS_AND_DISCLAIMER.md")
-                with open(terms_path, "r", encoding="utf-8") as f:
-                    terms_content = f.read()
-            except Exception:
-                terms_content = "Unable to load terms and disclaimer."
-
-            def close_terms(e):
-                terms_dlg.open = False
-                self.page.update()
-
-            terms_text = ft.Text(
-                terms_content,
-                size=12,
-                color=ft.Colors.GREY_300,
-                selectable=True,
-            )
-
-            terms_dlg = ft.AlertDialog(
-                modal=True,
-                title=ft.Row([
-                    ft.Icon(ft.Icons.DESCRIPTION, color="#00D9FF", size=28),
-                    ft.Text("Terms & Disclaimer", size=20, weight=ft.FontWeight.BOLD)
-                ]),
-                content=ft.Container(
-                    content=ft.Column(
-                        [terms_text],
-                        scroll=ft.ScrollMode.AUTO,
-                        spacing=0,
-                    ),
-                    width=700,
-                    height=500,
-                ),
-                actions=[
-                    ft.TextButton("Close", on_click=close_terms),
-                ],
-                actions_alignment=ft.MainAxisAlignment.END,
-                bgcolor="#1A1F3A",
-            )
-            self.page.overlay.append(terms_dlg)
-            terms_dlg.open = True
-            self.page.update()
-
-        def show_payment_dialog(plan_key):
-            """Show payment dialog for a subscription plan with screenshot upload."""
-            plan = PLANS.get(plan_key, {})
-            plan_name = plan.get("name", plan_key)
-            plan_price = plan.get("price", 0)
-            hw_id = get_hardware_id()
-
-            # Mutable state for screenshot and payment method
-            screenshot_state = {"path": None, "b64": ""}
-            selected_method = ["vodafone_cash"]
-
-            name_field = ft.TextField(
-                label="Your Full Name",
-                width=400,
-                border_radius=8,
-                bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
-                border_color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
-                hint_text="e.g. Ahmed Mohamed",
-            )
-            email_field = ft.TextField(
-                label="Your Email Address",
-                width=400,
-                border_radius=8,
-                bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
-                border_color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
-                hint_text="email@example.com",
-                keyboard_type=ft.KeyboardType.EMAIL,
-            )
-            ref_field = ft.TextField(
-                label="Transaction Reference (optional)",
-                width=400,
-                border_radius=8,
-                bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
-                border_color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
-                hint_text="Last 6 digits or transaction ID",
-            )
-            screenshot_label = ft.Text("No screenshot selected", size=12, color=ft.Colors.GREY_400)
-            submit_status = ft.Text("", size=13, text_align=ft.TextAlign.CENTER)
-
-            file_picker = ft.FilePicker()
-            self.page.services.append(file_picker)
-
-            def pick_screenshot(e):
-                files = file_picker.pick_files(
-                    allowed_extensions=["png", "jpg", "jpeg"],
-                    dialog_title="Select payment receipt screenshot",
-                )
-                if files:
-                    fpath = files[0].path
-                    screenshot_state["path"] = fpath
-                    try:
-                        with open(fpath, "rb") as f:
-                            screenshot_state["b64"] = base64.b64encode(f.read()).decode("utf-8")
-                        screenshot_label.value = f"✓ {files[0].name}"
-                        screenshot_label.color = ft.Colors.GREEN_400
-                    except Exception as ex:
-                        screenshot_label.value = f"Error reading file: {ex}"
-                        screenshot_label.color = ft.Colors.RED_400
-                    self.page.update()
-
-            def copy_vodafone(e):
-                pyperclip.copy("01065080242")
-                selected_method[0] = "vodafone_cash"
-                self.page.snack_bar = ft.SnackBar(ft.Text("Vodafone Cash number copied!"), open=True)
-                self.page.update()
-
-            def copy_instapay(e):
-                pyperclip.copy("01060263887")
-                selected_method[0] = "instapay"
-                self.page.snack_bar = ft.SnackBar(ft.Text("InstaPay number copied!"), open=True)
-                self.page.update()
-
-            def close_payment(e):
-                payment_dlg.open = False
-                if file_picker in self.page.services:
-                    self.page.services.remove(file_picker)
-                self.page.update()
-
-            def do_submit(e):
-                if not name_field.value or not name_field.value.strip():
-                    submit_status.value = "✗ Please enter your full name."
-                    submit_status.color = ft.Colors.RED_400
-                    self.page.update()
-                    return
-                if not email_field.value or "@" not in email_field.value:
-                    submit_status.value = "✗ Please enter a valid email address."
-                    submit_status.color = ft.Colors.RED_400
-                    self.page.update()
-                    return
-                submit_status.value = "Submitting..."
-                submit_status.color = ft.Colors.GREY_400
-                self.page.update()
-
-                def _send():
-                    try:
-                        body = {
-                            "plan_key": plan_key,
-                            "hardware_id": hw_id,
-                            "full_name": name_field.value.strip(),
-                            "email": email_field.value.strip(),
-                            "payment_method": selected_method[0],
-                            "reference": ref_field.value.strip() if ref_field.value else "",
-                            "screenshot_b64": screenshot_state["b64"],
-                            "amount": float(plan_price),
-                        }
-                        resp = api_client._request("POST", "/api/app/payments/submit", body, auth=False)
-                        submit_status.value = resp.get("message", "✓ Submitted! You'll receive your license key by email.")
-                        submit_status.color = ft.Colors.GREEN_400
-                    except APIError as ex:
-                        submit_status.value = f"✗ Error: {ex.detail}"
-                        submit_status.color = ft.Colors.RED_400
-                    except Exception as ex:
-                        submit_status.value = f"✗ Error: {ex}"
-                        submit_status.color = ft.Colors.RED_400
-                    self.page.update()
-
-                threading.Thread(target=_send, daemon=True).start()
-
-            payment_dlg = ft.AlertDialog(
-                modal=True,
-                title=ft.Column([
-                    ft.Icon(ft.Icons.MONETIZATION_ON, color=ft.Colors.AMBER_400, size=44),
-                    ft.Text(f"Subscribe — {plan_name}", size=20, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
-                    ft.Text(f"{plan_price:,} EGP / month · per device", size=13, color=ft.Colors.GREY_400, text_align=ft.TextAlign.CENTER),
-                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=6),
-                content=ft.Container(
-                    content=ft.Column([
-                        ft.Text("Step 1: Send payment via one of these methods:", size=13, color=ft.Colors.GREY_300),
-                        ft.Container(height=10),
-                        # Vodafone Cash
-                        ft.Container(
-                            content=ft.Column([
-                                ft.Row([
-                                    ft.Icon(ft.Icons.PHONE_ANDROID, color=ft.Colors.RED_400, size=18),
-                                    ft.Text("Vodafone Cash", size=14, weight=ft.FontWeight.BOLD),
-                                ], spacing=8),
-                                ft.Container(height=6),
-                                ft.Text("01065080242", size=18, weight=ft.FontWeight.BOLD, color="#00D9FF", selectable=True),
-                                ft.Container(height=6),
-                                ft.FilledButton(
-                                    "Copy & Select",
-                                    on_click=copy_vodafone,
-                                    style=ft.ButtonStyle(
-                                        bgcolor="#00D9FF", color="#0A0E27",
-                                        shape=ft.RoundedRectangleBorder(radius=6),
-                                    ),
-                                    width=150, height=32,
-                                ),
-                            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                            padding=12, border_radius=8,
-                            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
-                            border=ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.RED)),
-                        ),
-                        ft.Container(height=10),
-                        # InstaPay
-                        ft.Container(
-                            content=ft.Column([
-                                ft.Row([
-                                    ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET, color=ft.Colors.BLUE_400, size=18),
-                                    ft.Text("InstaPay", size=14, weight=ft.FontWeight.BOLD),
-                                ], spacing=8),
-                                ft.Container(height=6),
-                                ft.Text("01060263887", size=18, weight=ft.FontWeight.BOLD, color="#00D9FF", selectable=True),
-                                ft.Container(height=6),
-                                ft.FilledButton(
-                                    "Copy & Select",
-                                    on_click=copy_instapay,
-                                    style=ft.ButtonStyle(
-                                        bgcolor="#00D9FF", color="#0A0E27",
-                                        shape=ft.RoundedRectangleBorder(radius=6),
-                                    ),
-                                    width=150, height=32,
-                                ),
-                            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                            padding=12, border_radius=8,
-                            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
-                            border=ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.BLUE)),
-                        ),
-                        ft.Container(height=14),
-                        ft.Divider(height=1, color=ft.Colors.with_opacity(0.15, ft.Colors.WHITE)),
-                        ft.Container(height=10),
-                        ft.Text("Step 2: Fill in your details & upload receipt:", size=13, color=ft.Colors.GREY_300),
-                        ft.Container(height=8),
-                        name_field,
-                        ft.Container(height=8),
-                        email_field,
-                        ft.Container(height=8),
-                        ref_field,
-                        ft.Container(height=10),
-                        # Screenshot upload row
-                        ft.Row([
-                            ft.FilledButton(
-                                content=ft.Row([
-                                    ft.Icon(ft.Icons.ATTACH_FILE, size=16),
-                                    ft.Text("Upload Screenshot", size=13),
-                                ], spacing=6),
-                                on_click=pick_screenshot,
-                                style=ft.ButtonStyle(
-                                    bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.WHITE),
-                                    color=ft.Colors.WHITE,
-                                    shape=ft.RoundedRectangleBorder(radius=8),
-                                    side=ft.BorderSide(1, ft.Colors.with_opacity(0.3, ft.Colors.WHITE)),
-                                ),
-                                height=36,
-                            ),
-                            screenshot_label,
-                        ], spacing=10, alignment=ft.MainAxisAlignment.CENTER),
-                        ft.Container(height=10),
-                        submit_status,
-                        ft.Container(height=8),
-                        ft.FilledButton(
-                            "Submit Payment",
-                            on_click=do_submit,
-                            style=ft.ButtonStyle(
-                                bgcolor=ft.Colors.AMBER_600,
-                                color=ft.Colors.WHITE,
-                                shape=ft.RoundedRectangleBorder(radius=8),
-                            ),
-                            width=400, height=44,
-                        ),
-                        ft.Container(height=8),
-                        ft.OutlinedButton(
-                            "Close",
-                            on_click=close_payment,
-                            style=ft.ButtonStyle(
-                                color=ft.Colors.GREY_400,
-                                side=ft.BorderSide(1, ft.Colors.GREY_600),
-                                shape=ft.RoundedRectangleBorder(radius=8),
-                            ),
-                            width=400, height=38,
-                        ),
-                    ], spacing=0, horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                       scroll=ft.ScrollMode.AUTO),
-                    width=450, height=520,
-                ),
-                bgcolor="#1A1F3A",
-            )
-            self.page.overlay.append(payment_dlg)
-            payment_dlg.open = True
-            self.page.update()
-
-        def open_website(e):
-            """Open website in browser"""
-            webbrowser.open("https://tls-saas.vercel.app")
-
-        # ----- plan card builder -----
-        def create_plan_card(plan_key, highlight=False):
-            plan = PLANS[plan_key]
-            is_trial = plan_key == "trial"
-            is_premium = plan_key == "premium"
-
-            if is_trial:
-                price_text = "Free"
-                period_text = "1 day"
-                icon = ft.Icons.ROCKET_LAUNCH
-                accent = ft.Colors.GREEN_400
-                features = [
-                    f"{plan['checks_per_day']} checks per day",
-                    "Email notifications",
-                    "All branches",
-                ]
-                btn_text = "Start Free Trial"
-                btn_click = start_trial
-                btn_bgcolor = ft.Colors.GREEN_600
-                btn_color = ft.Colors.WHITE
-                badge = None
-            elif plan_key == "legalization_monthly":
-                price_text = "500 EGP"
-                period_text = "/month"
-                icon = ft.Icons.DESCRIPTION
-                accent = "#00D9FF"
-                features = [
-                    "Unlimited daily checks",
-                    "Check every hour",
-                    "Email notifications",
-                    "All legalization branches",
-                    "PC must stay on",
-                ]
-                btn_text = "Subscribe"
-                btn_click = lambda e: show_payment_dialog("legalization_monthly")
-                btn_bgcolor = "#00D9FF"
-                btn_color = "#0A0E27"
-                badge = None
-            elif plan_key == "visa_monthly":
-                price_text = "500 EGP"
-                period_text = "/month"
-                icon = ft.Icons.CREDIT_CARD
-                accent = ft.Colors.CYAN_400
-                features = [
-                    "Unlimited daily checks",
-                    "Check every hour",
-                    "Email notifications",
-                    "All visa branches",
-                    "PC must stay on",
-                ]
-                btn_text = "Subscribe"
-                btn_click = lambda e: show_payment_dialog("visa_monthly")
-                btn_bgcolor = ft.Colors.CYAN_600
-                btn_color = ft.Colors.WHITE
-                badge = None
-            elif is_premium:
-                price_text = "2,500 EGP"
-                period_text = "/month"
-                icon = ft.Icons.CLOUD_DONE
-                accent = ft.Colors.AMBER_400
-                features = [
-                    "Server-based monitoring",
-                    "No PC required",
-                    "30-minute checks",
-                    "Email & push notifications",
-                    "Priority support",
-                ]
-                btn_text = "Subscribe"
-                btn_click = lambda e: show_payment_dialog("premium")
-                btn_bgcolor = ft.Colors.AMBER_600
-                btn_color = ft.Colors.WHITE
-                badge = "☁ No PC Needed"
-            else:
-                return ft.Container()
-
-            feature_rows = []
-            for f_text in features:
-                feature_rows.append(
-                    ft.Row(
-                        [
-                            ft.Icon(ft.Icons.CHECK_CIRCLE, size=14, color=accent),
-                            ft.Text(f_text, size=12, color=ft.Colors.GREY_300),
-                        ],
-                        spacing=6,
-                    )
-                )
-
-            badge_widget = ft.Container()
-            if badge:
-                badge_widget = ft.Container(
-                    content=ft.Text(badge, size=11, weight=ft.FontWeight.BOLD, color="#0A0E27"),
-                    bgcolor=ft.Colors.AMBER_400,
-                    border_radius=12,
-                    padding=ft.Padding(left=10, right=10, top=4, bottom=4),
-                )
-
-            border_color = accent if highlight else ft.Colors.with_opacity(0.2, ft.Colors.WHITE)
-            border_width = 2 if highlight else 1
-
-            card = ft.Container(
-                content=ft.Column(
-                    [
-                        badge_widget,
-                        ft.Icon(icon, size=38, color=accent),
-                        ft.Container(height=8),
-                        ft.Text(plan['name'], size=17, weight=ft.FontWeight.BOLD),
-                        ft.Container(height=4),
-                        ft.Row(
-                            [
-                                ft.Text(price_text, size=26, weight=ft.FontWeight.BOLD, color=accent),
-                                ft.Text(period_text, size=12, color=ft.Colors.GREY_400),
-                            ],
-                            spacing=4,
-                            alignment=ft.MainAxisAlignment.CENTER,
-                        ),
-                        ft.Container(height=12),
-                        ft.Divider(height=1, color=ft.Colors.with_opacity(0.15, ft.Colors.WHITE)),
-                        ft.Container(height=8),
-                        ft.Column(feature_rows, spacing=7),
-                        ft.Container(height=12),
-                        ft.FilledButton(
-                            btn_text,
-                            width=200,
-                            height=40,
-                            on_click=btn_click,
-                            style=ft.ButtonStyle(
-                                bgcolor=btn_bgcolor,
-                                color=btn_color,
-                                shape=ft.RoundedRectangleBorder(radius=10),
-                            ),
-                        ),
-                    ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=0,
-                ),
-                width=260,
-                border_radius=18,
-                bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
-                border=ft.Border.all(border_width, border_color),
-                padding=18,
-            )
-
-            if highlight:
-                card.shadow = ft.BoxShadow(
-                    spread_radius=0, blur_radius=20,
-                    color=ft.Colors.with_opacity(0.2, accent if isinstance(accent, str) else "#00D9FF"),
-                    offset=ft.Offset(0, 4),
-                )
-            return card
-
-        trial_card = create_plan_card("trial")
-        legalization_card = create_plan_card("legalization_monthly", highlight=True)
-        visa_card = create_plan_card("visa_monthly", highlight=True)
-        premium_card = create_plan_card("premium", highlight=True)
-
-        # Per-device info banner
-        per_device_banner = ft.Container(
-            content=ft.Row(
-                [
-                    ft.Icon(ft.Icons.DEVICES, size=22, color="#00D9FF"),
-                    ft.Text(
-                        "Each subscription is bound to one device only.  "
-                        "Premium plan runs on our server — your PC does not need to stay on.",
-                        size=13,
-                        color=ft.Colors.BLUE_200,
-                        weight=ft.FontWeight.W_500,
-                        text_align=ft.TextAlign.CENTER,
-                        expand=True,
-                    ),
-                ],
-                spacing=10,
-                alignment=ft.MainAxisAlignment.CENTER,
-            ),
-            padding=ft.Padding(left=20, right=20, top=12, bottom=12),
-            border_radius=12,
-            bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.BLUE),
-            border=ft.Border.all(1, ft.Colors.with_opacity(0.3, ft.Colors.BLUE)),
-        )
-
-        self.page.add(
-            ft.Container(
-                content=ft.Column(
-                    [
-                        ft.Container(height=20),
-                        ft.Container(
-                            content=ft.Row([
-                                ft.TextButton(
-                                    "← Back",
-                                    on_click=go_back,
-                                    style=ft.ButtonStyle(color="#00D9FF"),
-                                ),
-                                ft.Container(expand=True),
-                                self.create_website_icon_button(),
-                            ]),
-                            padding=ft.Padding(left=20, right=20, top=0, bottom=0),
-                        ),
-                        ft.Container(height=5),
-                        per_device_banner,
-                        ft.Container(height=15),
-                        ft.Text(
-                            "Get Started",
-                            size=28, weight=ft.FontWeight.BOLD,
-                            text_align=ft.TextAlign.CENTER,
-                        ),
-                        ft.Container(height=5),
-                        ft.Text(
-                            "Visa Appointment Monitoring" if self.flow_data.get('service_type') == 'visa'
-                            else "Legalization Appointment Monitoring" if self.flow_data.get('service_type') == 'legalization'
-                            else "TLS Appointment Monitoring",
-                            size=14, color=ft.Colors.GREY_400,
-                            text_align=ft.TextAlign.CENTER,
-                        ),
-                        ft.Container(height=5),
-                        status_msg,
-                        ft.Container(height=20),
-                        ft.Row(
-                            [trial_card, legalization_card, visa_card, premium_card],
-                            alignment=ft.MainAxisAlignment.CENTER,
-                            spacing=16,
-                            wrap=True,
-                        ),
-                        ft.Container(height=25),
-                        ft.Row(
-                            [
-                                ft.TextButton(
-                                    "Already have a license key?  Activate here →",
-                                    on_click=show_activation,
-                                    style=ft.ButtonStyle(color="#00D9FF"),
-                                ),
-                            ],
-                            alignment=ft.MainAxisAlignment.CENTER,
-                        ),
-                        ft.Container(height=5),
-                        dashboard_btn,
-                        ft.Container(height=10),
-                        ft.Row(
-                            [
-                                ft.TextButton(
-                                    "📋 Terms & Disclaimer",
-                                    on_click=show_terms_dialog,
-                                    style=ft.ButtonStyle(color=ft.Colors.GREY_400),
-                                ),
-                            ],
-                            alignment=ft.MainAxisAlignment.CENTER,
-                        ),
-                        ft.Container(height=10),
-                        ft.Text(
-                            f"Your Device ID: {hw_id[:8].upper()}",
-                            size=12, color=ft.Colors.GREY_500,
-                            text_align=ft.TextAlign.CENTER,
-                            selectable=True,
-                        ),
-                    ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    scroll=ft.ScrollMode.AUTO,
-                    expand=True,
-                ),
-                expand=True,
-            )
-        )
-        self.page.update()
-
-    # ==================================================================
     #  LICENSE ACTIVATION PAGE
     # ==================================================================
+    def _start_trial_from_activation(self, status_msg):
+        """Start free trial from the activation page."""
+        success, message = activate_trial()
+        if success:
+            self._save_service_type_to_db()
+            self.show_monitoring_page()
+        else:
+            status_msg.value = message
+            status_msg.color = ft.Colors.RED_400
+            self.page.update()
+
     def show_activation_page(self):
         self.page.controls.clear()
         self.page.scroll = None
@@ -2260,15 +815,15 @@ class TLSApp:
                 status_msg.color = ft.Colors.RED_400
                 self.page.update()
 
-        def go_back(e):
-            self.show_pricing_page()
+        def open_website(e):
+            webbrowser.open(Config.WEBSITE_URL)
 
         # Add website icon button at top
         top_bar = ft.Container(
             content=ft.Row([
                 ft.TextButton(
-                    "← Back to Pricing",
-                    on_click=go_back,
+                    "🌐 Get a License on Website",
+                    on_click=open_website,
                     style=ft.ButtonStyle(color="#00D9FF"),
                 ),
                 ft.Container(expand=True),
@@ -2345,10 +900,10 @@ class TLSApp:
                             [
                                 ft.Text("How to get a license:", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_300),
                                 ft.Container(height=5),
-                                ft.Text("1. Copy your Device ID above", size=12, color=ft.Colors.GREY_400),
-                                ft.Text("2. Email it to: tlsappointmentchecker@gmail.com", size=12, color=ft.Colors.GREY_400),
-                                ft.Text("3. Include the plan you want to purchase", size=12, color=ft.Colors.GREY_400),
-                                ft.Text("4. You'll receive your license key within 24 hours", size=12, color=ft.Colors.GREY_400),
+                                ft.Text("1. Visit our website and create an account", size=12, color=ft.Colors.GREY_400),
+                                ft.Text("2. Choose a plan and complete payment", size=12, color=ft.Colors.GREY_400),
+                                ft.Text("3. Copy your Device ID above and enter it during checkout", size=12, color=ft.Colors.GREY_400),
+                                ft.Text("4. Your license key will be emailed to you", size=12, color=ft.Colors.GREY_400),
                             ],
                         ),
                         padding=15,
@@ -2373,13 +928,35 @@ class TLSApp:
                             shape=ft.RoundedRectangleBorder(radius=12),
                         ),
                     ),
+                    ft.Container(height=10),
+                    # Free trial button
+                    ft.OutlinedButton(
+                        content=ft.Row([
+                            ft.Icon(ft.Icons.ROCKET_LAUNCH, size=18),
+                            ft.Text("Start Free Trial", size=14),
+                        ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
+                        width=500,
+                        height=45,
+                        on_click=lambda e: self._start_trial_from_activation(status_msg),
+                        style=ft.ButtonStyle(
+                            color=ft.Colors.GREEN_400,
+                            side=ft.BorderSide(1, ft.Colors.GREEN_600),
+                            shape=ft.RoundedRectangleBorder(radius=12),
+                        ),
+                    ),
                     ft.Container(height=15),
                     status_msg,
                     ft.Container(height=10),
                     ft.TextButton(
-                        "← Back to Plans",
-                        on_click=go_back,
+                        "🌐 Visit Website",
+                        on_click=open_website,
                         style=ft.ButtonStyle(color="#00D9FF"),
+                    ),
+                    ft.Container(height=8),
+                    ft.Text(
+                        f"Version {VERSION}",
+                        size=11, color=ft.Colors.GREY_600,
+                        text_align=ft.TextAlign.CENTER,
                     ),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -2467,7 +1044,7 @@ class TLSApp:
         self.page.scroll = None
 
         # Current license info (API first, then offline)
-        license_status = get_combined_license_status()
+        license_status = get_license_status()
 
         # Init checker
         if not self.checker:
@@ -2698,15 +1275,7 @@ class TLSApp:
             if self.checker:
                 self.checker.stop_monitoring()
             self.checker = None
-            self.show_pricing_page()
-
-        def do_logout(e):
-            """Logout from API account and go back to welcome."""
-            if self.checker:
-                self.checker.stop_monitoring()
-            self.checker = None
-            api_client.logout()
-            self.show_welcome_page()
+            self.show_activation_page()
 
         def view_screenshots(e):
             self.show_screenshots_gallery()
@@ -3012,14 +1581,14 @@ class TLSApp:
             elif plan_key_curr == 'trial':
                 secs_left = (license_status['expires_at'] - datetime.now(timezone.utc)).total_seconds()
                 hrs = max(0, int(secs_left / 3600))
-                badge_text = f"Trial Â· {hrs}h left"
+                badge_text = f"Trial · {hrs}h left"
                 badge_border = ft.Colors.GREEN_600
                 badge_bg = ft.Colors.with_opacity(0.15, ft.Colors.GREEN)
                 badge_color = ft.Colors.GREEN_400
                 badge_icon_color = ft.Colors.GREEN_400
             else:
                 days = license_status.get('days_remaining', 0)
-                badge_text = f"{plan_info['name']} Â· {days}d left"
+                badge_text = f"{plan_info['name']} · {days}d left"
                 badge_border = "#00D9FF"
                 badge_bg = ft.Colors.with_opacity(0.15, "#00D9FF")
                 badge_color = "#00D9FF"
@@ -3166,12 +1735,6 @@ class TLSApp:
                     on_click=change_plan,
                     icon_color="#00D9FF",
                 ),
-                ft.IconButton(
-                    icon=ft.Icons.LOGOUT,
-                    tooltip="Logout",
-                    on_click=do_logout,
-                    icon_color=ft.Colors.RED_400,
-                ) if api_client.is_logged_in else ft.Container(),
             ],
             spacing=10,
             alignment=ft.MainAxisAlignment.END,
@@ -3688,10 +2251,10 @@ class TLSApp:
             db.commit()
         db.close()
 
-        def go_to_pricing(e):
+        def go_to_activation(e):
             license_dlg.open = False
             self.page.update()
-            self.show_pricing_page()
+            self.show_activation_page()
 
         license_dlg = ft.AlertDialog(
             modal=True,
@@ -3726,8 +2289,8 @@ class TLSApp:
             ], tight=True, spacing=4),
             actions=[
                 ft.FilledButton(
-                    "View Plans",
-                    on_click=go_to_pricing,
+                    "Get New License",
+                    on_click=go_to_activation,
                     style=ft.ButtonStyle(bgcolor="#00D9FF", color="#0A0E27"),
                 ),
             ],

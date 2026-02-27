@@ -245,5 +245,24 @@ class EmailService:
         """
         return self.send(to_email, f"✅ {plan_name} Subscription Activated", html)
 
+    def send_password_reset(self, to_email: str, user_name: str, reset_url: str) -> bool:
+        """Send a password reset link email."""
+        display_name = user_name or to_email
+        html = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #0a192f; color: #ccd6f6; padding: 30px; border-radius: 12px;">
+            <h2 style="color: #00D9FF; margin-bottom: 20px;">🔑 Password Reset</h2>
+            <p>Hi {display_name},</p>
+            <p>We received a request to reset your password. Click the button below to set a new password:</p>
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{reset_url}" style="background: #00D9FF; color: #0a192f; padding: 14px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">Reset Password</a>
+            </div>
+            <p style="color: #8892b0; font-size: 13px;">This link expires in 15 minutes. If you didn't request this reset, you can safely ignore this email.</p>
+            <p style="color: #8892b0; font-size: 13px;">Or copy and paste this URL into your browser:</p>
+            <p style="color: #64ffda; font-size: 12px; word-break: break-all;">{reset_url}</p>
+            <p style="color: #8892b0; font-size: 12px; margin-top: 30px;">TLS Appointment Checker</p>
+        </div>
+        """
+        return self.send(to_email, "🔑 Reset Your Password - TLS Appointment Checker", html)
+
 
 email_service = EmailService()
