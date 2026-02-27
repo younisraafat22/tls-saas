@@ -33,8 +33,8 @@ PLANS = {
     },
     "legalization_monthly": {
         "name": "Legalization",
-        "checks_per_day": 999999,
-        "min_interval": 60,        # 1 hour
+        "checks_per_day": 48,      # 24h / 30min
+        "min_interval": 30,
         "duration_days": 30,
         "price": 500,
         "currency": "EGP",
@@ -42,8 +42,8 @@ PLANS = {
     },
     "legalization_quarterly": {
         "name": "Legalization (3 months)",
-        "checks_per_day": 999999,
-        "min_interval": 60,
+        "checks_per_day": 48,
+        "min_interval": 30,
         "duration_days": 90,
         "price": 1200,
         "currency": "EGP",
@@ -51,8 +51,8 @@ PLANS = {
     },
     "visa_monthly": {
         "name": "Visa",
-        "checks_per_day": 999999,
-        "min_interval": 60,        # 1 hour
+        "checks_per_day": 48,      # 24h / 30min
+        "min_interval": 30,
         "duration_days": 30,
         "price": 500,
         "currency": "EGP",
@@ -60,8 +60,8 @@ PLANS = {
     },
     "visa_quarterly": {
         "name": "Visa (3 months)",
-        "checks_per_day": 999999,
-        "min_interval": 60,
+        "checks_per_day": 48,
+        "min_interval": 30,
         "duration_days": 90,
         "price": 1200,
         "currency": "EGP",

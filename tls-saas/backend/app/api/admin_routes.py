@@ -381,6 +381,23 @@ async def approve_payment(
     ))
     await db.commit()
 
+    # Send subscription activation email
+    try:
+        from app.services.email_service import email_service
+        user_result = await db.execute(select(User).where(User.id == payment.user_id))
+        email_user = user_result.scalar_one_or_none()
+        if email_user and sub:
+            plan_name = (payment.plan_key or "subscription").replace("_", " ").title()
+            expires_str = sub.expires_at.strftime("%B %d, %Y") if sub.expires_at else "N/A"
+            email_service.send_subscription_activated(
+                to_email=email_user.email,
+                user_name=email_user.full_name or email_user.email,
+                plan_name=plan_name,
+                expires_at=expires_str,
+            )
+    except Exception:
+        pass  # Never fail payment approval due to email error
+
     # Notify user via WebSocket
     await ws_manager.send_to_user(payment.user_id, {
         "type": "subscription_activated",

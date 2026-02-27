@@ -3,14 +3,15 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
-import { monitoringApi, subscriptionApi } from "@/lib/api";
+import { monitoringApi, paymentApi } from "@/lib/api";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import Link from "next/link";
 import { useLanguage } from "@/lib/i18n";
 import {
   Activity, Bell, Clock, Globe, CheckCircle2,
   XCircle, AlertCircle, ArrowRight, Wifi, WifiOff,
-  Sparkles, Calendar, Wrench,
+  Sparkles, Calendar, Wrench, Key, Copy, Check,
+  ShieldCheck,
 } from "lucide-react";
 
 const fadeUp = {
@@ -27,6 +28,9 @@ export default function DashboardPage() {
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
+  const [licenseKey, setLicenseKey] = useState<string | null>(null);
+  const [licensePlan, setLicensePlan] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -49,14 +53,27 @@ export default function DashboardPage() {
     }
   }, [lastMessage]);
 
+  const copyLicenseKey = async () => {
+    if (!licenseKey) return;
+    await navigator.clipboard.writeText(licenseKey);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const loadData = async () => {
     try {
-      const [statusData, resultsData] = await Promise.all([
+      const [statusData, resultsData, paymentsData] = await Promise.all([
         monitoringApi.getStatus(),
         monitoringApi.getResults(undefined, 10),
+        paymentApi.getMyPayments().catch(() => []),
       ]);
       setStatus(statusData);
       setResults(resultsData);
+      const approvedPayment = Array.isArray(paymentsData)
+        ? paymentsData.find((p: any) => p.license_key && p.status === "approved")
+        : null;
+      setLicenseKey(approvedPayment?.license_key ?? null);
+      setLicensePlan(approvedPayment?.plan_key ?? null);
     } catch (err) {
       console.error("Failed to load data:", err);
     } finally {
@@ -143,6 +160,38 @@ export default function DashboardPage() {
             <Link href="/dashboard/payments" className="btn-gradient text-sm !py-2.5 flex items-center gap-2">
               {td.subscribeNow} <ArrowRight className="w-4 h-4" />
             </Link>
+          </div>
+        </motion.div>
+      )}
+
+      {/* License Key Card */}
+      {licenseKey && (
+        <motion.div initial={fadeUp.hidden} animate={fadeUp.visible} className="glass-card p-6 border-accent-green/30 bg-accent-green/5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-accent-green/10 flex items-center justify-center">
+              <ShieldCheck className="w-5 h-5 text-accent-green" />
+            </div>
+            <div>
+              <div className="font-semibold text-accent-green">Your Desktop License Key</div>
+              <div className="text-xs text-gray-400">
+                {licensePlan ? licensePlan.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Desktop Plan"} • Install it in the desktop app to activate
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 bg-black/30 rounded-xl px-4 py-3 border border-white/10">
+            <Key className="w-4 h-4 text-accent-green shrink-0" />
+            <code className="flex-1 text-sm font-mono text-accent-green tracking-wider break-all">{licenseKey}</code>
+            <button
+              onClick={copyLicenseKey}
+              className="ml-2 p-1.5 rounded-lg hover:bg-white/10 transition-colors shrink-0"
+              title="Copy license key"
+            >
+              {copied ? (
+                <Check className="w-4 h-4 text-accent-green" />
+              ) : (
+                <Copy className="w-4 h-4 text-gray-400" />
+              )}
+            </button>
           </div>
         </motion.div>
       )}

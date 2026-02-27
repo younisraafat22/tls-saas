@@ -36,13 +36,15 @@ async def submit_payment(
     if not plan:
         raise HTTPException(400, "Invalid plan")
 
-    # Validate branch exists
-    branch_result = await db.execute(
-        select(Branch).where(Branch.id == body.branch_id, Branch.is_active == True)
-    )
-    branch = branch_result.scalar_one_or_none()
-    if not branch:
-        raise HTTPException(400, "Invalid or inactive branch")
+    # Validate branch exists (optional — branches are now configured in the desktop app)
+    branch = None
+    if body.branch_id:
+        branch_result = await db.execute(
+            select(Branch).where(Branch.id == body.branch_id, Branch.is_active == True)
+        )
+        branch = branch_result.scalar_one_or_none()
+        if not branch:
+            raise HTTPException(400, "Invalid or inactive branch")
 
     # Require at least a reference number or a screenshot
     if not body.reference.strip() and not body.screenshot_data:
@@ -89,7 +91,7 @@ async def submit_payment(
         "method": body.method.value,
         "reference": body.reference,
         "plan": plan.display_name,
-        "branch": branch.name,
+        "branch": branch.name if branch else None,
     })
 
     return MessageResponse(

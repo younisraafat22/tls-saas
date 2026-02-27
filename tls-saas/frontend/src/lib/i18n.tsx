@@ -71,6 +71,7 @@ export const translations = {
       sub: "Choose the plan that fits your needs. No hidden fees, cancel anytime.",
       perMonth: "/mo",
       getStarted: "Get Started",
+      startTrial: "Start Free Trial",
       footer: "Pay via Vodafone Cash or Instapay. Subscription activated within a few hours.",
     },
     faq: {
@@ -81,7 +82,7 @@ export const translations = {
         { q: "Do I need to keep my computer on?", a: "No! Everything runs on our server 24/7. You just need an internet connection to receive notifications — on your phone, tablet, or any device." },
         { q: "How fast will I be notified?", a: "Within seconds of detecting available slots. Our system sends notifications via multiple channels simultaneously to maximize your chances of booking." },
         { q: "What payment methods do you accept?", a: "We currently accept Vodafone Cash and Instapay. After payment, our team verifies and activates your subscription, usually within a few hours." },
-        { q: "Can I monitor multiple branches?", a: "Each subscription is tied to one specific branch of your choice. If you need to monitor multiple branches, you'll need a separate subscription for each." },
+        { q: "Can I monitor multiple branches?", a: "Yes — you set your preferred branches directly in the desktop app after activating your license. You can configure which branches to monitor during setup." },
         { q: "What happens when my subscription expires?", a: "Monitoring stops and you won't receive notifications. You can renew at any time to resume monitoring." },
         { q: "Is this an early access service?", a: "Yes — this is an early access release. While we strive for reliability, we cannot guarantee 100% uptime or uninterrupted monitoring. By using the service you agree to our Terms & Conditions." },
       ],
@@ -178,12 +179,13 @@ export const translations = {
     },
     planFeatures: ["Sheikh Zayed & Hurghada branches", "Individual appointment monitoring", "Email notifications", "Web push notifications", "Real-time dashboard"],
     planFeaturesMap: {
-      legalization: ["One branch of your choice (Sheikh Zayed or Hurghada)", "Email & web push notifications", "Real-time dashboard", "30-minute check interval", "No TLS credentials needed", "Desktop app — PC must stay on"],
-      visa: ["One branch of your choice (El-Sheikh Zayed, Hurghada, New Cairo or Alexandria)", "Individual check using your TLS credentials", "Email & web push notifications", "Real-time dashboard", "30-minute check interval", "Desktop app — PC must stay on"],
+      trial: ["3 checks per day (free)", "Email notifications", "Real-time dashboard", "No payment needed", "Desktop app — PC must stay on"],
+      legalization: ["Set your preferred branches in the app", "Email & web push notifications", "Real-time dashboard", "30-minute check interval", "No TLS credentials needed", "Desktop app — PC must stay on"],
+      visa: ["Set your preferred branches in the app", "Individual check using your TLS credentials", "Email & web push notifications", "Real-time dashboard", "30-minute check interval", "Desktop app — PC must stay on"],
       premium: ["Server-based monitoring — no PC needed", "Legalization & visa branches covered", "Email & web push notifications", "Real-time dashboard", "Priority support", "30-minute check interval"],
     } as Record<string, string[]>,
     branchNames: { "Sheikh Zayed": "Sheikh Zayed", "Hurghada": "Hurghada", "New Cairo": "New Cairo", "Alexandria": "Alexandria", "El-Sheikh Zayed - Visa": "El-Sheikh Zayed - Visa", "Hurghada - Visa": "Hurghada - Visa", "New Cairo - Visa": "New Cairo - Visa", "Alexandria - Visa": "Alexandria - Visa", "Sheikh Zayed - Normal Legalization": "Sheikh Zayed - Normal Legalization", "Sheikh Zayed - Students Legalization": "Sheikh Zayed - Students Legalization", "Hurghada - Normal Legalization": "Hurghada - Normal Legalization", "Hurghada - Students Legalization": "Hurghada - Students Legalization" } as Record<string, string>,
-    planNames: { "legalization": "Legalization Monitor", "visa": "Visa Monitor", "premium": "Premium", "Visa Monitor": "Visa Monitor", "Legalization Monitor": "Legalization Monitor" } as Record<string, string>,
+    planNames: { "trial": "Free Trial", "legalization": "Legalization Monitor", "visa": "Visa Monitor", "premium": "Premium", "Visa Monitor": "Visa Monitor", "Legalization Monitor": "Legalization Monitor" } as Record<string, string>,
     planDesc: { "legalization": "Monitor legalization branches for appointment availability", "visa": "Individual per-user check for your personal TLS visa appointment" } as Record<string, string>,
     login: {
       title: "Welcome Back",
@@ -451,6 +453,7 @@ export const translations = {
       sub: "اختر الخطة المناسبة لك. لا رسوم خفية، يمكن الإلغاء في أي وقت.",
       perMonth: "/شهر",
       getStarted: "ابدأ الآن",
+      startTrial: "ابدأ التجربة المجانية",
       footer: "الدفع عبر فودافون كاش أو إنستاباي. يُفعَّل الاشتراك خلال ساعات قليلة.",
     },
     faq: {
@@ -558,12 +561,13 @@ export const translations = {
     },
     planFeatures: ["فروع الشيخ زايد والغردقة", "مراقبة مواعيد فردية", "تنبيهات بريد إلكتروني", "إشعارات الويب", "لوحة تحكم لحظية"],
     planFeaturesMap: {
-      legalization: ["فرع واحد حسب اختيارك (الشيخ زايد أو الغردقة)", "تنبيهات بريد إلكتروني وإشعارات ويب", "لوحة تحكم لحظية", "فحص كل 30 دقيقة", "لا حاجة لبيانات TLS", "تطبيق سطح مكتب — يجب تشغيل الحاسوب"],
-      visa: ["فرع واحد حسب اختيارك (الشيخ زايد، الغردقة، القاهرة الجديدة، أو الإسكندرية)", "فحص فردي ببيانات TLS الخاصة بك", "تنبيهات بريد إلكتروني وإشعارات ويب", "لوحة تحكم لحظية", "فحص كل 30 دقيقة", "تطبيق سطح مكتب — يجب تشغيل الحاسوب"],
+      trial: ["3 فحوصات يومياً (مجاناً)", "تنبيهات بريد إلكتروني", "لوحة تحكم لحظية", "لا يلزم دفع", "تطبيق سطح مكتب — يجب تشغيل الحاسوب"],
+      legalization: ["اختر فروعك المفضلة من التطبيق", "تنبيهات بريد إلكتروني وإشعارات ويب", "لوحة تحكم لحظية", "فحص كل 30 دقيقة", "لا حاجة لبيانات TLS", "تطبيق سطح مكتب — يجب تشغيل الحاسوب"],
+      visa: ["اختر فروعك المفضلة من التطبيق", "فحص فردي ببيانات TLS الخاصة بك", "تنبيهات بريد إلكتروني وإشعارات ويب", "لوحة تحكم لحظية", "فحص كل 30 دقيقة", "تطبيق سطح مكتب — يجب تشغيل الحاسوب"],
       premium: ["مراقبة عبر الخادم — لا حاجة لإبقاء الحاسوب مشغلا", "فروع التوثيق والفيزا مغطاة", "تنبيهات بريد إلكتروني وإشعارات ويب", "لوحة تحكم لحظية", "دعم ذو أولوية", "فحص كل 30 دقيقة"],
     } as Record<string, string[]>,
     branchNames: { "Sheikh Zayed": "الشيخ زايد", "Hurghada": "الغردقة", "New Cairo": "القاهرة الجديدة", "Alexandria": "الإسكندرية", "El-Sheikh Zayed - Visa": "الشيخ زايد - فيزا", "Hurghada - Visa": "الغردقة - فيزا", "New Cairo - Visa": "القاهرة الجديدة - فيزا", "Alexandria - Visa": "الإسكندرية - فيزا", "Sheikh Zayed - Normal Legalization": "الشيخ زايد - توثيق عادي", "Sheikh Zayed - Students Legalization": "الشيخ زايد - توثيق الطلاب", "Hurghada - Normal Legalization": "الغردقة - توثيق عادي", "Hurghada - Students Legalization": "الغردقة - توثيق الطلاب" } as Record<string, string>,
-    planNames: { "legalization": "مراقبة التوثيق", "visa": "مراقبة الفيزا", "premium": "بريميوم", "Visa Monitor": "مراقبة الفيزا", "Legalization Monitor": "مراقبة التوثيق" } as Record<string, string>,
+    planNames: { "trial": "تجربة مجانية", "legalization": "مراقبة التوثيق", "visa": "مراقبة الفيزا", "premium": "بريميوم", "Visa Monitor": "مراقبة الفيزا", "Legalization Monitor": "مراقبة التوثيق" } as Record<string, string>,
     planDesc: { "legalization": "مراقبة فروع التوثيق لتوفر المواعيد", "visa": "فحص فردي لكل مستخدم باستخدام بيانات TLS الخاصة به" } as Record<string, string>,
     login: {
       title: "مرحبًا بعودتك",
@@ -831,6 +835,7 @@ export const translations = {
       sub: "Wähle den Plan, der zu dir passt. Keine versteckten Kosten, jederzeit kündbar.",
       perMonth: "/Monat",
       getStarted: "Loslegen",
+      startTrial: "Kostenlos testen",
       footer: "Zahlung per Vodafone Cash oder Instapay. Abonnement wird innerhalb weniger Stunden aktiviert.",
     },
     faq: {
@@ -938,12 +943,13 @@ export const translations = {
     },
     planFeatures: ["Sheikh Zayed & Hurghada Filialen", "Individuelle Terminüberwachung", "E-Mail-Benachrichtigungen", "Web-Push-Benachrichtigungen", "Echtzeit-Dashboard"],
     planFeaturesMap: {
-      legalization: ["Eine Filiale deiner Wahl (Sheikh Zayed oder Hurghada)", "E-Mail- & Web-Push-Benachrichtigungen", "Echtzeit-Dashboard", "30-Minuten-Prüfintervall", "Keine TLS-Zugangsdaten benötigt", "Desktop-App — PC muss eingeschaltet bleiben"],
-      visa: ["Eine Filiale deiner Wahl (Sheikh Zayed, Hurghada, Neu-Kairo oder Alexandria)", "Individuelle Prüfung mit deinen TLS-Zugangsdaten", "E-Mail- & Web-Push-Benachrichtigungen", "Echtzeit-Dashboard", "30-Minuten-Prüfintervall", "Desktop-App — PC muss eingeschaltet bleiben"],
+      trial: ["3 Prüfungen pro Tag (kostenlos)", "E-Mail-Benachrichtigungen", "Echtzeit-Dashboard", "Keine Zahlung erforderlich", "Desktop-App — PC muss eingeschaltet bleiben"],
+      legalization: ["Lege bevorzugte Filialen in der App fest", "E-Mail- & Web-Push-Benachrichtigungen", "Echtzeit-Dashboard", "30-Minuten-Prüfintervall", "Keine TLS-Zugangsdaten benötigt", "Desktop-App — PC muss eingeschaltet bleiben"],
+      visa: ["Lege bevorzugte Filialen in der App fest", "Individuelle Prüfung mit deinen TLS-Zugangsdaten", "E-Mail- & Web-Push-Benachrichtigungen", "Echtzeit-Dashboard", "30-Minuten-Prüfintervall", "Desktop-App — PC muss eingeschaltet bleiben"],
       premium: ["Server-basierte Überwachung — kein PC erforderlich", "Beglaubigungs- & Visum-Filialen abgedeckt", "E-Mail- & Web-Push-Benachrichtigungen", "Echtzeit-Dashboard", "Prioritäts-Support", "30-Minuten-Prüfintervall"],
     } as Record<string, string[]>,
     branchNames: { "Sheikh Zayed": "Sheikh Zayed", "Hurghada": "Hurghada", "New Cairo": "Neu-Kairo", "Alexandria": "Alexandria", "El-Sheikh Zayed - Visa": "Sheikh Zayed - Visum", "Hurghada - Visa": "Hurghada - Visum", "New Cairo - Visa": "Neu-Kairo - Visum", "Alexandria - Visa": "Alexandria - Visum", "Sheikh Zayed - Normal Legalization": "Sheikh Zayed - Normale Beglaubigung", "Sheikh Zayed - Students Legalization": "Sheikh Zayed - Studenten-Beglaubigung", "Hurghada - Normal Legalization": "Hurghada - Normale Beglaubigung", "Hurghada - Students Legalization": "Hurghada - Studenten-Beglaubigung" } as Record<string, string>,
-    planNames: { "legalization": "Beglaubigungs-Monitor", "visa": "Visum-Monitor", "premium": "Premium", "Visa Monitor": "Visum-Monitor", "Legalization Monitor": "Beglaubigungs-Monitor" } as Record<string, string>,
+    planNames: { "trial": "Kostenlose Testversion", "legalization": "Beglaubigungs-Monitor", "visa": "Visum-Monitor", "premium": "Premium", "Visa Monitor": "Visum-Monitor", "Legalization Monitor": "Beglaubigungs-Monitor" } as Record<string, string>,
     planDesc: { "legalization": "Überwache Beglaubigungsfilialen auf Terminverfügbarkeit", "visa": "Individuelle Prüfung für deinen persönlichen TLS-Visumtermin" } as Record<string, string>,
     login: {
       title: "Willkommen zurück",

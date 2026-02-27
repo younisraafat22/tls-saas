@@ -69,40 +69,43 @@ except ImportError:
 
 def _get_chrome_major_version() -> int | None:
     """Detect the installed Chrome/Chromium major version number.
-    Returns e.g. 145 or None if undetectable."""
-    import subprocess
+    Returns e.g. 145 or None if undetectable.
+    Uses registry first to avoid briefly launching Chrome as a subprocess."""
     import re
-    candidates = [
-        os.path.join(os.environ.get('PROGRAMFILES', ''), 'Google', 'Chrome', 'Application', 'chrome.exe'),
-        os.path.join(os.environ.get('PROGRAMFILES(X86)', ''), 'Google', 'Chrome', 'Application', 'chrome.exe'),
-        os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Google', 'Chrome', 'Application', 'chrome.exe'),
-    ]
-    for path in candidates:
-        if not os.path.exists(path):
-            continue
-        try:
-            out = subprocess.check_output(
-                [path, '--version'],
-                stderr=subprocess.DEVNULL,
-                timeout=5,
-            ).decode('utf-8', errors='ignore')
-            m = re.search(r'(\d+)\.', out)
-            if m:
-                return int(m.group(1))
-        except Exception:
-            pass
-    # Fallback: read version from registry
+    # 1) Registry (fast, no Chrome launch)
     try:
         import winreg
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
+        for reg_path in [
             r'Software\Google\Chrome\BLBeacon',
-        )
-        version, _ = winreg.QueryValueEx(key, 'version')
-        winreg.CloseKey(key)
-        m = re.search(r'(\d+)\.', str(version))
-        if m:
-            return int(m.group(1))
+            r'Software\Wow6432Node\Google\Chrome\BLBeacon',
+        ]:
+            for hive in [winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE]:
+                try:
+                    key = winreg.OpenKey(hive, reg_path)
+                    version, _ = winreg.QueryValueEx(key, 'version')
+                    winreg.CloseKey(key)
+                    m = re.search(r'(\d+)\.', str(version))
+                    if m:
+                        return int(m.group(1))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    # 2) Fallback: read from chrome.exe file version (no subprocess launch)
+    try:
+        import win32api
+        candidates = [
+            os.path.join(os.environ.get('PROGRAMFILES', ''), 'Google', 'Chrome', 'Application', 'chrome.exe'),
+            os.path.join(os.environ.get('PROGRAMFILES(X86)', ''), 'Google', 'Chrome', 'Application', 'chrome.exe'),
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        ]
+        for path in candidates:
+            if os.path.exists(path):
+                info = win32api.GetFileVersionInfo(path, '\\')
+                ms = info['FileVersionMS']
+                major = ms >> 16
+                if major:
+                    return int(major)
     except Exception:
         pass
     return None
@@ -191,12 +194,11 @@ class TLSCheckerService:
                     return
     
     def _hide_chrome_window(self):
-        """Hide Chrome window in background mode - call after page loads successfully."""
+        """Hide Chrome window in background mode."""
         if self._window_hidden or not Config.BROWSER_HEADLESS or not self.driver:
             return
-        
+
         try:
-            self._log("[DEBUG] Hiding Chrome window (background mode)...")
             import ctypes
             import ctypes.wintypes
             import time as _time
@@ -204,7 +206,6 @@ class TLSCheckerService:
             # Move window off-screen but keep it at a usable size
             self.driver.set_window_position(-3000, -3000)
             self.driver.set_window_size(1920, 1080)
-            self._log("[DEBUG] Chrome window moved off-screen (-3000, -3000)")
             
             # Wait for window to stabilize
             _time.sleep(2)
@@ -245,14 +246,12 @@ class TLSCheckerService:
                     user32.EnumWindows(EnumWindowsProc(callback), 0)
                 
                 hide_chrome_from_taskbar()
-                self._log("[DEBUG] Chrome hidden from taskbar")
-            except Exception as taskbar_err:
-                self._log(f"[DEBUG] Could not hide from taskbar: {taskbar_err}")
-            
+            except Exception:
+                pass
+
             self._window_hidden = True
-        except Exception as hide_err:
-            self._log(f"[DEBUG] Window hiding error: {hide_err}")
-    
+        except Exception:
+            pass
     def log(self, message: str):
         """Public log method (alias for _log)"""
         self._log(message)
@@ -320,11 +319,6 @@ class TLSCheckerService:
     def _setup_driver(self):
         """Setup Selenium driver"""
         try:
-            # Browser initialization (silent)
-            self._log(f"[DEBUG] _setup_driver called. SELENIUMBASE_AVAILABLE={SELENIUMBASE_AVAILABLE}, frozen={getattr(sys, 'frozen', False)}")
-            
-            # For installed app: redirect driver paths to writable AppData
-            self._redirect_driver_paths_for_frozen()
 
             # Use AppData for browser downloads to avoid permission issues
             from config import BASE_DIR
@@ -351,23 +345,20 @@ class TLSCheckerService:
                         uc_exe = os.path.join(_Patcher.data_path, "undetected_chromedriver.exe")
                         if os.path.exists(uc_exe):
                             os.remove(uc_exe)
-                            self._log(f"[DEBUG] Cleared patcher binary: {uc_exe}")
                         legacy_exe = os.path.join(
                             os.environ.get("APPDATA", ""),
                             "undetected_chromedriver", "undetected_chromedriver.exe"
                         )
                         if os.path.exists(legacy_exe):
                             os.remove(legacy_exe)
-                            self._log("[DEBUG] Cleared legacy UC binary")
-                    except Exception as _e:
-                        self._log(f"[DEBUG] Cache clear skipped: {_e}")
+                    except Exception:
+                        pass
 
                     # Detect Chrome version and pass it as a numeric version_main.
                     # Passing "keep" or None causes the patcher to fetch the latest
                     # chromedriver version from the internet (ignoring installed Chrome).
                     chrome_ver = _get_chrome_major_version()
                     driver_ver = str(chrome_ver) if chrome_ver else "keep"
-                    self._log(f"[DEBUG] Chrome v{chrome_ver}, using driver_version={driver_ver}")
 
                     driver_kwargs = {
                         "uc": True,
@@ -388,13 +379,9 @@ class TLSCheckerService:
                                 break
                     
                     self.driver = Driver(**driver_kwargs)
-                    self._log(f"[DEBUG] SeleniumBase Driver created successfully. BROWSER_HEADLESS={Config.BROWSER_HEADLESS}")
                     if Config.BROWSER_HEADLESS:
-                        self._log("[DEBUG] Window hiding deferred until after first page load...")
-                        # Don't hide immediately - let Chrome initialize first
-                        # Window hiding will happen after first successful page load
+                        self._hide_chrome_window()
                     else:
-                        self._log("[DEBUG] Browser running in visible mode")
                         self.driver.maximize_window()
                     self._is_seleniumbase = True
                     return True
@@ -441,7 +428,6 @@ class TLSCheckerService:
                     pass
 
                 chrome_ver_uc = _get_chrome_major_version()
-                self._log(f"[DEBUG] UC fallback: Chrome v{chrome_ver_uc}")
                 # Clear any stale uc binary that may be wrong version
                 try:
                     from seleniumbase.undetected.patcher import Patcher as _P2
@@ -528,35 +514,40 @@ class TLSCheckerService:
     
     # ── reCAPTCHA / Cloudflare / anti-bot helpers ───────────────────
 
+    def _is_cloudflare_challenge_page(self) -> bool:
+        """Return True only if the current page is an active Cloudflare challenge.
+        Uses page title (most reliable signal) rather than broad keywords that
+        also appear on normal pages (e.g. 'cloudflare', 'ray id' in footers)."""
+        try:
+            title = self.driver.title.lower()
+            # These titles are ONLY shown on actual Cloudflare challenge pages
+            if any(t in title for t in ["just a moment", "attention required", "one more step", "checking your browser"]):
+                return True
+            # Also check for the specific challenge-only DOM element
+            try:
+                self.driver.find_element(By.ID, "cf-challenge-running")
+                return True
+            except Exception:
+                pass
+        except Exception:
+            pass
+        return False
+
     def _detect_cloudflare(self, max_attempts: int = 2) -> bool:
         """Detect Cloudflare challenge / Turnstile and wait for it to pass.
         Retries with page refresh if challenge doesn't clear.
         """
         for attempt in range(1, max_attempts + 1):
             try:
-                page_src = self.driver.page_source.lower()
-                cf_indicators = [
-                    "cf-browser-verification",
-                    "cloudflare",
-                    "cf_chl_opt",
-                    "turnstile",
-                    "just a moment",
-                    "checking your browser",
-                    "ray id",
-                ]
-                if any(ind in page_src for ind in cf_indicators):
+                if self._is_cloudflare_challenge_page():
                     self._log(f"🛡️ Cloudflare challenge detected (attempt {attempt}/{max_attempts})...")
                     for _ in range(30):  # wait up to 30 seconds
                         time.sleep(1)
                         if not self.is_running:
                             return False
-                        try:
-                            page_src = self.driver.page_source.lower()
-                            if not any(ind in page_src for ind in cf_indicators):
-                                self._log("✅ Cloudflare challenge passed")
-                                return True
-                        except Exception:
-                            pass
+                        if not self._is_cloudflare_challenge_page():
+                            self._log("✅ Cloudflare challenge passed")
+                            return True
                     
                     # Challenge didn't pass
                     if attempt < max_attempts:
@@ -567,7 +558,7 @@ class TLSCheckerService:
                         self._log("❌ Cloudflare challenge did not clear after retries")
                         return False
                 else:
-                    return True  # No Cloudflare detected
+                    return True  # No active Cloudflare challenge
             except Exception:
                 pass
         return True  # no Cloudflare detected
@@ -1201,8 +1192,26 @@ class TLSCheckerService:
             label = "Visa" if service_type == "visa" else "Legalization"
             if not is_retry:
                 self._log(f"Opening TLS {label} website...")
-            self.driver.get(target_url)
-            self._wait_random(4, 6)
+
+            # Use SeleniumBase's UC-specific open method when available.
+            # uc_open_with_reconnect disconnects CDP during page load so
+            # Cloudflare Turnstile cannot detect automation, then reconnects.
+            if self._is_seleniumbase:
+                try:
+                    self.driver.uc_open_with_reconnect(target_url, reconnect_time=4)
+                    # Give Turnstile a moment then try to click it automatically
+                    self._wait_random(2, 3)
+                    try:
+                        self.driver.uc_gui_click_captcha()
+                    except Exception:
+                        pass  # No Turnstile present, that's fine
+                except Exception:
+                    # Fallback to regular get if UC method not available
+                    self.driver.get(target_url)
+                    self._wait_random(4, 6)
+            else:
+                self.driver.get(target_url)
+                self._wait_random(4, 6)
 
             # Check again after page load
             if not self.is_running:
@@ -1211,11 +1220,13 @@ class TLSCheckerService:
             # Dismiss any unexpected alerts before proceeding
             self._dismiss_alert()
 
-            # Check for Cloudflare / Turnstile challenge
-            # For visa sites, UC mode typically handles Cloudflare automatically.
-            # We detect it and give it time to auto-resolve.
-            if not self._detect_cloudflare(max_attempts=2):
-                return False, "CLOUDFLARE_TIMEOUT: Cloudflare challenge did not pass. Will retry after interval."
+            # Check for Cloudflare / Turnstile challenge.
+            # When UC mode opened the URL, uc_open_with_reconnect already bypassed
+            # Cloudflare. We still verify the title just in case it wasn't fully solved.
+            if self._is_cloudflare_challenge_page():
+                self._log("🛡️ Cloudflare still active after UC open – waiting...")
+                if not self._detect_cloudflare(max_attempts=2):
+                    return False, "CLOUDFLARE_TIMEOUT: Cloudflare challenge did not pass. Will retry after interval."
             
             # Handle cookie consent banner (may block Login button)
             self._handle_cookie_consent()
@@ -2073,7 +2084,6 @@ class TLSCheckerService:
             
             # Store headless setting for _setup_driver
             Config.BROWSER_HEADLESS = use_headless
-            self._log(f"[DEBUG] Headless mode: {use_headless}, first_check_done: {settings.first_check_done}, settings.headless_mode: {settings.headless_mode}")
             
             # Get TLS credentials
             tls_email = settings.tls_email

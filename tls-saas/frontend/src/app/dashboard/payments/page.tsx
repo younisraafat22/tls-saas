@@ -23,19 +23,16 @@ const statusIcons: Record<string, React.ReactNode> = {
 
 export default function PaymentsPage() {
   const [plans, setPlans] = useState<any[]>([]);
-  const [branches, setBranches] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [activeSub, setActiveSub] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"subscribe" | "history">("subscribe");
   const { t } = useLanguage();
-  const getBranchName = (name: string) => t.branchNames[name] ?? name;
   const getPlanName = (planType: string, fallback: string) => t.planNames[planType] ?? fallback;
   const getPlanDesc = (planType: string, fallback: string) => t.planDesc[planType] ?? fallback;
 
   // Payment form
   const [selectedPlan, setSelectedPlan] = useState<number | null>(null);
-  const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState("vodafone_cash");
   const [reference, setReference] = useState("");
   const [screenshotData, setScreenshotData] = useState<string | null>(null);
@@ -49,14 +46,12 @@ export default function PaymentsPage() {
 
   const loadData = async () => {
     try {
-      const [plansData, branchesData, paymentsData, subData] = await Promise.all([
+      const [plansData, paymentsData, subData] = await Promise.all([
         subscriptionApi.getPlans(),
-        subscriptionApi.getBranches(),
         paymentApi.getMyPayments(),
         subscriptionApi.getActiveSubscription().catch(() => null),
       ]);
       setPlans(plansData);
-      setBranches(branchesData);
       setPayments(paymentsData);
       setActiveSub(subData?.subscription || null);
     } catch (err) {
@@ -75,11 +70,9 @@ export default function PaymentsPage() {
     reader.readAsDataURL(file);
   };
 
-  const selectedPlanType = plans.find((p) => p.id === selectedPlan)?.plan_type ?? "";
-
   const handleSubmitPayment = async () => {
-    if (!selectedPlan || !selectedBranch) {
-      setToast({ type: "error", msg: t.payment.errSelectPlanBranch });
+    if (!selectedPlan) {
+      setToast({ type: "error", msg: t.payment.errSelectPlan ?? t.payment.errSelectPlanBranch });
       setTimeout(() => setToast(null), 4000);
       return;
     }
@@ -94,7 +87,6 @@ export default function PaymentsPage() {
       const plan = plans.find((p) => p.id === selectedPlan);
       await paymentApi.submit({
         plan_type: plan?.plan_type || "",
-        branch_id: selectedBranch,
         amount: plan?.price_monthly || 0,
         method: paymentMethod,
         reference: reference.trim(),
@@ -105,7 +97,6 @@ export default function PaymentsPage() {
       setScreenshotData(null);
       setScreenshotName("");
       setSelectedPlan(null);
-      setSelectedBranch(null);
       loadData();
     } catch (err: any) {
       setToast({ type: "error", msg: err?.detail || t.payment.errSubmitFail });
@@ -230,57 +221,8 @@ export default function PaymentsPage() {
             })}
           </div>
 
-          {/* Branch / Embassy selection */}
-          {selectedPlan && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-              <h3 className="font-semibold mb-3 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-primary-500/20 text-primary-400 text-xs flex items-center justify-center font-bold">2</span>
-                {t.payment.selectBranchTitle}
-              </h3>
-              <p className="text-sm text-gray-400">
-                {plans.find(p => p.id === selectedPlan)?.plan_type === "visa"
-                  ? t.payment.selectBranchDesc_visa
-                  : t.payment.selectBranchDesc}
-              </p>
-              <div className="grid sm:grid-cols-2 gap-3">
-                {branches.filter((b: any) => {
-                  const plan = plans.find((p) => p.id === selectedPlan);
-                  if (plan?.plan_type === "premium") return b.is_active;
-                  const branchServiceType = plan?.plan_type === "visa" ? "visa" : "legalization";
-                  return b.is_active && b.service_type === branchServiceType;
-                }).map((branch: any) => {
-                  const isSelected = selectedBranch === branch.id;
-                  const isStudents = branch.name.toLowerCase().includes("students");
-                  return (
-                    <button
-                      key={branch.id}
-                      onClick={() => setSelectedBranch(branch.id)}
-                      className={`glass-card p-4 text-left transition-all ${
-                        isSelected ? "border-primary-500/50 ring-1 ring-primary-500/30" : "hover:border-white/10"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium text-sm">{getBranchName(branch.name)}</div>
-                          <div className={`text-xs mt-1 px-2 py-0.5 rounded-full inline-block ${
-                            isStudents
-                              ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                              : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                          }`}>
-                            {isStudents ? t.payment.studentsLabel : t.payment.normalLabel}
-                          </div>
-                        </div>
-                        {isSelected && <CheckCircle2 className="w-5 h-5 text-primary-400" />}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </motion.div>
-          )}
-
           {/* Payment instructions */}
-          {selectedPlan && selectedBranch && (
+          {selectedPlan && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 space-y-5">
               <h3 className="font-semibold flex items-center gap-2">
                 <CreditCard className="w-5 h-5 text-primary-400" /> {t.payment.paymentDetailsTitle}
@@ -409,8 +351,7 @@ export default function PaymentsPage() {
                 onClick={handleSubmitPayment}
                 disabled={
                   submitting ||
-                  (!reference.trim() && !screenshotData) ||
-                  !selectedBranch
+                  (!reference.trim() && !screenshotData)
                 }
                 className="btn-gradient w-full flex items-center justify-center gap-2 disabled:opacity-50"
               >

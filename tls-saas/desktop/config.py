@@ -88,7 +88,7 @@ class Config:
     }
 
     # Default Settings
-    DEFAULT_CHECK_INTERVAL = 60  # minutes (1 hour)
+    DEFAULT_CHECK_INTERVAL = 30  # minutes (every 30 minutes)
     DEFAULT_NOTIFICATION_TYPES = ["email", "windows"]
     
     # Browser Settings

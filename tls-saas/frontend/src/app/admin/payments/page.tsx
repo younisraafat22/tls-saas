@@ -38,12 +38,28 @@ export default function AdminPaymentsPage() {
     }
   };
 
-  const handleApprove = async (paymentId: number) => {
-    setProcessing(paymentId);
+  const handleApprove = async (payment: any) => {
+    setProcessing(payment.id);
     try {
-      await adminApi.approvePayment(paymentId);
-      setPayments((prev) => prev.map((p) => (p.id === paymentId ? { ...p, status: "approved" } : p)));
-      showToast("success", "Payment approved! Subscription activated.");
+      if (payment.hardware_id) {
+        // Desktop payment — generate license key and email it
+        const result = await adminApi.generateLicense(payment.id);
+        setPayments((prev) =>
+          prev.map((p) =>
+            p.id === payment.id ? { ...p, status: "approved", license_key: result.license_key } : p
+          )
+        );
+        if (result.email_sent) {
+          showToast("success", `License generated and emailed to ${result.submitter_email}`);
+        } else {
+          showToast("success", `License generated: ${result.license_key} — send manually to ${result.submitter_email || "customer"}`);
+        }
+      } else {
+        // Web subscription payment
+        await adminApi.approvePayment(payment.id);
+        setPayments((prev) => prev.map((p) => (p.id === payment.id ? { ...p, status: "approved" } : p)));
+        showToast("success", "Payment approved! Subscription activated and confirmation email sent.");
+      }
     } catch (err: any) {
       showToast("error", err?.detail || "Failed to approve");
     } finally {
@@ -349,7 +365,7 @@ export default function AdminPaymentsPage() {
                       {p.status === "pending" && (
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => handleApprove(p.id)}
+                            onClick={() => handleApprove(p)}
                             disabled={isProcessing}
                             className="px-3 py-1.5 bg-accent-green/10 text-accent-green rounded-lg text-xs font-medium hover:bg-accent-green/20 transition-colors disabled:opacity-50 flex items-center gap-1"
                           >

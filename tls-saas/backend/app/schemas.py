@@ -181,7 +181,7 @@ class UserCredentialPublic(BaseModel):
 
 class PaymentSubmitRequest(BaseModel):
     plan_type: PlanType
-    branch_id: int
+    branch_id: Optional[int] = None
     method: PaymentMethod
     reference: str = Field(default="", max_length=255, description="Transaction ID / reference")
     screenshot_data: Optional[str] = Field(default=None, description="Base64-encoded screenshot")
