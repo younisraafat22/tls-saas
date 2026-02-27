@@ -321,27 +321,44 @@ class TLSCheckerService:
                 original_cwd = os.getcwd()
                 os.chdir(str(BASE_DIR))
                 try:
-                    # Clean up stale cached undetected_chromedriver that may
-                    # be a different version than the installed Chrome browser.
+                    # Pre-seed the UC chromedriver cache with the correct version
+                    # so UC mode never tries to download a mismatched binary.
                     try:
                         import shutil
-                        uc_appdata = os.path.join(
-                            os.environ.get("APPDATA", ""),
-                            "undetected_chromedriver",
-                        )
-                        if os.path.isdir(uc_appdata):
-                            for item in os.listdir(uc_appdata):
-                                item_path = os.path.join(uc_appdata, item)
-                                try:
-                                    if os.path.isdir(item_path):
-                                        shutil.rmtree(item_path, ignore_errors=True)
-                                    else:
-                                        os.remove(item_path)
-                                except Exception:
-                                    pass
-                            self._log("[DEBUG] Cleared stale UC chromedriver cache")
-                    except Exception:
-                        pass
+
+                        # Find the correct chromedriver: frozen bundle first, then SB package
+                        src_driver = None
+                        if getattr(sys, 'frozen', False):
+                            # PyInstaller frozen: look in _MEIPASS / _internal
+                            for candidate in [
+                                os.path.join(sys._MEIPASS, 'seleniumbase', 'drivers', 'chromedriver.exe'),
+                                os.path.join(os.path.dirname(sys.executable), '_internal', 'seleniumbase', 'drivers', 'chromedriver.exe'),
+                            ]:
+                                if os.path.exists(candidate):
+                                    src_driver = candidate
+                                    break
+                        if not src_driver:
+                            # Development / installed package
+                            import seleniumbase as _sb
+                            candidate = os.path.join(os.path.dirname(_sb.__file__), 'drivers', 'chromedriver.exe')
+                            if os.path.exists(candidate):
+                                src_driver = candidate
+
+                        uc_appdata = os.path.join(os.environ.get('APPDATA', ''), 'undetected_chromedriver')
+                        uc_exe = os.path.join(uc_appdata, 'undetected_chromedriver.exe')
+                        os.makedirs(uc_appdata, exist_ok=True)
+
+                        if src_driver:
+                            # Replace whatever is in the cache with our known-good binary
+                            shutil.copy2(src_driver, uc_exe)
+                            self._log(f'[DEBUG] Pre-seeded UC cache with: {src_driver}')
+                        else:
+                            # No known-good binary found: at least clear any stale one
+                            if os.path.exists(uc_exe):
+                                os.remove(uc_exe)
+                                self._log('[DEBUG] Cleared stale UC chromedriver cache (no replacement found)')
+                    except Exception as _ce:
+                        self._log(f'[DEBUG] UC cache pre-seed failed (non-fatal): {_ce}')
 
                     # IMPORTANT: Do NOT use headless=True with uc=True!
                     # SeleniumBase UC Mode is detectable in headless mode.
