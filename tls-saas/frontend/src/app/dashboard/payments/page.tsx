@@ -99,7 +99,7 @@ export default function PaymentsPage() {
       setSelectedPlan(null);
       loadData();
     } catch (err: any) {
-      setToast({ type: "error", msg: err?.detail || t.payment.errSubmitFail });
+      setToast({ type: "error", msg: err?.message || err?.detail || t.payment.errSubmitFail });
     } finally {
       setSubmitting(false);
       setTimeout(() => setToast(null), 5000);
