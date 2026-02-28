@@ -290,27 +290,25 @@ export default function PaymentsPage() {
               )}
 
               {/* Device ID for Desktop License */}
-              {!isPremium && (
-                <div className="space-y-3 p-4 rounded-xl bg-primary-500/5 border border-primary-500/20">
-                  <div className="flex items-center gap-2 text-primary-400 text-sm font-semibold">
-                    <Hash className="w-4 h-4" /> Device ID (for Desktop App License)
-                  </div>
-                  <p className="text-xs text-gray-400">
-                    Paste your Device ID so we can generate a license key for your computer.
-                    You can find it in the desktop app under <strong>Settings → Device ID</strong>.
-                  </p>
-                  <div>
-                    <label className="text-xs text-gray-500 mb-1.5 block">Device ID</label>
-                    <input
-                      type="text"
-                      value={hardwareId}
-                      onChange={(e) => setHardwareId(e.target.value)}
-                      placeholder="e.g. A1B2C3D4E5F6..."
-                      className="input-field font-mono"
-                    />
-                  </div>
+              <div className="space-y-3 p-4 rounded-xl bg-primary-500/5 border border-primary-500/20">
+                <div className="flex items-center gap-2 text-primary-400 text-sm font-semibold">
+                  <Hash className="w-4 h-4" /> Device ID (for Desktop App License)
                 </div>
-              )}
+                <p className="text-xs text-gray-400">
+                  Paste your Device ID so we can generate a license key for your computer.
+                  You can find it in the desktop app under <strong>Settings → Device ID</strong>.
+                </p>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1.5 block">Device ID</label>
+                  <input
+                    type="text"
+                    value={hardwareId}
+                    onChange={(e) => setHardwareId(e.target.value)}
+                    placeholder="e.g. A1B2C3D4E5F6..."
+                    className="input-field font-mono"
+                  />
+                </div>
+              </div>
 
               {/* Method selection */}
               <div>
