@@ -31,6 +31,25 @@ PLANS = {
         "price": 0,
         "max_emails": 1,           # Trial: 1 email only
     },
+    # Base plan keys (used by backend license generation)
+    "legalization": {
+        "name": "Legalization",
+        "checks_per_day": 999999,
+        "min_interval": 60,
+        "duration_days": 30,
+        "price": 500,
+        "currency": "EGP",
+        "max_emails": 2,
+    },
+    "visa": {
+        "name": "Visa",
+        "checks_per_day": 999999,
+        "min_interval": 60,
+        "duration_days": 30,
+        "price": 500,
+        "currency": "EGP",
+        "max_emails": 2,
+    },
     "legalization_monthly": {
         "name": "Legalization",
         "checks_per_day": 48,      # 24h / 30min
@@ -325,6 +344,25 @@ def activate_license(key: str) -> tuple[bool, str]:
         "checks_today": 0,
         "checks_reset_date": now.date().isoformat(),
     }
+
+    # Fetch branch info from backend (if available)
+    try:
+        from config import Config
+        import requests
+        resp = requests.get(
+            f"{Config.BACKEND_URL}/api/payments/license-branch",
+            params={"license_key": key.strip().upper()},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            branch_data = resp.json()
+            if branch_data.get("branch_name"):
+                license_data["branch_name"] = branch_data["branch_name"]
+                license_data["branch_url"] = branch_data["branch_url"]
+                license_data["service_type"] = branch_data["service_type"]
+    except Exception:
+        pass  # Branch info is optional — don't block activation
+
     _write_license_file(license_data)
     return True, f"License activated! Type: {plan_info['name']}"
 
@@ -453,6 +491,9 @@ def get_license_status() -> dict | None:
         "checks_limit": plan_info["checks_per_day"],
         "min_interval": plan_info["min_interval"],
         "key": data.get("key", ""),
+        "branch_name": data.get("branch_name"),
+        "branch_url": data.get("branch_url"),
+        "service_type": data.get("service_type"),
         "message": f"License: {plan_info['name']}",
     }
 

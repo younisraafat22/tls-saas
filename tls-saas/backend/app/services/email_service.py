@@ -201,6 +201,72 @@ class EmailService:
             html_body=html,
         )
 
+    def send_check_error_alert(
+        self,
+        to_email: str,
+        user_name: str,
+        branch_name: str,
+        error_type: str,
+        error_message: str,
+    ) -> bool:
+        """Send an alert when a monitoring check finds invalid credentials or no application."""
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+        if "no application" in error_type.lower():
+            icon = "📋"
+            title = "No Application Found"
+            color = "#ffaa00"
+            explanation = (
+                "Our monitoring check could not find a TLS application under your account. "
+                "You need to <strong>create an application on the TLS website first</strong> "
+                "before we can monitor for available appointment slots."
+            )
+            action_text = "Create Application on TLS"
+            action_url = "https://visas-de.tlscontact.com"
+        else:
+            icon = "🔐"
+            title = "Invalid Credentials"
+            color = "#ff4444"
+            explanation = (
+                "Our monitoring check could not log in with the TLS credentials you provided. "
+                "Your email or password may be <strong>incorrect or expired</strong>. "
+                "Please update your credentials in your dashboard."
+            )
+            action_text = "Update Credentials"
+            action_url = f"{settings.FRONTEND_URL}/dashboard"
+
+        html = f"""
+        <div style="font-family:'Segoe UI',Arial;max-width:600px;margin:0 auto;background:#0a0e27;color:#fff;padding:0;">
+            <div style="background:linear-gradient(135deg,{color} 0%,#ff6600 100%);padding:30px;border-radius:16px 16px 0 0;text-align:center;">
+                <h1 style="margin:0;font-size:24px;color:#fff;">{icon} {title}</h1>
+            </div>
+            <div style="background:#141832;padding:30px;border-radius:0 0 16px 16px;">
+                <p>Hi {user_name or 'there'},</p>
+                <p>{explanation}</p>
+                <div style="background:#0a0e27;border:1px solid {color}40;border-radius:12px;padding:16px;margin:20px 0;">
+                    <div style="color:#8892b0;font-size:13px;">Branch</div>
+                    <div style="color:#fff;font-weight:600;margin-top:4px;">{branch_name}</div>
+                    <div style="color:#8892b0;font-size:13px;margin-top:12px;">Error</div>
+                    <div style="color:{color};margin-top:4px;font-size:13px;">{error_message}</div>
+                    <div style="color:#8892b0;font-size:13px;margin-top:12px;">Time</div>
+                    <div style="color:#fff;margin-top:4px;font-size:13px;">{now}</div>
+                </div>
+                <div style="text-align:center;">
+                    <a href="{action_url}" style="display:inline-block;background:linear-gradient(135deg,#00d9ff,#0066ff);color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;margin:20px 0;">{action_text} →</a>
+                </div>
+            </div>
+            <div style="text-align:center;padding:20px;color:#8892b0;font-size:12px;">
+                <p>TLS Appointment Checker — Automated monitoring alert.</p>
+            </div>
+        </div>
+        """
+
+        return self.send(
+            to_email=to_email,
+            subject=f"{icon} {title} — {branch_name}",
+            html_body=html,
+        )
+
     def send_license_key(self, to_email: str, customer_name: str, license_key: str, plan_name: str) -> bool:
         """Send a license key to the customer after admin approval."""
         html = f"""

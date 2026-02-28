@@ -48,20 +48,26 @@ export default function PaymentsPage() {
   // Device ID for desktop license binding
   const [hardwareId, setHardwareId] = useState("");
 
+  // Branch selection
+  const [branches, setBranches] = useState<any[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
+
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
     try {
-      const [plansData, paymentsData, subData] = await Promise.all([
+      const [plansData, paymentsData, subData, branchesData] = await Promise.all([
         subscriptionApi.getPlans(),
         paymentApi.getMyPayments(),
         subscriptionApi.getActiveSubscription().catch(() => null),
+        subscriptionApi.getBranches().catch(() => []),
       ]);
       setPlans(plansData);
       setPayments(paymentsData);
       setActiveSub(subData?.subscription || null);
+      setBranches(branchesData || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -81,9 +87,39 @@ export default function PaymentsPage() {
   const selectedPlanType = plans.find((p) => p.id === selectedPlan)?.plan_type ?? "";
   const isPremium = selectedPlanType === "premium";
 
+  // Reset branch selection when plan changes
+  useEffect(() => { setSelectedBranch(null); }, [selectedPlan]);
+
+  // Filter branches by selected plan type and deduplicate by URL (legalization Normal+Students share same URL)
+  const filteredBranches = (() => {
+    if (!selectedPlanType || isPremium) return [];
+    const serviceType = selectedPlanType === "visa" ? "visa" : "legalization";
+    const matching = branches.filter((b: any) => b.service_type === serviceType);
+    // Deduplicate by URL and clean display names
+    const seen = new Set<string>();
+    return matching.reduce((acc: any[], b: any) => {
+      if (!seen.has(b.url)) {
+        seen.add(b.url);
+        acc.push({
+          ...b,
+          displayName: b.name
+            .replace(/ - Normal Legalization$/, "")
+            .replace(/ - Students Legalization$/, "")
+            .replace(/ - Visa$/, ""),
+        });
+      }
+      return acc;
+    }, []);
+  })();
+
   const handleSubmitPayment = async () => {
     if (!selectedPlan) {
       setToast({ type: "error", msg: t.payment.errSelectPlanBranch });
+      setTimeout(() => setToast(null), 4000);
+      return;
+    }
+    if (!isPremium && filteredBranches.length > 0 && !selectedBranch) {
+      setToast({ type: "error", msg: "Please select a branch." });
       setTimeout(() => setToast(null), 4000);
       return;
     }
@@ -110,12 +146,14 @@ export default function PaymentsPage() {
         tls_email: isPremium ? tlsEmail.trim() : undefined,
         tls_password: isPremium ? tlsPassword.trim() : undefined,
         hardware_id: hardwareId.trim() || undefined,
+        branch_id: selectedBranch || undefined,
       });
       setToast({ type: "success", msg: t.payment.successSubmit });
       setReference("");
       setScreenshotData(null);
       setScreenshotName("");
       setSelectedPlan(null);
+      setSelectedBranch(null);
       setTlsEmail("");
       setTlsPassword("");
       setHardwareId("");
@@ -243,6 +281,40 @@ export default function PaymentsPage() {
             })}
           </div>
 
+          {/* Branch selection — shown for non-premium plans */}
+          {selectedPlan && !isPremium && filteredBranches.length > 0 && (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 space-y-3">
+              <h3 className="font-semibold flex items-center gap-2 text-sm">
+                <AlertCircle className="w-4 h-4 text-primary-400" /> Select Your Branch
+              </h3>
+              <p className="text-xs text-gray-400">Choose the TLS branch you want to monitor for appointments.</p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {filteredBranches.map((branch: any) => {
+                  const isSelected = selectedBranch === branch.id;
+                  return (
+                    <button
+                      key={branch.id}
+                      onClick={() => setSelectedBranch(branch.id)}
+                      className={`p-4 rounded-xl text-left transition-all border ${
+                        isSelected
+                          ? "border-primary-500/50 bg-primary-500/10 ring-1 ring-primary-500/30"
+                          : "border-white/5 bg-dark-700/50 hover:border-white/10"
+                      }`}
+                    >
+                      <div className="font-medium text-sm">{branch.displayName}</div>
+                      <div className="text-xs text-gray-500 capitalize mt-0.5">{branch.service_type}</div>
+                      {isSelected && (
+                        <div className="mt-2 text-primary-400 text-xs flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Selected
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+
           {/* Payment instructions */}
           {selectedPlan && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 space-y-5">
@@ -289,14 +361,15 @@ export default function PaymentsPage() {
                 </div>
               )}
 
-              {/* Device ID for Desktop License */}
+              {/* Device ID for Desktop License — not needed for Premium (server-monitored) */}
+              {!isPremium && (
               <div className="space-y-3 p-4 rounded-xl bg-primary-500/5 border border-primary-500/20">
                 <div className="flex items-center gap-2 text-primary-400 text-sm font-semibold">
                   <Hash className="w-4 h-4" /> Device ID (for Desktop App License)
                 </div>
                 <p className="text-xs text-gray-400">
                   Paste your Device ID so we can generate a license key for your computer.
-                  You can find it in the desktop app under <strong>Settings → Device ID</strong>.
+                  You can find it on the <strong>main screen when you first open the desktop app</strong>.
                 </p>
                 <div>
                   <label className="text-xs text-gray-500 mb-1.5 block">Device ID</label>
@@ -309,6 +382,7 @@ export default function PaymentsPage() {
                   />
                 </div>
               </div>
+              )}
 
               {/* Method selection */}
               <div>

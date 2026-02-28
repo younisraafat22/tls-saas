@@ -137,6 +137,27 @@ async def _notify_admin_login_failure(branch_name: str, user_email: str, error: 
         logger.error(f"Failed to send admin login failure email: {e}")
 
 
+def _is_no_application_error(error: str) -> bool:
+    err = (error or "").lower()
+    return "no application" in err
+
+
+async def _notify_user_check_error(user, branch_name: str, error: str):
+    """Send email to user when their check encounters login failure or no-application error."""
+    try:
+        error_type = "no_application" if _is_no_application_error(error) else "invalid_credentials"
+        email_service.send_check_error_alert(
+            to_email=user.email,
+            user_name=user.full_name or user.email,
+            branch_name=branch_name,
+            error_type=error_type,
+            error_message=error,
+        )
+        logger.info(f"Sent check error email to {user.email}: {error_type}")
+    except Exception as e:
+        logger.error(f"Failed to send check error email to {user.email}: {e}")
+
+
 async def _save_screenshot(result: dict, branch_name: str) -> str:
     if not result.get("screenshot"):
         return ""
@@ -350,12 +371,17 @@ class SchedulerService:
                     cred.last_error = res["error"]
                     consecutive_failures += 1
                     logger.warning(f"[{branch.name}] Login failure #{consecutive_failures} for {user.email}")
+                    await _notify_user_check_error(user, branch.name, res["error"])
                     if consecutive_failures >= 2:
                         await db.commit()
                         await _notify_admin_login_failure(branch.name, user.email, res["error"])
                         await _emit_log("error", "2 consecutive login failures  admin notified", branch.name)
                         return
                     continue
+
+                # Check for "no application" error and notify user
+                if _is_no_application_error(res.get("error", "")):
+                    await _notify_user_check_error(user, branch.name, res["error"])
 
                 cred.last_error = res.get("error", "")
                 consecutive_failures = 0
@@ -414,10 +440,16 @@ class SchedulerService:
                     cred.last_error = res["error"]
                     await db.commit()
                     await _notify_admin_login_failure(branch.name, user.email, res["error"])
+                    await _notify_user_check_error(user, branch.name, res["error"])
                     await _emit_log("error", f"Login failed for {user.email}  admin notified", branch.name)
                     continue
 
                 cred.last_error = res.get("error", "")
+                await db.flush()
+
+                # Check for "no application" error and notify user
+                if _is_no_application_error(res.get("error", "")):
+                    await _notify_user_check_error(user, branch.name, res["error"])
                 await db.flush()
 
                 screenshot_path = await _save_screenshot(res, branch.name)

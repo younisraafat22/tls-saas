@@ -172,7 +172,12 @@ class VisaCheckerSB:
 
             # Navigate to booking
             if not self._navigate_to_booking(driver, log, branch_url):
-                result["error"] = "Could not navigate to appointment booking page"
+                # Check logs for specific "no application" error
+                no_app_logs = [l for l in result["logs"] if "no application" in l.get("message", "").lower()]
+                if no_app_logs:
+                    result["error"] = "No application found on TLS website"
+                else:
+                    result["error"] = "Could not navigate to appointment booking page"
                 try:
                     result["screenshot"] = driver.get_screenshot_as_png()
                 except Exception:

@@ -187,3 +187,38 @@ async def payment_status(
         "admin_notes": payment.admin_notes,
         "processed_at": payment.processed_at,
     }
+
+
+@router.get("/license-branch")
+async def get_license_branch(
+    license_key: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return branch info associated with a license key (used by desktop app after activation)."""
+    result = await db.execute(
+        select(Payment).where(Payment.license_key == license_key.strip().upper())
+    )
+    payment = result.scalar_one_or_none()
+    if not payment or not payment.branch_id:
+        return {"branch_name": None, "branch_url": None, "service_type": None}
+
+    branch_result = await db.execute(
+        select(Branch).where(Branch.id == payment.branch_id)
+    )
+    branch = branch_result.scalar_one_or_none()
+    if not branch:
+        return {"branch_name": None, "branch_url": None, "service_type": None}
+
+    # Clean display name (strip suffixes)
+    display_name = (
+        branch.name
+        .replace(" - Normal Legalization", "")
+        .replace(" - Students Legalization", "")
+        .replace(" - Visa", "")
+    )
+
+    return {
+        "branch_name": display_name,
+        "branch_url": branch.url,
+        "service_type": branch.service_type.value,
+    }
