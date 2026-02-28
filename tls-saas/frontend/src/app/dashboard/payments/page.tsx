@@ -6,7 +6,7 @@ import { paymentApi, subscriptionApi } from "@/lib/api";
 import { useLanguage } from "@/lib/i18n";
 import {
   CreditCard, Upload, Clock, CheckCircle2, XCircle,
-  AlertCircle, Copy, ArrowRight, Loader2, Sparkles,
+  AlertCircle, Copy, ArrowRight, Loader2, Sparkles, Eye, EyeOff, KeyRound,
 } from "lucide-react";
 
 const statusColors: Record<string, string> = {
@@ -40,6 +40,11 @@ export default function PaymentsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
+  // TLS credentials (Premium)
+  const [tlsEmail, setTlsEmail] = useState("");
+  const [tlsPassword, setTlsPassword] = useState("");
+  const [showTlsPassword, setShowTlsPassword] = useState(false);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -70,9 +75,17 @@ export default function PaymentsPage() {
     reader.readAsDataURL(file);
   };
 
+  const selectedPlanType = plans.find((p) => p.id === selectedPlan)?.plan_type ?? "";
+  const isPremium = selectedPlanType === "premium";
+
   const handleSubmitPayment = async () => {
     if (!selectedPlan) {
       setToast({ type: "error", msg: t.payment.errSelectPlanBranch });
+      setTimeout(() => setToast(null), 4000);
+      return;
+    }
+    if (isPremium && (!tlsEmail.trim() || !tlsPassword.trim())) {
+      setToast({ type: "error", msg: "Please enter your TLS email and password for the Premium plan." });
       setTimeout(() => setToast(null), 4000);
       return;
     }
@@ -91,12 +104,16 @@ export default function PaymentsPage() {
         method: paymentMethod,
         reference: reference.trim(),
         screenshot_data: screenshotData || undefined,
+        tls_email: isPremium ? tlsEmail.trim() : undefined,
+        tls_password: isPremium ? tlsPassword.trim() : undefined,
       });
       setToast({ type: "success", msg: t.payment.successSubmit });
       setReference("");
       setScreenshotData(null);
       setScreenshotName("");
       setSelectedPlan(null);
+      setTlsEmail("");
+      setTlsPassword("");
       loadData();
     } catch (err: any) {
       setToast({ type: "error", msg: err?.message || err?.detail || t.payment.errSubmitFail });
@@ -227,6 +244,45 @@ export default function PaymentsPage() {
               <h3 className="font-semibold flex items-center gap-2">
                 <CreditCard className="w-5 h-5 text-primary-400" /> {t.payment.paymentDetailsTitle}
               </h3>
+
+              {/* TLS Credentials for Premium */}
+              {isPremium && (
+                <div className="space-y-3 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                  <div className="flex items-center gap-2 text-amber-400 text-sm font-semibold">
+                    <KeyRound className="w-4 h-4" /> Your TLS Account Credentials
+                  </div>
+                  <p className="text-xs text-gray-400">Required so our server can monitor appointments on your behalf. Stored encrypted.</p>
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1.5 block">TLS Email</label>
+                    <input
+                      type="email"
+                      value={tlsEmail}
+                      onChange={(e) => setTlsEmail(e.target.value)}
+                      placeholder="your@email.com"
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1.5 block">TLS Password</label>
+                    <div className="relative">
+                      <input
+                        type={showTlsPassword ? "text" : "password"}
+                        value={tlsPassword}
+                        onChange={(e) => setTlsPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="input-field !pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowTlsPassword(!showTlsPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                      >
+                        {showTlsPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Method selection */}
               <div>

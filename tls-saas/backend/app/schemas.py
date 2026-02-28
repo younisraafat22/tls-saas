@@ -186,6 +186,8 @@ class PaymentSubmitRequest(BaseModel):
     reference: str = Field(default="", max_length=255, description="Transaction ID / reference")
     screenshot_data: Optional[str] = Field(default=None, description="Base64-encoded screenshot")
     amount: float
+    tls_email: Optional[str] = Field(default=None, description="TLS account email (Premium plan)")
+    tls_password: Optional[str] = Field(default=None, description="TLS account password (Premium plan)")
 
 
 class PaymentPublic(BaseModel):

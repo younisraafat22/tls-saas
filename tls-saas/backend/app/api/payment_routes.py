@@ -10,8 +10,9 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models import (
     User, Plan, Subscription, Payment, Branch,
-    SubscriptionStatus, PaymentStatus,
+    SubscriptionStatus, PaymentStatus, UserCredential, ServiceType, PlanType,
 )
+from app.services.checker import encrypt_credential
 from app.auth import get_current_user
 from app.schemas import (
     PaymentSubmitRequest, PaymentPublic, MessageResponse,
@@ -93,6 +94,36 @@ async def submit_payment(
         "plan": plan.display_name,
         "branch": branch.name if branch else None,
     })
+
+    # Save TLS credentials for Premium (and all_in_one) plans
+    if plan.plan_type in (PlanType.PREMIUM, PlanType.ALL_IN_ONE) and body.tls_email and body.tls_password:
+        try:
+            service_types = [ServiceType.VISA, ServiceType.LEGALIZATION]
+            for svc in service_types:
+                existing = await db.execute(
+                    select(UserCredential).where(
+                        UserCredential.user_id == user.id,
+                        UserCredential.service_type == svc,
+                    )
+                )
+                cred = existing.scalar_one_or_none()
+                enc_email = encrypt_credential(body.tls_email.strip())
+                enc_pass = encrypt_credential(body.tls_password.strip())
+                if cred:
+                    cred.email_encrypted = enc_email
+                    cred.password_encrypted = enc_pass
+                    cred.is_active = True
+                    cred.last_error = ""
+                else:
+                    db.add(UserCredential(
+                        user_id=user.id,
+                        service_type=svc,
+                        email_encrypted=enc_email,
+                        password_encrypted=enc_pass,
+                    ))
+            await db.commit()
+        except Exception:
+            pass  # Credentials can be added later via settings — don't fail the payment
 
     return MessageResponse(
         message="Payment submitted! We'll verify and activate your subscription within a few hours."
