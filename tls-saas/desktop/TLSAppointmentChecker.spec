@@ -18,6 +18,7 @@ hiddenimports = [
     'seleniumbase', 'undetected_chromedriver',
     'selenium', 'selenium.webdriver', 'selenium.webdriver.chrome',
     'selenium.webdriver.chrome.options', 'selenium.webdriver.chrome.service',
+    'webbrowser',  # Standard library for opening URLs in default browser
     # Database
     'sqlalchemy', 'sqlalchemy.ext.declarative', 'sqlalchemy.orm',
     # Audio CAPTCHA solving
@@ -128,7 +129,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='Logos/icon_BLACK.ico',
+    icon='Logos\\icon_BLACK.ico',
 )
 
 coll = COLLECT(
