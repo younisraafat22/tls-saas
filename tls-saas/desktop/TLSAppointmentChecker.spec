@@ -13,7 +13,7 @@ binaries = []
 
 hiddenimports = [
     # Flet framework (GUI)
-    'flet', 'flet.core', 'flet_core', 'flet_desktop',
+    'flet', 'flet_desktop',
     # Browser automation
     'seleniumbase', 'undetected_chromedriver',
     'selenium', 'selenium.webdriver', 'selenium.webdriver.chrome',
@@ -31,7 +31,7 @@ hiddenimports = [
 ]
 
 # Only collect data for packages that actually need bundled assets
-for pkg in ['flet', 'flet_core', 'flet_desktop', 'seleniumbase', 'imageio_ffmpeg']:
+for pkg in ['flet', 'flet_desktop', 'seleniumbase', 'imageio_ffmpeg']:
     try:
         tmp = collect_all(pkg)
         datas += tmp[0]
