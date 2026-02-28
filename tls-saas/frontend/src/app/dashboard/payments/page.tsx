@@ -6,7 +6,7 @@ import { paymentApi, subscriptionApi } from "@/lib/api";
 import { useLanguage } from "@/lib/i18n";
 import {
   CreditCard, Upload, Clock, CheckCircle2, XCircle,
-  AlertCircle, Copy, ArrowRight, Loader2, Sparkles, Eye, EyeOff, KeyRound,
+  AlertCircle, Copy, ArrowRight, Loader2, Sparkles, Eye, EyeOff, KeyRound, Hash,
 } from "lucide-react";
 
 const statusColors: Record<string, string> = {
@@ -44,6 +44,9 @@ export default function PaymentsPage() {
   const [tlsEmail, setTlsEmail] = useState("");
   const [tlsPassword, setTlsPassword] = useState("");
   const [showTlsPassword, setShowTlsPassword] = useState(false);
+
+  // Device ID for desktop license binding
+  const [hardwareId, setHardwareId] = useState("");
 
   useEffect(() => {
     loadData();
@@ -106,6 +109,7 @@ export default function PaymentsPage() {
         screenshot_data: screenshotData || undefined,
         tls_email: isPremium ? tlsEmail.trim() : undefined,
         tls_password: isPremium ? tlsPassword.trim() : undefined,
+        hardware_id: hardwareId.trim() || undefined,
       });
       setToast({ type: "success", msg: t.payment.successSubmit });
       setReference("");
@@ -114,6 +118,7 @@ export default function PaymentsPage() {
       setSelectedPlan(null);
       setTlsEmail("");
       setTlsPassword("");
+      setHardwareId("");
       loadData();
     } catch (err: any) {
       setToast({ type: "error", msg: err?.message || err?.detail || t.payment.errSubmitFail });
@@ -280,6 +285,29 @@ export default function PaymentsPage() {
                         {showTlsPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Device ID for Desktop License */}
+              {!isPremium && (
+                <div className="space-y-3 p-4 rounded-xl bg-primary-500/5 border border-primary-500/20">
+                  <div className="flex items-center gap-2 text-primary-400 text-sm font-semibold">
+                    <Hash className="w-4 h-4" /> Device ID (for Desktop App License)
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Paste your Device ID so we can generate a license key for your computer.
+                    You can find it in the desktop app under <strong>Settings → Device ID</strong>.
+                  </p>
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1.5 block">Device ID</label>
+                    <input
+                      type="text"
+                      value={hardwareId}
+                      onChange={(e) => setHardwareId(e.target.value)}
+                      placeholder="e.g. A1B2C3D4E5F6..."
+                      className="input-field font-mono"
+                    />
                   </div>
                 </div>
               )}

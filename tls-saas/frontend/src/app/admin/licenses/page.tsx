@@ -363,7 +363,7 @@ export default function AdminLicensesPage() {
       showToast("success", `Key generated! Send to: ${res.submitter_email || "buyer"}`);
       loadLicenses();
     } catch (err: any) {
-      showToast("error", err?.detail || "Failed to generate");
+      showToast("error", err?.message || err?.detail || "Failed to generate");
     } finally { setProcessing(null); }
   };
 
@@ -374,7 +374,7 @@ export default function AdminLicensesPage() {
       showToast("success", "License revoked");
       loadLicenses();
     } catch (err: any) {
-      showToast("error", err?.detail || "Failed to revoke");
+      showToast("error", err?.message || err?.detail || "Failed to revoke");
     } finally { setProcessing(null); }
   };
 
@@ -385,7 +385,7 @@ export default function AdminLicensesPage() {
       showToast("success", "New key: " + res.license_key);
       loadLicenses();
     } catch (err: any) {
-      showToast("error", err?.detail || "Failed to regenerate");
+      showToast("error", err?.message || err?.detail || "Failed to regenerate");
     } finally { setProcessing(null); }
   };
 
@@ -396,7 +396,7 @@ export default function AdminLicensesPage() {
       showToast("success", "Record deleted");
       loadLicenses();
     } catch (err: any) {
-      showToast("error", err?.detail || "Failed to delete");
+      showToast("error", err?.message || err?.detail || "Failed to delete");
     } finally { setProcessing(null); }
   };
 

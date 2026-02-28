@@ -61,7 +61,7 @@ export default function AdminPaymentsPage() {
         showToast("success", "Payment approved! Subscription activated and confirmation email sent.");
       }
     } catch (err: any) {
-      showToast("error", err?.detail || "Failed to approve");
+      showToast("error", err?.message || err?.detail || "Failed to approve");
     } finally {
       setProcessing(null);
     }
@@ -74,7 +74,7 @@ export default function AdminPaymentsPage() {
       setPayments((prev) => prev.map((p) => (p.id === paymentId ? { ...p, status: "rejected" } : p)));
       showToast("success", "Payment rejected.");
     } catch (err: any) {
-      showToast("error", err?.detail || "Failed to reject");
+      showToast("error", err?.message || err?.detail || "Failed to reject");
     } finally {
       setProcessing(null);
     }
@@ -88,7 +88,7 @@ export default function AdminPaymentsPage() {
       setPayments((prev) => prev.filter((p) => p.id !== paymentId));
       showToast("success", `Payment #${paymentId} deleted.`);
     } catch (err: any) {
-      showToast("error", err?.detail || "Failed to delete");
+      showToast("error", err?.message || err?.detail || "Failed to delete");
     } finally {
       setProcessing(null);
     }

@@ -379,9 +379,27 @@ async def approve_payment(
         action="payment_approved",
         details={"payment_id": payment_id, "months": body.months, "branch_id": payment.branch_id},
     ))
+
+    # Auto-generate desktop license key if hardware_id is present
+    license_key = None
+    if payment.hardware_id and payment.plan_key:
+        license_key = _generate_license_key(payment.plan_key, payment.hardware_id)
+        payment.license_key = license_key
+    elif payment.hardware_id and not payment.plan_key:
+        # Fallback: use plan_type from subscription
+        plan_key = "premium"
+        if sub and sub.plan_id:
+            plan_result = await db.execute(select(Plan).where(Plan.id == sub.plan_id))
+            plan_obj = plan_result.scalar_one_or_none()
+            if plan_obj:
+                plan_key = plan_obj.plan_type.value
+        license_key = _generate_license_key(plan_key, payment.hardware_id)
+        payment.license_key = license_key
+        payment.plan_key = plan_key
+
     await db.commit()
 
-    # Send subscription activation email
+    # Send subscription activation email (+ license key if generated)
     try:
         from app.services.email_service import email_service
         user_result = await db.execute(select(User).where(User.id == payment.user_id))
@@ -395,17 +413,29 @@ async def approve_payment(
                 plan_name=plan_name,
                 expires_at=expires_str,
             )
+            # Also send license key email if one was generated
+            if license_key:
+                email_service.send_license_key(
+                    to_email=email_user.email,
+                    customer_name=email_user.full_name or email_user.email,
+                    license_key=license_key,
+                    plan_name=plan_name,
+                )
     except Exception:
         pass  # Never fail payment approval due to email error
 
     # Notify user via WebSocket
     await ws_manager.send_to_user(payment.user_id, {
         "type": "subscription_activated",
-        "message": f"Your subscription has been activated for {body.months} month(s)!",
+        "message": f"Your subscription has been activated for {body.months} month(s)!" + (f" License key: {license_key}" if license_key else ""),
         "expires_at": sub.expires_at.isoformat() if sub else None,
+        "license_key": license_key,
     })
 
-    return MessageResponse(message=f"Payment approved. Subscription activated for {body.months} month(s).")
+    msg = f"Payment approved. Subscription activated for {body.months} month(s)."
+    if license_key:
+        msg += f" License key generated: {license_key}"
+    return MessageResponse(message=msg)
 
 
 @router.post("/payments/{payment_id}/reject", response_model=MessageResponse)

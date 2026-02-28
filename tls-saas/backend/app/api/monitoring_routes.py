@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.config import settings
 from app.models import (
@@ -166,6 +167,7 @@ async def monitoring_status(
     # Check subscription
     sub_result = await db.execute(
         select(Subscription)
+        .options(selectinload(Subscription.plan))
         .where(
             Subscription.user_id == user.id,
             Subscription.status == SubscriptionStatus.ACTIVE,
@@ -249,6 +251,7 @@ async def monitoring_status(
 
     return {
         "subscription_active": is_active,
+        "plan_type": sub.plan.plan_type.value if sub and sub.plan else None,
         "payment_pending": pending_payment,
         "maintenance_mode": maintenance_mode,
         "expires_at": sub.expires_at.isoformat() if sub and sub.expires_at else None,

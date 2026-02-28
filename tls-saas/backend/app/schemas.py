@@ -188,6 +188,7 @@ class PaymentSubmitRequest(BaseModel):
     amount: float
     tls_email: Optional[str] = Field(default=None, description="TLS account email (Premium plan)")
     tls_password: Optional[str] = Field(default=None, description="TLS account password (Premium plan)")
+    hardware_id: Optional[str] = Field(default=None, max_length=100, description="Device ID for desktop license")
 
 
 class PaymentPublic(BaseModel):

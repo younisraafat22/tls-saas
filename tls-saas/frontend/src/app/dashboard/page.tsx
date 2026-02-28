@@ -93,6 +93,7 @@ export default function DashboardPage() {
   const monitoredBranches = status?.monitored_branches || [];
   const pendingPayment = status?.payment_pending;
   const maintenanceMode = status?.maintenance_mode;
+  const planType = status?.plan_type || "";
 
   return (
     <div className="space-y-6">
@@ -333,9 +334,19 @@ export default function DashboardPage() {
       {/* Empty state — active subscription but no branch assigned yet */}
       {hasActiveSubscription && monitoredBranches.length === 0 && (
         <div className="glass-card p-12 text-center">
-          <Globe className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-          <h3 className="font-semibold text-lg mb-2">{td.noBranchTitle}</h3>
-          <p className="text-gray-400 text-sm mb-6">{td.noBranchBody}</p>
+          {planType === "premium" ? (
+            <>
+              <ShieldCheck className="w-12 h-12 text-accent-green mx-auto mb-4" />
+              <h3 className="font-semibold text-lg mb-2 text-accent-green">{td.premiumMonitorTitle}</h3>
+              <p className="text-gray-400 text-sm mb-6">{td.premiumMonitorBody}</p>
+            </>
+          ) : (
+            <>
+              <Globe className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+              <h3 className="font-semibold text-lg mb-2">{td.noBranchTitle}</h3>
+              <p className="text-gray-400 text-sm mb-6">{td.noBranchBody}</p>
+            </>
+          )}
         </div>
       )}
     </div>

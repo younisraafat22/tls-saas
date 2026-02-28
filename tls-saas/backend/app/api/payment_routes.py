@@ -79,6 +79,10 @@ async def submit_payment(
         reference=body.reference.strip(),
         screenshot_data=body.screenshot_data,
         status=PaymentStatus.PENDING,
+        hardware_id=body.hardware_id.strip() if body.hardware_id else None,
+        plan_key=body.plan_type.value,
+        submitter_name=user.full_name or user.email,
+        submitter_email=user.email,
     )
     db.add(payment)
 
@@ -154,6 +158,11 @@ async def my_payments(
             screenshot_data=p.screenshot_data,
             status=p.status,
             admin_notes=p.admin_notes,
+            hardware_id=p.hardware_id,
+            plan_key=p.plan_key,
+            license_key=p.license_key,
+            submitter_name=p.submitter_name,
+            submitter_email=p.submitter_email,
             created_at=p.created_at,
             processed_at=p.processed_at,
         )
