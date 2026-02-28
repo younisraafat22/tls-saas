@@ -1491,21 +1491,31 @@ class TLSCheckerService:
             self._log("Selecting group...")
             
             # Check for "No application created" message — user needs to create one on TLS website
+            # Use very specific strings that only appear on the actual empty-application page,
+            # not on normal pages. Also verify no select button exists to avoid false positives.
             try:
                 page_text = self.driver.page_source.lower()
+                # Only the most specific phrases that uniquely identify the "no application" page
                 no_app_indicators = [
                     "no application created",
-                    "no application",
-                    "create a new application",
                     "click on the button to create a new application",
+                    "you don't have any application",
+                    "vous n'avez pas de dossier",   # French version
                 ]
-                if any(ind in page_text for ind in no_app_indicators):
-                    self._log("❌ No application found on TLS website")
-                    # Signal the UI to show a popup and stop monitoring
-                    if self.on_status_update:
-                        self.on_status_update("SHOW_NO_APPLICATION_ERROR")
-                    self.is_running = False
-                    return False
+                indicator_found = any(ind in page_text for ind in no_app_indicators)
+                if indicator_found:
+                    # Double-check: if a select/enter button IS present, the application exists
+                    # and the indicator was a false positive in some other page text
+                    has_select_btn = bool(
+                        self.driver.find_elements(By.CSS_SELECTOR,
+                            "button[name='formGroupId'], button.tls-button-primary")
+                    )
+                    if not has_select_btn:
+                        self._log("❌ No application found on TLS website")
+                        if self.on_status_update:
+                            self.on_status_update("SHOW_NO_APPLICATION_ERROR")
+                        self.is_running = False
+                        return False
             except Exception:
                 pass
 
