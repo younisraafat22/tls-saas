@@ -165,7 +165,7 @@ async def monitoring_status(
 ):
     """Get user's monitoring overview — is monitoring active, what branches, latest results."""
     # Check subscription
-    sub_result = await db.execute(
+    subs_result = await db.execute(
         select(Subscription)
         .options(selectinload(Subscription.plan))
         .where(
@@ -173,18 +173,23 @@ async def monitoring_status(
             Subscription.status == SubscriptionStatus.ACTIVE,
         )
         .order_by(Subscription.expires_at.desc())
-        .limit(1)
     )
-    sub = sub_result.scalar_one_or_none()
-    # Handle timezone-naive datetimes returned by SQLite
-    if sub and sub.expires_at:
-        exp = sub.expires_at
-        if exp.tzinfo is None:
-            from datetime import timezone as _tz
-            exp = exp.replace(tzinfo=_tz.utc)
-        is_active = exp > datetime.now(timezone.utc)
-    else:
-        is_active = False
+    all_subs = subs_result.scalars().all()
+    # Filter to truly active (not expired)
+    now = datetime.now(timezone.utc)
+    active_subs = []
+    for s in all_subs:
+        exp = s.expires_at
+        if exp:
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp > now:
+                active_subs.append(s)
+    sub = active_subs[0] if active_subs else None
+    is_active = len(active_subs) > 0
+    plan_types = list(dict.fromkeys(
+        s.plan.plan_type.value for s in active_subs if s.plan
+    ))
 
     # Get monitored branches with latest results
     monitors = await db.execute(
@@ -252,6 +257,7 @@ async def monitoring_status(
     return {
         "subscription_active": is_active,
         "plan_type": sub.plan.plan_type.value if sub and sub.plan else None,
+        "plan_types": plan_types,
         "payment_pending": pending_payment,
         "maintenance_mode": maintenance_mode,
         "expires_at": sub.expires_at.isoformat() if sub and sub.expires_at else None,

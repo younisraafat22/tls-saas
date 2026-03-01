@@ -45,7 +45,7 @@ class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "change-this-secret-key-in-production")
     
     # Backend API URL (for authentication, subscriptions, result reporting)
-    BACKEND_URL = os.getenv("BACKEND_URL", "https://schemes-operators-compliance-exhibition.trycloudflare.com")
+    BACKEND_URL = os.getenv("BACKEND_URL", "https://stephanie-centres-chart-whole.trycloudflare.com")
     
     # Website URL (for links in the app)
     WEBSITE_URL = os.getenv("WEBSITE_URL", "https://tls-saas.vercel.app")

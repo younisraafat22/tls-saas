@@ -34,7 +34,7 @@ PLANS = {
     # Base plan keys (used by backend license generation)
     "legalization": {
         "name": "Legalization",
-        "checks_per_day": 999999,
+        "checks_per_day": 24,
         "min_interval": 60,
         "duration_days": 30,
         "price": 500,
@@ -43,7 +43,7 @@ PLANS = {
     },
     "visa": {
         "name": "Visa",
-        "checks_per_day": 999999,
+        "checks_per_day": 24,
         "min_interval": 60,
         "duration_days": 30,
         "price": 500,
@@ -52,8 +52,8 @@ PLANS = {
     },
     "legalization_monthly": {
         "name": "Legalization",
-        "checks_per_day": 48,      # 24h / 30min
-        "min_interval": 30,
+        "checks_per_day": 24,      # 24h / 60min
+        "min_interval": 60,
         "duration_days": 30,
         "price": 500,
         "currency": "EGP",
@@ -61,8 +61,8 @@ PLANS = {
     },
     "legalization_quarterly": {
         "name": "Legalization (3 months)",
-        "checks_per_day": 48,
-        "min_interval": 30,
+        "checks_per_day": 24,
+        "min_interval": 60,
         "duration_days": 90,
         "price": 1200,
         "currency": "EGP",
@@ -79,8 +79,8 @@ PLANS = {
     },
     "visa_quarterly": {
         "name": "Visa (3 months)",
-        "checks_per_day": 48,
-        "min_interval": 30,
+        "checks_per_day": 24,
+        "min_interval": 60,
         "duration_days": 90,
         "price": 1200,
         "currency": "EGP",

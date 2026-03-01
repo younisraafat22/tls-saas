@@ -49,6 +49,7 @@ class UserPublic(BaseModel):
     has_push_subscription: bool = False
     created_at: datetime
     active_plan: Optional[str] = None
+    active_plans: list[str] = []
     subscription_expires: Optional[datetime] = None
 
     class Config:

@@ -18,6 +18,7 @@ interface User {
   has_push_subscription: boolean;
   created_at: string;
   active_plan: string | null;
+  active_plans: string[];
   subscription_expires: string | null;
 }
 

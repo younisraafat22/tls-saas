@@ -94,6 +94,8 @@ export default function DashboardPage() {
   const pendingPayment = status?.payment_pending;
   const maintenanceMode = status?.maintenance_mode;
   const planType = status?.plan_type || "";
+  const planTypes: string[] = status?.plan_types || [];
+  const isPremium = planTypes.includes("PREMIUM");
 
   return (
     <div className="space-y-6">
@@ -251,7 +253,11 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2 text-gray-400 text-sm mb-2">
             <Bell className="w-4 h-4" /> {td.planLabel}
           </div>
-          <div className="text-sm font-medium">{(t.planNames as Record<string, string>)[user?.active_plan ?? ""] ?? user?.active_plan ?? "—"}</div>
+          <div className="text-sm font-medium">
+            {(user?.active_plans?.length ?? 0) > 0
+              ? (user.active_plans as string[]).map((p: string) => (t.planNames as Record<string, string>)[p] ?? p).join(" + ")
+              : (t.planNames as Record<string, string>)[user?.active_plan ?? ""] ?? user?.active_plan ?? "—"}
+          </div>
         </motion.div>
       </motion.div>
 
@@ -334,7 +340,7 @@ export default function DashboardPage() {
       {/* Empty state — active subscription but no branch assigned yet */}
       {hasActiveSubscription && monitoredBranches.length === 0 && (
         <div className="glass-card p-12 text-center">
-          {planType === "premium" ? (
+          {isPremium ? (
             <>
               <ShieldCheck className="w-12 h-12 text-accent-green mx-auto mb-4" />
               <h3 className="font-semibold text-lg mb-2 text-accent-green">{td.premiumMonitorTitle}</h3>

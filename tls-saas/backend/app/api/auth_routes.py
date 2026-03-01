@@ -38,12 +38,19 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 def _user_to_public(user: User) -> UserPublic:
     """Convert a User ORM object to a public schema."""
     active_plan = None
+    active_plans: list[str] = []
     sub_expires = None
+    now = datetime.now(timezone.utc)
     for sub in (user.subscriptions or []):
         if sub.status.value == "active" and sub.plan:
-            active_plan = sub.plan.display_name
-            sub_expires = sub.expires_at
-            break
+            exp = sub.expires_at
+            if exp and exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp and exp > now:
+                active_plans.append(sub.plan.display_name)
+                if active_plan is None:
+                    active_plan = sub.plan.display_name
+                    sub_expires = sub.expires_at
     return UserPublic(
         id=user.id,
         email=user.email,
@@ -54,6 +61,7 @@ def _user_to_public(user: User) -> UserPublic:
         has_push_subscription=bool(user.push_subscription),
         created_at=user.created_at,
         active_plan=active_plan,
+        active_plans=active_plans,
         subscription_expires=sub_expires,
     )
 
