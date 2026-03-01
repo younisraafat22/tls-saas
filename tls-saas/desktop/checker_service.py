@@ -342,15 +342,24 @@ class TLSCheckerService:
                     # Also clear the legacy %APPDATA%\undetected_chromedriver location.
                     try:
                         from seleniumbase.undetected.patcher import Patcher as _Patcher
-                        uc_exe = os.path.join(_Patcher.data_path, "undetected_chromedriver.exe")
-                        if os.path.exists(uc_exe):
-                            os.remove(uc_exe)
-                        legacy_exe = os.path.join(
+                        import shutil as _shutil_sb
+                        # Clean Patcher data_path (AppData or ./downloaded_files)
+                        for _uc_file in ["undetected_chromedriver.exe", "chromedriver.exe"]:
+                            _p = os.path.join(_Patcher.data_path, _uc_file)
+                            if os.path.exists(_p):
+                                try: os.remove(_p)
+                                except Exception: pass
+                        # Clean the chromedriver-win32 subfolder the patcher downloads into
+                        _cdw32 = os.path.join(_Patcher.data_path, "chromedriver-win32")
+                        if os.path.isdir(_cdw32):
+                            _shutil_sb.rmtree(_cdw32, ignore_errors=True)
+                        # Clean legacy %APPDATA%\undetected_chromedriver entirely
+                        _legacy_dir = os.path.join(
                             os.environ.get("APPDATA", ""),
-                            "undetected_chromedriver", "undetected_chromedriver.exe"
+                            "undetected_chromedriver",
                         )
-                        if os.path.exists(legacy_exe):
-                            os.remove(legacy_exe)
+                        if os.path.isdir(_legacy_dir):
+                            _shutil_sb.rmtree(_legacy_dir, ignore_errors=True)
                     except Exception:
                         pass
 

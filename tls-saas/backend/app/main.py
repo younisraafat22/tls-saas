@@ -78,6 +78,22 @@ async def seed_data():
                 "sort_order": 2,
             },
             {
+                "plan_type": PlanType.ALL_IN_ONE,
+                "display_name": "Legalization + Visa",
+                "description": "Monitor both legalization and visa branches — switch anytime in the desktop app",
+                "price_monthly": settings.PRICE_ALL_IN_ONE_MONTHLY,
+                "features": [
+                    "Both legalization & visa monitoring",
+                    "Switch service type anytime",
+                    "All branches available",
+                    "Email & web push notifications",
+                    "Real-time dashboard",
+                    "60-minute check interval",
+                    "Desktop app — PC must stay on",
+                ],
+                "sort_order": 3,
+            },
+            {
                 "plan_type": PlanType.PREMIUM,
                 "display_name": "Premium — Server Monitored",
                 "description": "We run monitoring on our server — you don't need to leave your PC on",
@@ -90,7 +106,7 @@ async def seed_data():
                     "Priority support",
                     "30-minute check interval",
                 ],
-                "sort_order": 3,
+                "sort_order": 4,
             },
         ]
         for pd in plans_data:
@@ -263,8 +279,11 @@ async def lifespan(app: FastAPI):
                     "p": settings.PRICE_LEGALIZATION_MONTHLY,
                 },
             )
-            # Remove all-in-one plan (no longer offered)
-            await db.execute(text("DELETE FROM plans WHERE UPPER(plan_type) = 'ALL_IN_ONE'"))
+            # Ensure all-in-one plan price is up to date
+            await db.execute(
+                text("UPDATE plans SET price_monthly = :p WHERE UPPER(plan_type) = 'ALL_IN_ONE'"),
+                {"p": settings.PRICE_ALL_IN_ONE_MONTHLY},
+            )
             # Update legalization price to 300
             await db.execute(
                 text("UPDATE plans SET price_monthly = :p WHERE UPPER(plan_type) = 'LEGALIZATION'"),

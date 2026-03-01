@@ -86,14 +86,24 @@ export default function PaymentsPage() {
 
   const selectedPlanType = plans.find((p) => p.id === selectedPlan)?.plan_type ?? "";
   const isPremium = selectedPlanType === "premium";
+  const isAllInOne = selectedPlanType === "all_in_one";
+
+  // Service type selection (for premium and all_in_one)
+  const [selectedServiceType, setSelectedServiceType] = useState<"legalization" | "visa">("legalization");
 
   // Reset branch selection when plan changes
-  useEffect(() => { setSelectedBranch(null); }, [selectedPlan]);
+  useEffect(() => { setSelectedBranch(null); setSelectedServiceType("legalization"); }, [selectedPlan]);
 
   // Filter branches by selected plan type and deduplicate by URL (legalization Normal+Students share same URL)
   const filteredBranches = (() => {
-    if (!selectedPlanType || isPremium) return [];
-    const serviceType = selectedPlanType === "visa" ? "visa" : "legalization";
+    if (!selectedPlanType) return [];
+    // For premium/all_in_one: use selectedServiceType; for single plans: derive from plan type
+    let serviceType: string;
+    if (isPremium || isAllInOne) {
+      serviceType = selectedServiceType;
+    } else {
+      serviceType = selectedPlanType === "visa" ? "visa" : "legalization";
+    }
     const matching = branches.filter((b: any) => b.service_type === serviceType);
     // Deduplicate by URL and clean display names
     const seen = new Set<string>();
@@ -118,7 +128,7 @@ export default function PaymentsPage() {
       setTimeout(() => setToast(null), 4000);
       return;
     }
-    if (!isPremium && filteredBranches.length > 0 && !selectedBranch) {
+    if (filteredBranches.length > 0 && !selectedBranch) {
       setToast({ type: "error", msg: "Please select a branch." });
       setTimeout(() => setToast(null), 4000);
       return;
@@ -252,7 +262,7 @@ export default function PaymentsPage() {
             </div>
           </motion.div>
           {/* Plans */}
-          <div className="grid sm:grid-cols-3 gap-4">
+          <div className="grid sm:grid-cols-2 gap-4">
             {plans.filter(p => p.is_active).map((plan) => {
               const isSelected = selectedPlan === plan.id;
               return (
@@ -281,8 +291,33 @@ export default function PaymentsPage() {
             })}
           </div>
 
-          {/* Branch selection — shown for non-premium plans */}
-          {selectedPlan && !isPremium && filteredBranches.length > 0 && (
+          {/* Service type selection — shown for premium and all_in_one */}
+          {selectedPlan && (isPremium || isAllInOne) && (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 space-y-3">
+              <h3 className="font-semibold flex items-center gap-2 text-sm">
+                <AlertCircle className="w-4 h-4 text-primary-400" /> Select Service Type
+              </h3>
+              <p className="text-xs text-gray-400">Choose whether you want to monitor Visa or Legalization appointments.</p>
+              <div className="flex gap-3">
+                {(["legalization", "visa"] as const).map((st) => (
+                  <button
+                    key={st}
+                    onClick={() => { setSelectedServiceType(st); setSelectedBranch(null); }}
+                    className={`px-5 py-2.5 rounded-xl text-sm font-medium border transition-all capitalize ${
+                      selectedServiceType === st
+                        ? "bg-primary-500/10 border-primary-500/50 text-primary-400 ring-1 ring-primary-500/30"
+                        : "border-white/10 text-gray-400 hover:border-white/20"
+                    }`}
+                  >
+                    {st}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Branch selection — shown for all plans */}
+          {selectedPlan && filteredBranches.length > 0 && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 space-y-3">
               <h3 className="font-semibold flex items-center gap-2 text-sm">
                 <AlertCircle className="w-4 h-4 text-primary-400" /> Select Your Branch
@@ -362,7 +397,7 @@ export default function PaymentsPage() {
               )}
 
               {/* Device ID for Desktop License — not needed for Premium (server-monitored) */}
-              {!isPremium && (
+              {(!isPremium || isAllInOne) && (
               <div className="space-y-3 p-4 rounded-xl bg-primary-500/5 border border-primary-500/20">
                 <div className="flex items-center gap-2 text-primary-400 text-sm font-semibold">
                   <Hash className="w-4 h-4" /> Device ID (for Desktop App License)

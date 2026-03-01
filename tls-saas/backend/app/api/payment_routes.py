@@ -99,8 +99,8 @@ async def submit_payment(
         "branch": branch.name if branch else None,
     })
 
-    # Save TLS credentials for Premium (and all_in_one) plans
-    if plan.plan_type in (PlanType.PREMIUM, PlanType.ALL_IN_ONE) and body.tls_email and body.tls_password:
+    # Save TLS credentials for Premium plans (server-monitored)
+    if plan.plan_type == PlanType.PREMIUM and body.tls_email and body.tls_password:
         try:
             service_types = [ServiceType.VISA, ServiceType.LEGALIZATION]
             for svc in service_types:

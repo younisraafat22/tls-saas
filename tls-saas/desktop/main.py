@@ -1353,6 +1353,10 @@ class TLSApp:
         elif license_plan.startswith('legalization'):
             current_service_type = 'legalization'
             service_locked = True
+        elif license_plan.startswith('all_in_one'):
+            # Combo plan — user can switch between legalization and visa
+            current_service_type = getattr(settings, 'service_type', 'legalization') if settings else 'legalization'
+            service_locked = False
         else:
             # Trial — use whatever is saved in DB, allow changing
             current_service_type = getattr(settings, 'service_type', 'legalization') if settings else 'legalization'

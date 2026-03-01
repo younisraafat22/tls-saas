@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     PRICE_LEGALIZATION_MONTHLY: float = 500.0
     PRICE_VISA_MONTHLY: float = 500.0
     PRICE_PREMIUM_MONTHLY: float = 2500.0
+    PRICE_ALL_IN_ONE_MONTHLY: float = 900.0
     CURRENCY: str = "EGP"
 
     # ── License Generation ───────────────────────────────

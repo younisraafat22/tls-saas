@@ -122,6 +122,34 @@ PLANS = {
         "currency": "EGP",
         "max_emails": 3,
     },
+    # Combo plan: both legalization + visa locally
+    "all_in_one": {
+        "name": "Legalization + Visa",
+        "checks_per_day": 24,
+        "min_interval": 60,
+        "duration_days": 30,
+        "price": 900,
+        "currency": "EGP",
+        "max_emails": 2,
+    },
+    "all_in_one_monthly": {
+        "name": "Legalization + Visa",
+        "checks_per_day": 24,
+        "min_interval": 60,
+        "duration_days": 30,
+        "price": 900,
+        "currency": "EGP",
+        "max_emails": 2,
+    },
+    "all_in_one_quarterly": {
+        "name": "Legalization + Visa (3 months)",
+        "checks_per_day": 24,
+        "min_interval": 60,
+        "duration_days": 90,
+        "price": 2400,
+        "currency": "EGP",
+        "max_emails": 2,
+    },
 }
 
 

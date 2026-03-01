@@ -460,7 +460,8 @@ function Pricing() {
           TRIAL_PLAN,
           { id: 1, plan_type: "legalization", display_name: "Legalization Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice", "Email & web push notifications", "Real-time dashboard", "60-minute check interval", "No TLS credentials needed", "Desktop app — PC must stay on"], sort_order: 1 },
           { id: 2, plan_type: "visa", display_name: "Visa Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice", "Individual check using your TLS credentials", "Email & web push notifications", "Real-time dashboard", "60-minute check interval", "Desktop app — PC must stay on"], sort_order: 2 },
-          { id: 3, plan_type: "premium", display_name: "Premium — Server Monitored", price_monthly: 2500, currency: "EGP", features: ["Server-based monitoring — no PC needed", "Legalization & visa branches covered", "Email & web push notifications", "Real-time dashboard", "Priority support", "30-minute check interval"], sort_order: 3 },
+          { id: 4, plan_type: "all_in_one", display_name: "Legalization + Visa", price_monthly: 900, currency: "EGP", features: ["Both legalization & visa monitoring", "Switch service type anytime", "All branches available", "Email & web push notifications", "Real-time dashboard", "60-minute check interval", "Desktop app — PC must stay on"], sort_order: 3 },
+          { id: 3, plan_type: "premium", display_name: "Premium — Server Monitored", price_monthly: 2500, currency: "EGP", features: ["Server-based monitoring — no PC needed", "Legalization & visa branches covered", "Email & web push notifications", "Real-time dashboard", "Priority support", "30-minute check interval"], sort_order: 4 },
         ]);
       });
   }, []);
@@ -478,19 +479,24 @@ function Pricing() {
           </motion.p>
         </AnimatedSection>
 
-        <AnimatedSection className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+        <AnimatedSection className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-5xl mx-auto">
           {plans.sort((a, b) => a.sort_order - b.sort_order).map((plan) => {
             const isPremium = plan.plan_type === "premium";
             const isTrial = plan.plan_type === "trial";
+            const isAllInOne = plan.plan_type === "all_in_one";
             return (
               <motion.div
                 key={plan.id}
                 variants={scaleIn}
-                className={`glass-card p-8 relative ${isPremium ? "border-amber-500/50 ring-2 ring-amber-500/30" : isTrial ? "border-cyan-500/50 ring-1 ring-cyan-500/20" : "border-primary-500/30 ring-1 ring-primary-500/20"}`}
+                className={`glass-card p-8 relative ${isPremium ? "border-amber-500/50 ring-2 ring-amber-500/30" : isAllInOne ? "border-emerald-500/50 ring-2 ring-emerald-500/30" : isTrial ? "border-cyan-500/50 ring-1 ring-cyan-500/20" : "border-primary-500/30 ring-1 ring-primary-500/20"}`}
               >
                 {isPremium ? (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-4 py-1 rounded-full whitespace-nowrap">
                     ☁ SERVER MONITORED
+                  </div>
+                ) : isAllInOne ? (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold px-4 py-1 rounded-full whitespace-nowrap">
+                    ★ BEST VALUE
                   </div>
                 ) : isTrial ? (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-cyan-500 to-teal-500 text-white text-xs font-bold px-4 py-1 rounded-full whitespace-nowrap">
@@ -508,7 +514,7 @@ function Pricing() {
                     <span className="text-4xl font-display font-bold text-cyan-400">FREE</span>
                   ) : (
                     <>
-                      <span className={`text-4xl font-display font-bold ${isPremium ? "text-amber-400" : ""}`}>{plan.price_monthly}</span>
+                      <span className={`text-4xl font-display font-bold ${isPremium ? "text-amber-400" : isAllInOne ? "text-emerald-400" : ""}`}>{plan.price_monthly}</span>
                       <span className="text-gray-400 text-sm">{plan.currency}{t.pricing.perMonth}</span>
                     </>
                   )}
@@ -517,7 +523,7 @@ function Pricing() {
                 <ul className="space-y-3 mb-8">
                   {(t.planFeaturesMap?.[plan.plan_type] ?? plan.features ?? t.planFeatures).map((feat: string) => (
                     <li key={feat} className="flex items-start gap-2 text-sm">
-                      <Check className={`w-4 h-4 mt-0.5 shrink-0 ${isPremium ? "text-amber-400" : "text-accent-green"}`} />
+                      <Check className={`w-4 h-4 mt-0.5 shrink-0 ${isPremium ? "text-amber-400" : isAllInOne ? "text-emerald-400" : "text-accent-green"}`} />
                       <span className="text-gray-300">{feat}</span>
                     </li>
                   ))}
@@ -528,6 +534,8 @@ function Pricing() {
                   className={`block w-full text-center py-3 rounded-xl font-semibold transition-all ${
                     isPremium
                       ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white"
+                      : isAllInOne
+                      ? "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white"
                       : isTrial
                       ? "bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 hover:to-teal-400 text-white"
                       : "btn-gradient"
