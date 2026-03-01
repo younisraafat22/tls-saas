@@ -458,8 +458,8 @@ function Pricing() {
         // Fallback plans if API not reachable
         setPlans([
           TRIAL_PLAN,
-          { id: 1, plan_type: "legalization", display_name: "Legalization Monitor", price_monthly: 500, currency: "EGP", features: ["Set your preferred branches in the app", "Email & web push notifications", "Real-time dashboard", "30-minute check interval", "No TLS credentials needed", "Desktop app — PC must stay on"], sort_order: 1 },
-          { id: 2, plan_type: "visa", display_name: "Visa Monitor", price_monthly: 500, currency: "EGP", features: ["Set your preferred branches in the app", "Individual check using your TLS credentials", "Email & web push notifications", "Real-time dashboard", "30-minute check interval", "Desktop app — PC must stay on"], sort_order: 2 },
+          { id: 1, plan_type: "legalization", display_name: "Legalization Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice", "Email & web push notifications", "Real-time dashboard", "60-minute check interval", "No TLS credentials needed", "Desktop app — PC must stay on"], sort_order: 1 },
+          { id: 2, plan_type: "visa", display_name: "Visa Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice", "Individual check using your TLS credentials", "Email & web push notifications", "Real-time dashboard", "60-minute check interval", "Desktop app — PC must stay on"], sort_order: 2 },
           { id: 3, plan_type: "premium", display_name: "Premium — Server Monitored", price_monthly: 2500, currency: "EGP", features: ["Server-based monitoring — no PC needed", "Legalization & visa branches covered", "Email & web push notifications", "Real-time dashboard", "Priority support", "30-minute check interval"], sort_order: 3 },
         ]);
       });

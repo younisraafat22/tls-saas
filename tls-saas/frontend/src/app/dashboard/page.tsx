@@ -11,7 +11,7 @@ import {
   Activity, Bell, Clock, Globe, CheckCircle2,
   XCircle, AlertCircle, ArrowRight, Wifi, WifiOff,
   Sparkles, Calendar, Wrench, Key, Copy, Check,
-  ShieldCheck,
+  ShieldCheck, Monitor,
 } from "lucide-react";
 
 const fadeUp = {
@@ -342,9 +342,9 @@ export default function DashboardPage() {
             </>
           ) : (
             <>
-              <Globe className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-              <h3 className="font-semibold text-lg mb-2">{td.noBranchTitle}</h3>
-              <p className="text-gray-400 text-sm mb-6">{td.noBranchBody}</p>
+              <Monitor className="w-12 h-12 text-accent-green mx-auto mb-4" />
+              <h3 className="font-semibold text-lg mb-2 text-accent-green">{td.desktopMonitorTitle}</h3>
+              <p className="text-gray-400 text-sm mb-6">{td.desktopMonitorBody}</p>
             </>
           )}
         </div>

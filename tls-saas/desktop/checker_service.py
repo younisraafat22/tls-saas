@@ -379,10 +379,10 @@ class TLSCheckerService:
                                 break
                     
                     self.driver = Driver(**driver_kwargs)
-                    if Config.BROWSER_HEADLESS:
-                        self._hide_chrome_window()
-                    else:
+                    if not Config.BROWSER_HEADLESS:
                         self.driver.maximize_window()
+                    # Note: window hiding is deferred until after login/captcha
+                    # so uc_gui_click_captcha can work (needs visible window)
                     self._is_seleniumbase = True
                     return True
                 except Exception as e:
@@ -1198,6 +1198,16 @@ class TLSCheckerService:
             # Cloudflare Turnstile cannot detect automation, then reconnects.
             if self._is_seleniumbase:
                 try:
+                    # If window was hidden for headless, temporarily bring on-screen for captcha
+                    _was_hidden = self._window_hidden
+                    if _was_hidden:
+                        try:
+                            self._window_hidden = False
+                            self.driver.set_window_position(0, 0)
+                            self.driver.set_window_size(1920, 1080)
+                            import time as _time; _time.sleep(0.5)
+                        except Exception:
+                            pass
                     self.driver.uc_open_with_reconnect(target_url, reconnect_time=4)
                     # Give Turnstile a moment then try to click it automatically
                     self._wait_random(2, 3)
@@ -1205,6 +1215,9 @@ class TLSCheckerService:
                         self.driver.uc_gui_click_captcha()
                     except Exception:
                         pass  # No Turnstile present, that's fine
+                    # Re-hide window after captcha handling
+                    if _was_hidden or Config.BROWSER_HEADLESS:
+                        self._hide_chrome_window()
                 except Exception:
                     # Fallback to regular get if UC method not available
                     self.driver.get(target_url)
