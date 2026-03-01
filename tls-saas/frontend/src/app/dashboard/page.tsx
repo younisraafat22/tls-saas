@@ -255,7 +255,7 @@ export default function DashboardPage() {
           </div>
           <div className="text-sm font-medium">
             {(user?.active_plans?.length ?? 0) > 0
-              ? (user.active_plans as string[]).map((p: string) => (t.planNames as Record<string, string>)[p] ?? p).join(" + ")
+              ? (user?.active_plans as string[]).map((p: string) => (t.planNames as Record<string, string>)[p] ?? p).join(" + ")
               : (t.planNames as Record<string, string>)[user?.active_plan ?? ""] ?? user?.active_plan ?? "—"}
           </div>
         </motion.div>
