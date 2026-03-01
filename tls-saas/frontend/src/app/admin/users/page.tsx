@@ -5,19 +5,17 @@ import { motion, AnimatePresence } from "framer-motion";
 import { adminApi } from "@/lib/api";
 import {
   Users, Search, Shield, ShieldOff,
-  Ban, CheckCircle2, MapPin, Trash2,
+  Ban, CheckCircle2, Trash2,
 } from "lucide-react";
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<any[]>([]);
-  const [branches, setBranches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"created_at" | "email">("created_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "pending" | "none">("all");
   const [toast, setToast] = useState<string | null>(null);
-  const [assigningBranch, setAssigningBranch] = useState<{ userId: number; selectedBranch: number } | null>(null);
 
   useEffect(() => {
     loadUsers();
@@ -25,28 +23,13 @@ export default function AdminUsersPage() {
 
   const loadUsers = async () => {
     try {
-      const [usersData, branchesData] = await Promise.all([
-        adminApi.getUsers(),
-        adminApi.getBranches(),
-      ]);
+      const usersData = await adminApi.getUsers();
       setUsers(usersData.items || usersData);
-      setBranches(branchesData);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  };
-
-  const assignBranch = async (userId: number, branchId: number) => {
-    try {
-      await adminApi.assignBranch(userId, branchId);
-      setToast("Branch assigned! User will now be monitored.");
-      setAssigningBranch(null);
-    } catch (err) {
-      console.error(err);
-    }
-    setTimeout(() => setToast(null), 3000);
   };
 
   const toggleAdmin = async (userId: number, isAdmin: boolean) => {
@@ -170,9 +153,8 @@ export default function AdminUsersPage() {
         {/* Table header */}
         <div className="hidden sm:grid grid-cols-12 gap-4 p-4 border-b border-white/5 text-xs text-gray-400 uppercase tracking-wider font-medium">
           <div className="col-span-4">User</div>
-          <div className="col-span-3">Subscription</div>
-          <div className="col-span-2">Monitoring</div>
-          <div className="col-span-1">Joined</div>
+          <div className="col-span-4">Subscription</div>
+          <div className="col-span-2">Joined</div>
           <div className="col-span-2 text-right">Actions</div>
         </div>
 
@@ -200,7 +182,7 @@ export default function AdminUsersPage() {
                   </div>
 
                   {/* Subscription status */}
-                  <div className="col-span-3 mb-2 sm:mb-0">
+                  <div className="col-span-4 mb-2 sm:mb-0">
                     {user.subscription_status === "active" ? (
                       <div className="space-y-0.5">
                         <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full bg-accent-green/10 text-accent-green">
@@ -226,64 +208,13 @@ export default function AdminUsersPage() {
                     )}
                   </div>
 
-                  {/* Monitoring */}
-                  <div className="col-span-2 mb-2 sm:mb-0">
-                    {user.subscription_status === "active" ? (
-                      <div className="space-y-0.5">
-                        <span className={`inline-flex items-center gap-1 text-xs font-medium ${
-                          user.monitored_branches > 0 ? "text-accent-green" : "text-gray-500"
-                        }`}>
-                          <div className={`w-1.5 h-1.5 rounded-full ${
-                            user.monitored_branches > 0 ? "bg-accent-green" : "bg-gray-500"
-                          }`} />
-                          {user.monitored_branches > 0 ? `${user.monitored_branches} branch${user.monitored_branches > 1 ? "es" : ""}` : "No branches"}
-                        </span>
-                      </div>
-                    ) : user.subscription_status === "pending_payment" ? (
-                      <span className="text-xs text-amber-400">Awaiting approval</span>
-                    ) : (
-                      <span className="text-xs text-gray-600">—</span>
-                    )}
-                  </div>
-
                   {/* Joined date */}
-                  <div className="col-span-1 text-sm text-gray-400 mb-2 sm:mb-0">
+                  <div className="col-span-2 text-sm text-gray-400 mb-2 sm:mb-0">
                     {new Date(user.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
                   </div>
 
                   {/* Actions */}
                   <div className="col-span-2 flex items-center justify-end gap-2">
-                    {user.subscription_status === "active" && (
-                      <div className="relative">
-                        {assigningBranch?.userId === user.id ? (
-                          <div className="flex items-center gap-1">
-                            <select
-                              className="text-xs bg-dark-700 border border-white/10 rounded-lg px-2 py-1.5 text-white"
-                              value={assigningBranch?.selectedBranch || ""}
-                              onChange={(e) => setAssigningBranch({ userId: user.id, selectedBranch: Number(e.target.value) })}
-                            >
-                              <option value="">Pick branch…</option>
-                              {branches.filter((b: any) => b.is_active).map((b: any) => (
-                                <option key={b.id} value={b.id}>{b.name}</option>
-                              ))}
-                            </select>
-                            <button
-                              onClick={() => assigningBranch?.selectedBranch && assignBranch(user.id, assigningBranch.selectedBranch)}
-                              className="text-xs px-2 py-1.5 bg-accent-green/10 text-accent-green rounded-lg hover:bg-accent-green/20"
-                            >OK</button>
-                            <button onClick={() => setAssigningBranch(null)} className="text-xs px-2 py-1.5 bg-white/5 text-gray-400 rounded-lg">✕</button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setAssigningBranch({ userId: user.id, selectedBranch: 0 })}
-                            className="p-2 rounded-lg text-gray-500 hover:bg-white/5 transition-colors"
-                            title="Assign branch to monitor"
-                          >
-                            <MapPin className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    )}
                     <button
                       onClick={() => toggleAdmin(user.id, user.is_admin)}
                       className={`p-2 rounded-lg transition-colors ${

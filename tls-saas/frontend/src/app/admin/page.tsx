@@ -142,7 +142,6 @@ export default function AdminDashboard() {
           </div>
           <div className="p-4 space-y-3">
             <StatusRow label="Scheduler" active={stats?.scheduler_running} />
-            <StatusRow label="Active Branches" value={`${stats?.active_branches || 0}`} active={true} />
             <StatusRow label="Service Accounts" value={`${stats?.service_accounts || 0}`} active={(stats?.service_accounts || 0) > 0} />
             <StatusRow label="Checks Today" value={`${stats?.checks_today || 0}`} active={true} />
             <StatusRow label="Slots Found Today" value={`${stats?.slots_found_today || 0}`} active={(stats?.slots_found_today || 0) > 0} />

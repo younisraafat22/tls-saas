@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { adminApi } from "@/lib/api";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import {
-  Activity, Play, Pause, RefreshCw, Globe, MapPin,
+  Activity, Play, Pause, RefreshCw,
   Key, Plus, Trash2, Eye, EyeOff, Loader2,
   CheckCircle2, XCircle, AlertCircle, Zap, Clock,
   Terminal, ChevronDown, Bell, Monitor,
@@ -40,7 +40,6 @@ export default function AdminMonitoringPage() {
 
   // Processing states
   const [schedulerLoading, setSchedulerLoading] = useState(false);
-  const [manualCheckLoading, setManualCheckLoading] = useState<number | null>(null);
   const [headless, setHeadless] = useState(true);
   const [headlessLoading, setHeadlessLoading] = useState(false);
   const [testNotifLoading, setTestNotifLoading] = useState(false);
@@ -341,56 +340,6 @@ export default function AdminMonitoringPage() {
             {testApptEmailLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
             Test Appointment Email
           </button>
-        </div>
-      </div>
-
-      {/* Branches */}
-      <div className="glass-card overflow-hidden">
-        <div className="p-4 border-b border-white/5">
-          <h2 className="font-semibold">Branch Management</h2>
-        </div>
-        <div className="divide-y divide-white/5">
-          {branches.map((branch) => (
-            <div key={branch.id} className="p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {branch.service_type === "visa" ? (
-                  <Globe className="w-4 h-4 text-primary-400" />
-                ) : (
-                  <MapPin className="w-4 h-4 text-accent-purple" />
-                )}
-                <div>
-                  <div className="text-sm font-medium">{branch.name}</div>
-                  <div className="text-xs text-gray-500 capitalize">
-                    {branch.service_type} &middot; {branch.subscriber_count || 0} subscribers
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => triggerManualCheck(branch.id)}
-                  disabled={manualCheckLoading === branch.id || !branch.is_active}
-                  className="p-2 rounded-lg text-gray-400 hover:text-primary-400 hover:bg-primary-400/10 transition-colors disabled:opacity-30"
-                  title="Trigger manual check"
-                >
-                  {manualCheckLoading === branch.id ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Zap className="w-4 h-4" />
-                  )}
-                </button>
-                <button
-                  onClick={() => toggleBranch(branch.id, branch.is_active)}
-                  className={`w-10 h-5 rounded-full transition-colors relative ${
-                    branch.is_active ? "bg-accent-green" : "bg-dark-600"
-                  }`}
-                >
-                  <div className={`w-4 h-4 rounded-full bg-white shadow-sm absolute top-0.5 transition-all ${
-                    branch.is_active ? "left-[22px]" : "left-0.5"
-                  }`} />
-                </button>
-              </div>
-            </div>
-          ))}
         </div>
       </div>
 

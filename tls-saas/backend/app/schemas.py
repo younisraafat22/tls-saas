@@ -291,7 +291,6 @@ class DashboardStats(BaseModel):
     total_revenue: float
     checks_today: int
     slots_found_today: int
-    active_branches: int
     notifications_sent_today: int
 
 

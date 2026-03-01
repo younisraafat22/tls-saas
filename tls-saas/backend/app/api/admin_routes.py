@@ -58,9 +58,6 @@ async def dashboard_stats(
         select(func.count(CheckResult.id))
         .where(CheckResult.checked_at >= today, CheckResult.slots_available == True)
     )).scalar() or 0
-    active_branches = (await db.execute(
-        select(func.count(Branch.id)).where(Branch.is_active == True)
-    )).scalar() or 0
     notifs_today = (await db.execute(
         select(func.count(NotificationLog.id))
         .where(NotificationLog.sent_at >= today)
@@ -73,7 +70,6 @@ async def dashboard_stats(
         total_revenue=total_revenue,
         checks_today=checks_today,
         slots_found_today=slots_found,
-        active_branches=active_branches,
         notifications_sent_today=notifs_today,
     )
 
@@ -92,7 +88,6 @@ async def list_users(
         select(User)
         .options(
             selectinload(User.subscriptions).selectinload(Subscription.plan),
-            selectinload(User.branch_monitors),
         )
         .order_by(User.created_at.desc())
     )
@@ -146,7 +141,6 @@ async def list_users(
             "subscription_status": sub_status,
             "plan_name": sub.plan.display_name if sub and sub.plan else None,
             "subscription_expires": active_sub.expires_at.isoformat() if active_sub and active_sub.expires_at else None,
-            "monitored_branches": len([m for m in (u.branch_monitors or []) if m.is_active]),
         })
 
     return {
@@ -224,29 +218,6 @@ async def delete_user(
     ))
     await db.commit()
     return MessageResponse(message=f"User {email} deleted")
-
-
-@router.post("/users/{user_id}/assign-branch/{branch_id}", response_model=MessageResponse)
-async def assign_branch_to_user(
-    user_id: int,
-    branch_id: int,
-    admin=Depends(get_current_admin),
-    db: AsyncSession = Depends(get_db),
-):
-    """Manually assign a branch monitor to a user (for existing subscribers)."""
-    existing = await db.execute(
-        select(UserBranchMonitor).where(
-            UserBranchMonitor.user_id == user_id,
-            UserBranchMonitor.branch_id == branch_id,
-        )
-    )
-    monitor = existing.scalar_one_or_none()
-    if monitor:
-        monitor.is_active = True
-    else:
-        db.add(UserBranchMonitor(user_id=user_id, branch_id=branch_id, is_active=True))
-    await db.commit()
-    return MessageResponse(message="Branch assigned to user")
 
 
 # ── Payment Management ───────────────────────────────────────────────
@@ -913,54 +884,6 @@ async def update_plan(
 
     await db.commit()
     return MessageResponse(message=f"Plan '{plan.display_name}' updated")
-
-
-# ── Branch Management ────────────────────────────────────────────────
-
-@router.get("/branches")
-async def admin_list_branches(admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Branch))
-    branches = result.scalars().all()
-    out = []
-    for b in branches:
-        sub_count = (await db.execute(
-            select(func.count(UserBranchMonitor.id))
-            .where(UserBranchMonitor.branch_id == b.id, UserBranchMonitor.is_active == True)
-        )).scalar() or 0
-
-        # Service account status
-        sa_result = await db.execute(
-            select(ServiceAccount).where(ServiceAccount.branch_id == b.id, ServiceAccount.is_active == True)
-        )
-        sas = sa_result.scalars().all()
-
-        out.append({
-            "id": b.id,
-            "name": b.name,
-            "url": b.url,
-            "service_type": b.service_type.value,
-            "is_active": b.is_active,
-            "subscriber_count": sub_count,
-            "service_accounts": len(sas),
-            "has_primary_account": any(s.is_primary for s in sas),
-        })
-    return out
-
-
-@router.patch("/branches/{branch_id}", response_model=MessageResponse)
-async def toggle_branch(
-    branch_id: int,
-    admin=Depends(get_current_admin),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(select(Branch).where(Branch.id == branch_id))
-    branch = result.scalar_one_or_none()
-    if not branch:
-        raise HTTPException(404, "Branch not found")
-    branch.is_active = not branch.is_active
-    await db.commit()
-    status = "activated" if branch.is_active else "deactivated"
-    return MessageResponse(message=f"Branch '{branch.name}' {status}")
 
 
 # ── Service Account Management ───────────────────────────────────────
