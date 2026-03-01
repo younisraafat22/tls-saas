@@ -775,7 +775,7 @@ async def revoke_license(
         raise HTTPException(400, "No active license to revoke")
 
     payment.status = PaymentStatus.REJECTED
-    payment.license_key = None
+    # Do NOT clear license_key — verify endpoint needs it to return is_active=False
     payment.admin_notes = ((payment.admin_notes or "") + " [REVOKED]").strip()
     payment.processed_at = datetime.now(timezone.utc)
 
@@ -837,7 +837,26 @@ async def delete_payment(
     if not payment:
         raise HTTPException(404, "Payment not found")
 
-    # If it had a pending subscription, cancel it first
+    # If payment has a license key, save it to the revoked blacklist before deleting
+    # so the desktop verify endpoint can still block it
+    if payment.license_key:
+        import json as _json
+        revoked_result = await db.execute(
+            select(SystemSetting).where(SystemSetting.key == "revoked_license_keys")
+        )
+        revoked_setting = revoked_result.scalar_one_or_none()
+        if revoked_setting:
+            try:
+                keys_list = _json.loads(revoked_setting.value)
+            except Exception:
+                keys_list = []
+            if payment.license_key not in keys_list:
+                keys_list.append(payment.license_key)
+            revoked_setting.value = _json.dumps(keys_list)
+        else:
+            db.add(SystemSetting(key="revoked_license_keys", value=_json.dumps([payment.license_key])))
+
+    # Cancel the linked subscription if it is still pending
     if payment.subscription_id and payment.status == PaymentStatus.PENDING:
         sub_result = await db.execute(
             select(Subscription).where(Subscription.id == payment.subscription_id)

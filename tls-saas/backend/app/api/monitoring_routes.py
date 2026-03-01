@@ -86,8 +86,20 @@ async def license_verify(
         payment = result.scalar_one_or_none()
 
         if not payment:
-            # Key is valid (HMAC checks out) but not in DB — might be
-            # generated outside this system. Allow it.
+            # Check the revoked-keys blacklist (populated when payments are deleted)
+            revoked_result = await db.execute(
+                select(SystemSetting).where(SystemSetting.key == "revoked_license_keys")
+            )
+            revoked_setting = revoked_result.scalar_one_or_none()
+            if revoked_setting:
+                try:
+                    import json as _json
+                    revoked_keys: list = _json.loads(revoked_setting.value)
+                    if parsed["raw_key"] in revoked_keys:
+                        return {"found": True, "is_active": False, "plan": parsed["plan"]}
+                except Exception:
+                    pass
+            # Key is valid (HMAC checks out) but not in DB — allow it.
             return {"found": True, "is_active": True, "plan": parsed["plan"]}
 
         is_active = payment.status == PaymentStatus.APPROVED

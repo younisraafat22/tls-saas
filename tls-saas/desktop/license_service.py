@@ -70,8 +70,8 @@ PLANS = {
     },
     "visa_monthly": {
         "name": "Visa",
-        "checks_per_day": 48,      # 24h / 30min
-        "min_interval": 30,
+        "checks_per_day": 24,      # 24h / 60min
+        "min_interval": 60,
         "duration_days": 30,
         "price": 500,
         "currency": "EGP",
