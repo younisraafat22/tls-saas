@@ -161,31 +161,6 @@ export default function AdminMonitoringPage() {
     }
   };
 
-  const toggleBranch = async (branchId: number, isActive: boolean) => {
-    try {
-      await adminApi.toggleBranch(branchId, !isActive);
-      setBranches((prev) =>
-        prev.map((b) => (b.id === branchId ? { ...b, is_active: !isActive } : b))
-      );
-      showToastMsg("success", `Branch ${!isActive ? "activated" : "deactivated"}`);
-    } catch (err: any) {
-      showToastMsg("error", err?.detail || "Failed");
-    }
-  };
-
-  const triggerManualCheck = async (branchId: number) => {
-    setManualCheckLoading(branchId);
-    try {
-      await adminApi.triggerCheck(branchId);
-      showToastMsg("success", "Manual check triggered! Results will appear shortly.");
-      setTimeout(loadAll, 5000);
-    } catch (err: any) {
-      showToastMsg("error", err?.detail || "Failed to trigger check");
-    } finally {
-      setManualCheckLoading(null);
-    }
-  };
-
   const addServiceAccount = async () => {
     if (!newAccount.branch_id || !newAccount.email || !newAccount.password) {
       showToastMsg("error", "Fill in all fields");
