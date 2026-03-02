@@ -374,10 +374,14 @@ class TLSCheckerService:
                     chrome_ver = _get_chrome_major_version()
                     driver_ver = str(chrome_ver) if chrome_ver else "keep"
 
+                    # Always launch Chrome as a real visible window to avoid
+                    # reCAPTCHA/Cloudflare headless-browser detection.
+                    # When the user enables "Run browser in background" we hide
+                    # the window off-screen via Win32 AFTER launch (_hide_chrome_window).
                     driver_kwargs = {
                         "uc": True,
                         "headless": False,
-                        "headless2": Config.BROWSER_HEADLESS,
+                        "headless2": False,
                         "driver_version": driver_ver,
                     }
                     
