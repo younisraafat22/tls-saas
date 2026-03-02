@@ -361,11 +361,23 @@ class TLSCheckerService:
                                 break
                     
                     self.driver = Driver(**driver_kwargs)
-                    # Set full desktop resolution so the TLS site renders its
-                    # desktop layout (text LOGIN button, not the SVG icon).
-                    # Then minimize immediately if running in background mode.
-                    # Anti-throttle flags above ensure Chrome doesn't slow down
-                    # JS/iframes (including reCAPTCHA audio) while minimized.
+                    # Force the page render viewport to 1920x1080 via CDP.
+                    # This persists even when the window is minimized (unlike
+                    # set_window_size which the OS can override in minimized state),
+                    # so the TLS website always renders its desktop layout
+                    # (text LOGIN button, not the SVG mobile icon).
+                    try:
+                        self.driver.execute_cdp_cmd(
+                            "Emulation.setDeviceMetricsOverride",
+                            {
+                                "width": 1920,
+                                "height": 1080,
+                                "deviceScaleFactor": 1,
+                                "mobile": False,
+                            },
+                        )
+                    except Exception:
+                        pass
                     try:
                         self.driver.set_window_size(1920, 1080)
                         if Config.BROWSER_HEADLESS:
