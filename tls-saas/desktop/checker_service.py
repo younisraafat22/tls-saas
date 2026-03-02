@@ -199,61 +199,16 @@ class TLSCheckerService:
                     return
     
     def _hide_chrome_window(self):
-        """Hide Chrome window in background mode."""
+        """Minimize Chrome to the taskbar in background mode.
+        
+        This is safe to call at any time (including before CAPTCHA) because
+        the anti-throttling Chrome flags prevent rendering slowdowns in
+        minimized windows.
+        """
         if self._window_hidden or not Config.BROWSER_HEADLESS or not self.driver:
             return
-
         try:
-            import ctypes
-            import ctypes.wintypes
-            import time as _time
-            
-            # Move window off-screen but keep it at a usable size
-            self.driver.set_window_position(-3000, -3000)
-            self.driver.set_window_size(1920, 1080)
-            
-            # Wait for window to stabilize
-            _time.sleep(2)
-            
-            # Hide Chrome from taskbar using win32 API
-            try:
-                user32 = ctypes.windll.user32
-                
-                GWL_EXSTYLE = -20
-                WS_EX_TOOLWINDOW = 0x00000080
-                WS_EX_APPWINDOW = 0x00040000
-                SWP_NOMOVE = 0x0002
-                SWP_NOSIZE = 0x0001
-                SWP_NOZORDER = 0x0004
-                SWP_FRAMECHANGED = 0x0020
-                
-                def hide_chrome_from_taskbar():
-                    """Find and hide Chrome windows from taskbar."""
-                    import ctypes
-                    EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
-                    
-                    def callback(hwnd, lparam):
-                        length = user32.GetWindowTextLengthW(hwnd)
-                        if length > 0:
-                            buff = ctypes.create_unicode_buffer(length + 1)
-                            user32.GetWindowTextW(hwnd, buff, length + 1)
-                            title = buff.value
-                            if 'chrome' in title.lower() or 'chromium' in title.lower():
-                                # Remove from taskbar by setting TOOLWINDOW style
-                                style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-                                style = style | WS_EX_TOOLWINDOW
-                                style = style & ~WS_EX_APPWINDOW
-                                user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
-                                user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
-                                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED)
-                        return True
-                    
-                    user32.EnumWindows(EnumWindowsProc(callback), 0)
-                
-                hide_chrome_from_taskbar()
-            except Exception:
-                pass
-
+            self.driver.minimize_window()
             self._window_hidden = True
         except Exception:
             pass
@@ -406,14 +361,16 @@ class TLSCheckerService:
                                 break
                     
                     self.driver = Driver(**driver_kwargs)
-                    # Force full desktop resolution so the TLS website always
-                    # renders its desktop layout (text LOGIN button, not SVG icon).
-                    # Do NOT hide the window here — hiding before login causes
-                    # Chrome to throttle the reCAPTCHA audio challenge iframe.
-                    # Window is hidden in run_check() AFTER successful login.
+                    # Set full desktop resolution so the TLS site renders its
+                    # desktop layout (text LOGIN button, not the SVG icon).
+                    # Then minimize immediately if running in background mode.
+                    # Anti-throttle flags above ensure Chrome doesn't slow down
+                    # JS/iframes (including reCAPTCHA audio) while minimized.
                     try:
                         self.driver.set_window_size(1920, 1080)
-                        if not Config.BROWSER_HEADLESS:
+                        if Config.BROWSER_HEADLESS:
+                            self._hide_chrome_window()  # minimize to taskbar
+                        else:
                             self.driver.maximize_window()
                     except Exception:
                         pass
@@ -1268,10 +1225,6 @@ class TLSCheckerService:
             
             # Handle cookie consent banner (may block Login button)
             self._handle_cookie_consent()
-            
-            # NOTE: _hide_chrome_window() is intentionally NOT called here.
-            # Hiding the window before CAPTCHA causes Chrome to throttle the
-            # reCAPTCHA audio-challenge iframe. Window is hidden after login.
 
             # Handle "Application error: a client-side exception has occurred"
             if not self._handle_application_error():
@@ -2157,11 +2110,6 @@ class TLSCheckerService:
                 branch_url=branch_url, service_type=service_type,
                 is_retry=is_retry,
             )
-
-            # Now that CAPTCHA is solved and login is done, hide Chrome if background mode.
-            # Deferring until here prevents Chrome from throttling the audio-challenge iframe.
-            if login_success:
-                self._hide_chrome_window()
 
             if not login_success:
                 self._cleanup_driver()
