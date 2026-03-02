@@ -31,15 +31,10 @@ interface LicenseRecord {
 }
 
 const PLAN_OPTIONS = [
-  { value: "legalization_monthly", label: "Legalization  Monthly" },
-  { value: "legalization_quarterly", label: "Legalization  Quarterly" },
-  { value: "visa_monthly", label: "Visa  Monthly" },
-  { value: "visa_quarterly", label: "Visa  Quarterly" },
-  { value: "premium_monthly", label: "Premium  Monthly" },
-  { value: "premium_quarterly", label: "Premium  Quarterly" },
-  { value: "premium_annual", label: "Premium  Annual" },
+  { value: "legalization", label: "Legalization" },
+  { value: "visa", label: "Visa" },
+  { value: "all_in_one", label: "Legalization + Visa" },
   { value: "premium", label: "Premium" },
-  { value: "basic", label: "Basic" },
 ];
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
@@ -90,7 +85,7 @@ interface CreateModalProps {
 function CreateLicenseModal({ onClose, onCreated }: CreateModalProps) {
   const [form, setForm] = useState({
     hardware_id: "",
-    plan_key: "premium_monthly",
+    plan_key: "legalization",
     customer_name: "",
     customer_email: "",
     notes: "",

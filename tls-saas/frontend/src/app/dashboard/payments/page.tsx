@@ -128,7 +128,7 @@ export default function PaymentsPage() {
       setTimeout(() => setToast(null), 4000);
       return;
     }
-    if (filteredBranches.length > 0 && !selectedBranch) {
+    if (!isAllInOne && filteredBranches.length > 0 && !selectedBranch) {
       setToast({ type: "error", msg: "Please select a branch." });
       setTimeout(() => setToast(null), 4000);
       return;
@@ -263,7 +263,7 @@ export default function PaymentsPage() {
           </motion.div>
           {/* Plans */}
           <div className="grid sm:grid-cols-2 gap-4">
-            {plans.filter(p => p.is_active).map((plan) => {
+            {plans.filter(p => p.is_active).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)).map((plan) => {
               const isSelected = selectedPlan === plan.id;
               return (
                 <motion.button
@@ -291,8 +291,8 @@ export default function PaymentsPage() {
             })}
           </div>
 
-          {/* Service type selection — shown for premium and all_in_one */}
-          {selectedPlan && (isPremium || isAllInOne) && (
+          {/* Service type selection — shown for premium only */}
+          {selectedPlan && isPremium && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 space-y-3">
               <h3 className="font-semibold flex items-center gap-2 text-sm">
                 <AlertCircle className="w-4 h-4 text-primary-400" /> Select Service Type
@@ -316,8 +316,8 @@ export default function PaymentsPage() {
             </motion.div>
           )}
 
-          {/* Branch selection — shown for all plans */}
-          {selectedPlan && filteredBranches.length > 0 && (
+          {/* Branch selection — shown for non-combo plans */}
+          {selectedPlan && !isAllInOne && filteredBranches.length > 0 && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 space-y-3">
               <h3 className="font-semibold flex items-center gap-2 text-sm">
                 <AlertCircle className="w-4 h-4 text-primary-400" /> Select Your Branch

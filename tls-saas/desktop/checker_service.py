@@ -372,6 +372,7 @@ class TLSCheckerService:
                     driver_kwargs = {
                         "uc": True,
                         "headless": False,
+                        "headless2": Config.BROWSER_HEADLESS,
                         "driver_version": driver_ver,
                     }
                     
