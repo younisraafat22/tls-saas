@@ -362,37 +362,14 @@ class TLSCheckerService:
 
                     self.driver = Driver(**driver_kwargs)
 
-                    # Brief pause to ensure SeleniumBase UC reconnect is complete
-                    # before applying any CDP/Selenium commands.
-                    time.sleep(1)
-
-                    # Force CSS viewport to 1920x1080 via Emulation override.
-                    # This sets what the website sees for CSS media queries,
-                    # regardless of actual window size. Ensures TLS renders its
-                    # desktop layout (text LOGIN button) even when off-screen.
+                    # Maximize the window — the OS preserves maximized state
+                    # even across SeleniumBase UC reconnects.  For background
+                    # mode, the window is moved off-screen AFTER navigation
+                    # (uc_open_with_reconnect resets position/CDP state).
                     try:
-                        self.driver.execute_cdp_cmd(
-                            "Emulation.setDeviceMetricsOverride",
-                            {"width": 1920, "height": 1080,
-                             "deviceScaleFactor": 1, "mobile": False},
-                        )
+                        self.driver.maximize_window()
                     except Exception:
                         pass
-
-                    if Config.BROWSER_HEADLESS:
-                        # Move window off-screen. Use normal window state (NOT
-                        # minimized) so Chrome does not throttle JS/iframes.
-                        try:
-                            self.driver.set_window_size(1920, 1080)
-                            self.driver.set_window_position(-3000, 0)
-                        except Exception:
-                            pass
-                        self._window_hidden = True
-                    else:
-                        try:
-                            self.driver.maximize_window()
-                        except Exception:
-                            pass
                     self._is_seleniumbase = True
                     return True
                 except Exception as e:
@@ -1244,6 +1221,33 @@ class TLSCheckerService:
             
             # Handle cookie consent banner (may block Login button)
             self._handle_cookie_consent()
+
+            # ── Background mode: move off-screen + lock CSS viewport ────────
+            # This MUST happen AFTER navigation because uc_open_with_reconnect
+            # resets the Chrome session (clearing CDP state and window position).
+            if Config.BROWSER_HEADLESS and not self._window_hidden:
+                try:
+                    # Lock CSS media-query viewport to 1920x1080 so TLS renders
+                    # its desktop layout (text LOGIN button) even at 800x600.
+                    self.driver.execute_cdp_cmd(
+                        "Emulation.setDeviceMetricsOverride",
+                        {"width": 1920, "height": 1080,
+                         "deviceScaleFactor": 1, "mobile": False},
+                    )
+                except Exception:
+                    pass
+                try:
+                    self.driver.set_window_position(-3000, 0)
+                except Exception:
+                    pass
+                self._window_hidden = True
+                # Reload so the page re-renders with the new 1920x1080 viewport.
+                try:
+                    self.driver.refresh()
+                    self._wait_random(3, 5)
+                    self._handle_cookie_consent()
+                except Exception:
+                    pass
 
             # Handle "Application error: a client-side exception has occurred"
             if not self._handle_application_error():
