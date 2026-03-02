@@ -199,16 +199,22 @@ class TLSCheckerService:
                     return
     
     def _hide_chrome_window(self):
-        """Minimize Chrome to the taskbar in background mode.
+        """Move Chrome off-screen in background mode.
         
-        This is safe to call at any time (including before CAPTCHA) because
-        the anti-throttling Chrome flags prevent rendering slowdowns in
-        minimized windows.
+        We avoid minimize_window() because on Windows it collapses the render
+        viewport to near-zero, causing the TLS website to switch to its mobile
+        layout (SVG icon instead of text LOGIN button).
+        
+        Moving off-screen keeps the full 1920x1080 render size intact.
+        The anti-throttling Chrome flags prevent JS/iframe slowdowns for
+        off-screen windows, so reCAPTCHA audio still works correctly.
+        Chrome remains visible in the taskbar so the user can click it.
         """
         if self._window_hidden or not Config.BROWSER_HEADLESS or not self.driver:
             return
         try:
-            self.driver.minimize_window()
+            self.driver.set_window_position(-3000, 0)
+            self.driver.set_window_size(1920, 1080)
             self._window_hidden = True
         except Exception:
             pass
