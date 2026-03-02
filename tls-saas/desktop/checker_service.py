@@ -728,6 +728,13 @@ class TLSCheckerService:
             self.driver.switch_to.frame(challenge_frame)
             self._wait_random(1, 2)  # Increased wait for audio UI to fully load
 
+            # ── DIAGNOSTIC: what's visible in bframe right after re-entry? ──
+            try:
+                body_text = self.driver.find_element(By.TAG_NAME, "body").text[:300]
+                self._log(f"🔍 [DEBUG] bframe body text: {body_text[:200]}")
+            except Exception:
+                pass
+
             # Check for "automated queries" block
             try:
                 err_el = self.driver.find_element(By.CSS_SELECTOR, ".rc-audiochallenge-error-message")
@@ -780,6 +787,25 @@ class TLSCheckerService:
                 time.sleep(0.5)
 
             if not audio_url:
+                # ── DIAGNOSTIC: what's in the bframe when audio src is missing? ──
+                try:
+                    body_html = self.driver.find_element(By.TAG_NAME, "body").get_attribute("innerHTML")[:1500]
+                    self._log(f"🔍 [DEBUG] bframe HTML (truncated): {body_html[:500]}")
+                    # Check for error messages
+                    err_msgs = self.driver.find_elements(By.CSS_SELECTOR, ".rc-audiochallenge-error-message, .rc-doscaptcha-header, .rc-doscaptcha-body")
+                    for em in err_msgs:
+                        if em.text:
+                            self._log(f"🔍 [DEBUG] reCAPTCHA error text: {em.text}")
+                    # Check audio element state
+                    audio_els = self.driver.find_elements(By.CSS_SELECTOR, "#audio-source, audio, source")
+                    self._log(f"🔍 [DEBUG] Audio elements found: {len(audio_els)}")
+                    for ae in audio_els:
+                        tag = ae.tag_name
+                        src = ae.get_attribute("src") or "(none)"
+                        self._log(f"🔍 [DEBUG]   <{tag}> src={src[:200]}")
+                except Exception as dbg_e:
+                    self._log(f"🔍 [DEBUG] bframe diagnostic error: {dbg_e}")
+
                 self.driver.switch_to.default_content()
                 self._log("❌ Audio source element not found")
                 if attempt < MAX_ATTEMPTS:
