@@ -199,22 +199,29 @@ class TLSCheckerService:
                     return
     
     def _hide_chrome_window(self):
-        """Move Chrome off-screen in background mode.
+        """Minimize Chrome to the taskbar in background mode.
         
-        We avoid minimize_window() because on Windows it collapses the render
-        viewport to near-zero, causing the TLS website to switch to its mobile
-        layout (SVG icon instead of text LOGIN button).
+        Chrome must have been visible on screen first (maximize_window in
+        _setup_driver) so that Google reCAPTCHA trusts it as a real browser.
+        We then minimize to the taskbar after navigation.
         
-        Moving off-screen keeps the full 1920x1080 render size intact.
-        The anti-throttling Chrome flags prevent JS/iframe slowdowns for
-        off-screen windows, so reCAPTCHA audio still works correctly.
-        Chrome remains visible in the taskbar so the user can click it.
+        The CSS viewport is locked to 1920x1080 via CDP
+        Emulation.setDeviceMetricsOverride, so the TLS website still sees
+        a desktop layout even though the OS window is minimized.
         """
         if self._window_hidden or not Config.BROWSER_HEADLESS or not self.driver:
             return
         try:
-            self.driver.set_window_position(-3000, 0)
-            self.driver.set_window_size(1920, 1080)
+            # Lock CSS viewport so TLS renders desktop layout when minimized
+            self.driver.execute_cdp_cmd(
+                "Emulation.setDeviceMetricsOverride",
+                {"width": 1920, "height": 1080,
+                 "deviceScaleFactor": 1, "mobile": False},
+            )
+        except Exception:
+            pass
+        try:
+            self.driver.minimize_window()
             self._window_hidden = True
         except Exception:
             pass
@@ -1248,25 +1255,14 @@ class TLSCheckerService:
             # Handle cookie consent banner (may block Login button)
             self._handle_cookie_consent()
 
-            # ── Background mode: move off-screen + lock CSS viewport ────────
+            # ── Background mode: minimize to taskbar + lock CSS viewport ───
             # This MUST happen AFTER navigation because uc_open_with_reconnect
-            # resets the Chrome session (clearing CDP state and window position).
+            # resets the Chrome session (clearing CDP state).
+            # Chrome was already visible at launch (maximize_window in
+            # _setup_driver) — Google saw a real browser.  Now we minimize it
+            # and lock the CSS viewport so TLS keeps its desktop layout.
             if Config.BROWSER_HEADLESS and not self._window_hidden:
-                try:
-                    # Lock CSS media-query viewport to 1920x1080 so TLS renders
-                    # its desktop layout (text LOGIN button) even at 800x600.
-                    self.driver.execute_cdp_cmd(
-                        "Emulation.setDeviceMetricsOverride",
-                        {"width": 1920, "height": 1080,
-                         "deviceScaleFactor": 1, "mobile": False},
-                    )
-                except Exception:
-                    pass
-                try:
-                    self.driver.set_window_position(-3000, 0)
-                except Exception:
-                    pass
-                self._window_hidden = True
+                self._hide_chrome_window()
                 # Reload so the page re-renders with the new 1920x1080 viewport.
                 try:
                     self.driver.refresh()
