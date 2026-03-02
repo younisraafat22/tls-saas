@@ -377,12 +377,20 @@ class TLSCheckerService:
                     # Always launch Chrome as a real visible window to avoid
                     # reCAPTCHA/Cloudflare headless-browser detection.
                     # When the user enables "Run browser in background" we hide
-                    # the window off-screen via Win32 AFTER launch (_hide_chrome_window).
+                    # the window off-screen via Win32 AFTER login is complete.
+                    # Anti-throttling flags prevent Chrome from slowing down iframes
+                    # when the window is off-screen or occluded.
+                    anti_throttle_args = (
+                        "--disable-background-timer-throttling "
+                        "--disable-renderer-backgrounding "
+                        "--disable-backgrounding-occluded-windows"
+                    )
                     driver_kwargs = {
                         "uc": True,
                         "headless": False,
                         "headless2": False,
                         "driver_version": driver_ver,
+                        "chromium_arg": anti_throttle_args,
                     }
                     
                     # If running as frozen app, explicitly set binary location
@@ -398,16 +406,17 @@ class TLSCheckerService:
                                 break
                     
                     self.driver = Driver(**driver_kwargs)
-                    # Force full desktop resolution immediately so the TLS website
-                    # always renders its desktop layout (text LOGIN button, not SVG icon)
+                    # Force full desktop resolution so the TLS website always
+                    # renders its desktop layout (text LOGIN button, not SVG icon).
+                    # Do NOT hide the window here — hiding before login causes
+                    # Chrome to throttle the reCAPTCHA audio challenge iframe.
+                    # Window is hidden in run_check() AFTER successful login.
                     try:
                         self.driver.set_window_size(1920, 1080)
+                        if not Config.BROWSER_HEADLESS:
+                            self.driver.maximize_window()
                     except Exception:
                         pass
-                    if Config.BROWSER_HEADLESS:
-                        self._hide_chrome_window()
-                    else:
-                        self.driver.maximize_window()
                     self._is_seleniumbase = True
                     return True
                 except Exception as e:
@@ -1260,8 +1269,9 @@ class TLSCheckerService:
             # Handle cookie consent banner (may block Login button)
             self._handle_cookie_consent()
             
-            # Now that page is loaded and stable, hide Chrome window if in background mode
-            self._hide_chrome_window()
+            # NOTE: _hide_chrome_window() is intentionally NOT called here.
+            # Hiding the window before CAPTCHA causes Chrome to throttle the
+            # reCAPTCHA audio-challenge iframe. Window is hidden after login.
 
             # Handle "Application error: a client-side exception has occurred"
             if not self._handle_application_error():
@@ -2147,6 +2157,12 @@ class TLSCheckerService:
                 branch_url=branch_url, service_type=service_type,
                 is_retry=is_retry,
             )
+
+            # Now that CAPTCHA is solved and login is done, hide Chrome if background mode.
+            # Deferring until here prevents Chrome from throttling the audio-challenge iframe.
+            if login_success:
+                self._hide_chrome_window()
+
             if not login_success:
                 self._cleanup_driver()
                 
