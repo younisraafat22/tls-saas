@@ -398,6 +398,12 @@ class TLSCheckerService:
                                 break
                     
                     self.driver = Driver(**driver_kwargs)
+                    # Force full desktop resolution immediately so the TLS website
+                    # always renders its desktop layout (text LOGIN button, not SVG icon)
+                    try:
+                        self.driver.set_window_size(1920, 1080)
+                    except Exception:
+                        pass
                     if Config.BROWSER_HEADLESS:
                         self._hide_chrome_window()
                     else:
@@ -490,6 +496,8 @@ class TLSCheckerService:
             except:
                 pass
             self.driver = None
+        # Always reset so the next cycle can re-hide/resize the new window
+        self._window_hidden = False
     
     def _dismiss_alert(self):
         """Dismiss any unexpected browser alert (e.g. reCAPTCHA network errors)."""
