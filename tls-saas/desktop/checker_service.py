@@ -335,25 +335,16 @@ class TLSCheckerService:
                     chrome_ver = _get_chrome_major_version()
                     driver_ver = str(chrome_ver) if chrome_ver else "keep"
 
-                    # Always launch Chrome as a real visible window to avoid
-                    # reCAPTCHA/Cloudflare headless-browser detection.
-                    # When the user enables "Run browser in background" we hide
-                    # the window off-screen via Win32 AFTER login is complete.
-                    # Anti-throttling flags prevent Chrome from slowing down iframes
-                    # when the window is off-screen or occluded.
-                    # Anti-throttle flags prevent Chrome from slowing down
-                    # JS/iframes when the window is off-screen or occluded.
+                    # Anti-throttle flags: prevent Chrome slowing down JS/iframes
+                    # when the window is off-screen.
+                    # NOTE: do NOT include --window-size here — SeleniumBase's
+                    # chromium_arg splits on commas, so "1920,1080" becomes two
+                    # broken tokens. Window size is set via CDP after launch.
                     chrome_flags = (
                         "--disable-background-timer-throttling "
                         "--disable-renderer-backgrounding "
-                        "--disable-backgrounding-occluded-windows "
-                        "--window-size=1920,1080"
+                        "--disable-backgrounding-occluded-windows"
                     )
-                    # When background mode is on, launch Chrome off-screen from
-                    # the start — this is more reliable than set_window_position()
-                    # after launch (which Windows can ignore for frozen apps).
-                    if Config.BROWSER_HEADLESS:
-                        chrome_flags += " --window-position=-3000,0"
 
                     driver_kwargs = {
                         "uc": True,
@@ -376,17 +367,36 @@ class TLSCheckerService:
                                 break
                     
                     self.driver = Driver(**driver_kwargs)
-                    # The --window-size and --window-position launch flags already
-                    # set the correct size/position.  Reinforce via Selenium API
-                    # as a belt-and-suspenders fallback.
+                    # Use CDP Browser.setWindowBounds to set size/position.
+                    # This is the only method guaranteed to work with SeleniumBase
+                    # UC mode (which reconnects to Chrome, potentially resetting
+                    # any size set before reconnection).
                     try:
-                        if Config.BROWSER_HEADLESS:
-                            self.driver.set_window_size(1920, 1080)
-                            self._window_hidden = True
-                        else:
-                            self.driver.maximize_window()
+                        result = self.driver.execute_cdp_cmd("Browser.getWindowForTarget", {})
+                        window_id = result.get("windowId")
+                        if window_id:
+                            bounds = {"width": 1920, "height": 1080, "windowState": "normal"}
+                            if Config.BROWSER_HEADLESS:
+                                bounds["left"] = -3000
+                                bounds["top"] = 0
+                            else:
+                                bounds["left"] = 0
+                                bounds["top"] = 0
+                            self.driver.execute_cdp_cmd("Browser.setWindowBounds",
+                                {"windowId": window_id, "bounds": bounds})
+                            if Config.BROWSER_HEADLESS:
+                                self._window_hidden = True
                     except Exception:
-                        pass
+                        # Fallback to Selenium API
+                        try:
+                            self.driver.set_window_size(1920, 1080)
+                            if Config.BROWSER_HEADLESS:
+                                self.driver.set_window_position(-3000, 0)
+                                self._window_hidden = True
+                            else:
+                                self.driver.maximize_window()
+                        except Exception:
+                            pass
                     self._is_seleniumbase = True
                     return True
                 except Exception as e:
@@ -1270,8 +1280,21 @@ class TLSCheckerService:
                     "a.tls-button-link",
                 ]
                 login_found = False
+
+                # ── DIAGNOSTIC: log actual browser dimensions ──
+                try:
+                    win_size = self.driver.get_window_size()
+                    win_pos = self.driver.get_window_position()
+                    self._log(f"🔍 [DEBUG] Window size: {win_size['width']}x{win_size['height']}, pos: ({win_pos['x']},{win_pos['y']})")
+                except Exception:
+                    pass
+
                 for selector in login_selectors:
                     login_links = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    # ── DIAGNOSTIC: log what elements each selector finds ──
+                    if login_links:
+                        texts = [repr(l.text.strip()) for l in login_links[:5]]
+                        self._log(f"🔍 [DEBUG] Selector '{selector}' found {len(login_links)} el(s): {', '.join(texts)}")
                     for link in login_links:
                         if link.text.strip().upper() == 'LOGIN':
                             self.driver.execute_script("arguments[0].click();", link)
@@ -1299,15 +1322,30 @@ class TLSCheckerService:
                             break
 
                 if not login_found:
-                    # Try fallback: Look for SVG icon button (small screens)
+                    # Try fallback: SVG user icon (shown on smaller viewports).
+                    # Clicking it opens a dropdown — we then find and click the
+                    # Login link inside that dropdown.
                     try:
-                        # Try finding by SVG aria-label
                         icon_svg = self.driver.find_element(By.CSS_SELECTOR, "svg[aria-label='User icon']")
-                        # Click the parent button/div containing the icon
                         login_button = icon_svg.find_element(By.XPATH, "..")
                         self.driver.execute_script("arguments[0].click();", login_button)
-                        login_found = True
                         self._log("✓ Clicked SVG icon login button")
+                        time.sleep(1.5)  # wait for dropdown to open
+                        # Look for Login link inside the opened dropdown
+                        try:
+                            login_link = self.driver.find_element(
+                                By.XPATH,
+                                "//*[normalize-space(text())='LOGIN' or "
+                                "normalize-space(text())='Login' or "
+                                "normalize-space(text())='Log in']"
+                            )
+                            self.driver.execute_script("arguments[0].click();", login_link)
+                            login_found = True
+                            self._log("✓ Clicked Login link in dropdown")
+                        except Exception:
+                            # Dropdown didn't have a direct Login link;
+                            # the icon click may have navigated directly
+                            login_found = True
                     except Exception:
                         pass
 
@@ -1369,6 +1407,19 @@ class TLSCheckerService:
                 if not email_field or not password_field:
                     raise Exception("fields not found")
             except Exception as e:
+                # ── DIAGNOSTIC: what's on the page when login form isn't found? ──
+                try:
+                    cur_url = self.driver.current_url
+                    page_title = self.driver.title
+                    body_text = self.driver.find_element(By.TAG_NAME, "body").text[:300]
+                    all_inputs = self.driver.find_elements(By.CSS_SELECTOR, "input")
+                    input_info = [(i.get_attribute("id"), i.get_attribute("type"), i.get_attribute("name")) for i in all_inputs[:10]]
+                    self._log(f"🔍 [DEBUG] Login form missing — URL: {cur_url}")
+                    self._log(f"🔍 [DEBUG] Title: {page_title}")
+                    self._log(f"🔍 [DEBUG] Inputs on page: {input_info}")
+                    self._log(f"🔍 [DEBUG] Body: {body_text[:200]}")
+                except Exception:
+                    pass
                 return False, "PAGE_NOT_LOADED: Login form not found. Website may be loading slowly. Will retry immediately."
             
             email_field.clear()
