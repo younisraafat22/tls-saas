@@ -335,23 +335,17 @@ class TLSCheckerService:
                     chrome_ver = _get_chrome_major_version()
                     driver_ver = str(chrome_ver) if chrome_ver else "keep"
 
-                    # Anti-throttle flags: prevent Chrome slowing down JS/iframes
-                    # when the window is off-screen.
-                    # NOTE: do NOT include --window-size here — SeleniumBase's
-                    # chromium_arg splits on commas, so "1920,1080" becomes two
-                    # broken tokens. Window size is set via CDP after launch.
-                    chrome_flags = (
-                        "--disable-background-timer-throttling "
-                        "--disable-renderer-backgrounding "
-                        "--disable-backgrounding-occluded-windows"
-                    )
-
+                    # Standard UC driver — no extra chromium flags.
+                    # Anti-throttle flags like --disable-renderer-backgrounding
+                    # change Chrome's JS fingerprint and cause Google reCAPTCHA
+                    # to block audio challenges. Off-screen positioning at (-3000, 0)
+                    # hides the window without triggering Chrome's minimize/occlude
+                    # throttling (which only fires for minimized or occluded states).
                     driver_kwargs = {
                         "uc": True,
                         "headless": False,
                         "headless2": False,
                         "driver_version": driver_ver,
-                        "chromium_arg": chrome_flags,
                     }
                     
                     # If running as frozen app, explicitly set binary location
@@ -365,36 +359,38 @@ class TLSCheckerService:
                             if os.path.exists(cp):
                                 driver_kwargs["binary_location"] = cp
                                 break
-                    
+
                     self.driver = Driver(**driver_kwargs)
-                    # Use CDP Browser.setWindowBounds to set size/position.
-                    # This is the only method guaranteed to work with SeleniumBase
-                    # UC mode (which reconnects to Chrome, potentially resetting
-                    # any size set before reconnection).
+
+                    # Brief pause to ensure SeleniumBase UC reconnect is complete
+                    # before applying any CDP/Selenium commands.
+                    time.sleep(1)
+
+                    # Force CSS viewport to 1920x1080 via Emulation override.
+                    # This sets what the website sees for CSS media queries,
+                    # regardless of actual window size. Ensures TLS renders its
+                    # desktop layout (text LOGIN button) even when off-screen.
                     try:
-                        result = self.driver.execute_cdp_cmd("Browser.getWindowForTarget", {})
-                        window_id = result.get("windowId")
-                        if window_id:
-                            bounds = {"width": 1920, "height": 1080, "windowState": "normal"}
-                            if Config.BROWSER_HEADLESS:
-                                bounds["left"] = -3000
-                                bounds["top"] = 0
-                            else:
-                                bounds["left"] = 0
-                                bounds["top"] = 0
-                            self.driver.execute_cdp_cmd("Browser.setWindowBounds",
-                                {"windowId": window_id, "bounds": bounds})
-                            if Config.BROWSER_HEADLESS:
-                                self._window_hidden = True
+                        self.driver.execute_cdp_cmd(
+                            "Emulation.setDeviceMetricsOverride",
+                            {"width": 1920, "height": 1080,
+                             "deviceScaleFactor": 1, "mobile": False},
+                        )
                     except Exception:
-                        # Fallback to Selenium API
+                        pass
+
+                    if Config.BROWSER_HEADLESS:
+                        # Move window off-screen. Use normal window state (NOT
+                        # minimized) so Chrome does not throttle JS/iframes.
                         try:
                             self.driver.set_window_size(1920, 1080)
-                            if Config.BROWSER_HEADLESS:
-                                self.driver.set_window_position(-3000, 0)
-                                self._window_hidden = True
-                            else:
-                                self.driver.maximize_window()
+                            self.driver.set_window_position(-3000, 0)
+                        except Exception:
+                            pass
+                        self._window_hidden = True
+                    else:
+                        try:
+                            self.driver.maximize_window()
                         except Exception:
                             pass
                     self._is_seleniumbase = True
