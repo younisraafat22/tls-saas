@@ -341,17 +341,26 @@ class TLSCheckerService:
                     # the window off-screen via Win32 AFTER login is complete.
                     # Anti-throttling flags prevent Chrome from slowing down iframes
                     # when the window is off-screen or occluded.
-                    anti_throttle_args = (
+                    # Anti-throttle flags prevent Chrome from slowing down
+                    # JS/iframes when the window is off-screen or occluded.
+                    chrome_flags = (
                         "--disable-background-timer-throttling "
                         "--disable-renderer-backgrounding "
-                        "--disable-backgrounding-occluded-windows"
+                        "--disable-backgrounding-occluded-windows "
+                        "--window-size=1920,1080"
                     )
+                    # When background mode is on, launch Chrome off-screen from
+                    # the start — this is more reliable than set_window_position()
+                    # after launch (which Windows can ignore for frozen apps).
+                    if Config.BROWSER_HEADLESS:
+                        chrome_flags += " --window-position=-3000,0"
+
                     driver_kwargs = {
                         "uc": True,
                         "headless": False,
                         "headless2": False,
                         "driver_version": driver_ver,
-                        "chromium_arg": anti_throttle_args,
+                        "chromium_arg": chrome_flags,
                     }
                     
                     # If running as frozen app, explicitly set binary location
@@ -367,27 +376,13 @@ class TLSCheckerService:
                                 break
                     
                     self.driver = Driver(**driver_kwargs)
-                    # Force the page render viewport to 1920x1080 via CDP.
-                    # This persists even when the window is minimized (unlike
-                    # set_window_size which the OS can override in minimized state),
-                    # so the TLS website always renders its desktop layout
-                    # (text LOGIN button, not the SVG mobile icon).
+                    # The --window-size and --window-position launch flags already
+                    # set the correct size/position.  Reinforce via Selenium API
+                    # as a belt-and-suspenders fallback.
                     try:
-                        self.driver.execute_cdp_cmd(
-                            "Emulation.setDeviceMetricsOverride",
-                            {
-                                "width": 1920,
-                                "height": 1080,
-                                "deviceScaleFactor": 1,
-                                "mobile": False,
-                            },
-                        )
-                    except Exception:
-                        pass
-                    try:
-                        self.driver.set_window_size(1920, 1080)
                         if Config.BROWSER_HEADLESS:
-                            self._hide_chrome_window()  # minimize to taskbar
+                            self.driver.set_window_size(1920, 1080)
+                            self._window_hidden = True
                         else:
                             self.driver.maximize_window()
                     except Exception:
