@@ -735,13 +735,6 @@ class TLSCheckerService:
             self.driver.switch_to.frame(challenge_frame)
             self._wait_random(1, 2)  # Increased wait for audio UI to fully load
 
-            # ── DIAGNOSTIC: what's visible in bframe right after re-entry? ──
-            try:
-                body_text = self.driver.find_element(By.TAG_NAME, "body").text[:300]
-                self._log(f"🔍 [DEBUG] bframe body text: {body_text[:200]}")
-            except Exception:
-                pass
-
             # Check for "automated queries" block
             try:
                 err_el = self.driver.find_element(By.CSS_SELECTOR, ".rc-audiochallenge-error-message")
@@ -794,24 +787,14 @@ class TLSCheckerService:
                 time.sleep(0.5)
 
             if not audio_url:
-                # ── DIAGNOSTIC: what's in the bframe when audio src is missing? ──
+                # Show any specific reCAPTCHA error to user
                 try:
-                    body_html = self.driver.find_element(By.TAG_NAME, "body").get_attribute("innerHTML")[:1500]
-                    self._log(f"🔍 [DEBUG] bframe HTML (truncated): {body_html[:500]}")
-                    # Check for error messages
-                    err_msgs = self.driver.find_elements(By.CSS_SELECTOR, ".rc-audiochallenge-error-message, .rc-doscaptcha-header, .rc-doscaptcha-body")
+                    err_msgs = self.driver.find_elements(By.CSS_SELECTOR, ".rc-audiochallenge-error-message, .rc-doscaptcha-header")
                     for em in err_msgs:
                         if em.text:
-                            self._log(f"🔍 [DEBUG] reCAPTCHA error text: {em.text}")
-                    # Check audio element state
-                    audio_els = self.driver.find_elements(By.CSS_SELECTOR, "#audio-source, audio, source")
-                    self._log(f"🔍 [DEBUG] Audio elements found: {len(audio_els)}")
-                    for ae in audio_els:
-                        tag = ae.tag_name
-                        src = ae.get_attribute("src") or "(none)"
-                        self._log(f"🔍 [DEBUG]   <{tag}> src={src[:200]}")
-                except Exception as dbg_e:
-                    self._log(f"🔍 [DEBUG] bframe diagnostic error: {dbg_e}")
+                            self._log(f"❌ reCAPTCHA: {em.text[:120]}")
+                except Exception:
+                    pass
 
                 self.driver.switch_to.default_content()
                 self._log("❌ Audio source element not found")
@@ -1255,22 +1238,6 @@ class TLSCheckerService:
             # Handle cookie consent banner (may block Login button)
             self._handle_cookie_consent()
 
-            # ── Background mode: minimize to taskbar + lock CSS viewport ───
-            # This MUST happen AFTER navigation because uc_open_with_reconnect
-            # resets the Chrome session (clearing CDP state).
-            # Chrome was already visible at launch (maximize_window in
-            # _setup_driver) — Google saw a real browser.  Now we minimize it
-            # and lock the CSS viewport so TLS keeps its desktop layout.
-            if Config.BROWSER_HEADLESS and not self._window_hidden:
-                self._hide_chrome_window()
-                # Reload so the page re-renders with the new 1920x1080 viewport.
-                try:
-                    self.driver.refresh()
-                    self._wait_random(3, 5)
-                    self._handle_cookie_consent()
-                except Exception:
-                    pass
-
             # Handle "Application error: a client-side exception has occurred"
             if not self._handle_application_error():
                 return False, "APPLICATION_ERROR: Page failed to load properly. Will retry immediately."
@@ -1303,20 +1270,8 @@ class TLSCheckerService:
                 ]
                 login_found = False
 
-                # ── DIAGNOSTIC: log actual browser dimensions ──
-                try:
-                    win_size = self.driver.get_window_size()
-                    win_pos = self.driver.get_window_position()
-                    self._log(f"🔍 [DEBUG] Window size: {win_size['width']}x{win_size['height']}, pos: ({win_pos['x']},{win_pos['y']})")
-                except Exception:
-                    pass
-
                 for selector in login_selectors:
                     login_links = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    # ── DIAGNOSTIC: log what elements each selector finds ──
-                    if login_links:
-                        texts = [repr(l.text.strip()) for l in login_links[:5]]
-                        self._log(f"🔍 [DEBUG] Selector '{selector}' found {len(login_links)} el(s): {', '.join(texts)}")
                     for link in login_links:
                         if link.text.strip().upper() == 'LOGIN':
                             self.driver.execute_script("arguments[0].click();", link)
@@ -1429,19 +1384,6 @@ class TLSCheckerService:
                 if not email_field or not password_field:
                     raise Exception("fields not found")
             except Exception as e:
-                # ── DIAGNOSTIC: what's on the page when login form isn't found? ──
-                try:
-                    cur_url = self.driver.current_url
-                    page_title = self.driver.title
-                    body_text = self.driver.find_element(By.TAG_NAME, "body").text[:300]
-                    all_inputs = self.driver.find_elements(By.CSS_SELECTOR, "input")
-                    input_info = [(i.get_attribute("id"), i.get_attribute("type"), i.get_attribute("name")) for i in all_inputs[:10]]
-                    self._log(f"🔍 [DEBUG] Login form missing — URL: {cur_url}")
-                    self._log(f"🔍 [DEBUG] Title: {page_title}")
-                    self._log(f"🔍 [DEBUG] Inputs on page: {input_info}")
-                    self._log(f"🔍 [DEBUG] Body: {body_text[:200]}")
-                except Exception:
-                    pass
                 return False, "PAGE_NOT_LOADED: Login form not found. Website may be loading slowly. Will retry immediately."
             
             email_field.clear()
@@ -2196,6 +2138,12 @@ class TLSCheckerService:
                 branch_url=branch_url, service_type=service_type,
                 is_retry=is_retry,
             )
+
+            # Minimize Chrome to taskbar AFTER login (including CAPTCHA solving).
+            # Chrome was visible on screen during the entire login flow so that
+            # Google sees a real browser. Now it's safe to hide it.
+            if login_success:
+                self._hide_chrome_window()
 
             if not login_success:
                 self._cleanup_driver()
