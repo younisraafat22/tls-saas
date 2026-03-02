@@ -1238,6 +1238,27 @@ class TLSCheckerService:
             # Handle cookie consent banner (may block Login button)
             self._handle_cookie_consent()
 
+            # ── Restore window state after uc_open_with_reconnect ───────────
+            # uc_open_with_reconnect disconnects/reconnects CDP which resets
+            # window size to 800x600. We must fix this AFTER navigation.
+            # For background mode: Chrome stays FULLY VISIBLE ON SCREEN here —
+            # reCAPTCHA checks window.screenX/Y and document.visibilityState,
+            # so any hidden/off-screen/minimized state blocks audio challenges.
+            # Chrome is only minimized AFTER login succeeds.
+            try:
+                self.driver.execute_cdp_cmd(
+                    "Emulation.setDeviceMetricsOverride",
+                    {"width": 1920, "height": 1080,
+                     "deviceScaleFactor": 1, "mobile": False},
+                )
+            except Exception:
+                pass
+            try:
+                self.driver.set_window_size(1920, 1080)
+                self.driver.maximize_window()
+            except Exception:
+                pass
+
             # Handle "Application error: a client-side exception has occurred"
             if not self._handle_application_error():
                 return False, "APPLICATION_ERROR: Page failed to load properly. Will retry immediately."
