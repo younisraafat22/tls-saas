@@ -391,8 +391,11 @@ class TLSApp:
         if e.key == "D" and e.ctrl and e.shift:
             self._developer_mode = not self._developer_mode
             status = "enabled" if self._developer_mode else "disabled"
+            # Sync flag to checker so log verbosity changes immediately
+            if self.checker:
+                self.checker.developer_mode = self._developer_mode
             if self.page:
-                self.page.snack_bar = ft.SnackBar(ft.Text(f"Developer mode {status}"), open=True)
+                self.page.snack_bar = ft.SnackBar(ft.Text(f"Developer mode {status} — all logs {'visible' if self._developer_mode else 'filtered'}"), open=True)
                 self.page.update()
                 # Rebuild monitoring page to show/hide developer controls
                 self.show_monitoring_page()
@@ -1088,6 +1091,8 @@ class TLSApp:
                 on_status_update=self.update_status_log,
                 on_countdown_update=self.update_countdown,
             )
+        # Always sync developer mode to checker (handles mode changes while checker exists)
+        self.checker.developer_mode = self._developer_mode
 
         # Detect if checker is actually still running (survives page rebuilds)
         is_monitoring = self.checker.is_running if self.checker else False
@@ -1911,8 +1916,20 @@ class TLSApp:
                                                 [
                                                     ft.Icon(ft.Icons.HISTORY, size=20, color="#00D9FF"),
                                                     ft.Text("Activity Log", size=16, weight=ft.FontWeight.BOLD),
+                                                    *([ft.Container(
+                                                        content=ft.Text("DEV", size=9, weight=ft.FontWeight.BOLD, color="#0A0E27"),
+                                                        bgcolor="#FFD700", border_radius=4, padding=ft.padding.symmetric(horizontal=5, vertical=2),
+                                                    )] if self._developer_mode else []),
+                                                    ft.Container(expand=True),
+                                                    *([ft.IconButton(
+                                                        icon=ft.Icons.FOLDER_OPEN,
+                                                        tooltip="Open debug log file",
+                                                        icon_size=16,
+                                                        icon_color=ft.Colors.GREY_400,
+                                                        on_click=lambda _: self._open_debug_log(),
+                                                    )] if self._developer_mode else []),
                                                 ],
-                                                alignment=ft.MainAxisAlignment.CENTER, spacing=8,
+                                                alignment=ft.MainAxisAlignment.START, spacing=8,
                                             ),
                                             ft.Divider(height=1, color=ft.Colors.with_opacity(0.2, "#00D9FF")),
                                             ft.Container(content=self.status_list, expand=True),
@@ -2108,13 +2125,15 @@ class TLSApp:
 
                         # Persist for page rebuild recovery
                         self._log_history.append((message, timestamp))
-                        if len(self._log_history) > 50:
-                            self._log_history = self._log_history[-50:]
+                        _hist_limit = 500 if self._developer_mode else 50
+                        if len(self._log_history) > _hist_limit:
+                            self._log_history = self._log_history[-_hist_limit:]
 
                         log_entry = self._create_log_entry(message, timestamp)
 
                         self.status_list.controls.append(log_entry)
-                        if len(self.status_list.controls) > 20:
+                        _display_limit = 200 if self._developer_mode else 20
+                        if len(self.status_list.controls) > _display_limit:
                             self.status_list.controls.pop(0)
 
                         if self.status_text:
@@ -2164,6 +2183,27 @@ class TLSApp:
                     self.page.update()
                 except Exception:
                     pass
+
+    def _open_debug_log(self):
+        """Open the checker_debug.log file in the system's default text editor."""
+        try:
+            from config import BASE_DIR
+            log_path = str(BASE_DIR / "checker_debug.log")
+        except Exception:
+            import os
+            log_path = os.path.join(os.getenv("APPDATA", ""), "TLSAppointmentChecker", "checker_debug.log")
+        try:
+            import os
+            if os.path.exists(log_path):
+                os.startfile(log_path)
+            else:
+                if self.page:
+                    self.page.snack_bar = ft.SnackBar(ft.Text(f"Log file not found: {log_path}"), open=True)
+                    self.page.update()
+        except Exception as ex:
+            if self.page:
+                self.page.snack_bar = ft.SnackBar(ft.Text(f"Could not open log: {ex}"), open=True)
+                self.page.update()
 
     def update_status_log(self, message: str):
         try:

@@ -125,6 +125,7 @@ class TLSCheckerService:
         self.on_status_update = on_status_update  # Callback for UI updates
         self.on_countdown_update = on_countdown_update  # Callback for countdown timer
         self.last_status_report = None
+        self.developer_mode = False  # When True, ALL log messages are forwarded to the UI
     
     # Messages allowed in the UI activity log (prefix match).
     # Everything else is printed to terminal only.
@@ -186,8 +187,12 @@ class TLSCheckerService:
             # If all else fails, silently continue - don't break the app
             print(f"[Checker] Warning: Could not write to debug log: {e}")
         
-        # Only forward approved messages to the UI
+        # Forward messages to the UI
         if self.on_status_update:
+            if getattr(self, 'developer_mode', False):
+                # Developer mode: send every message regardless of prefix
+                self.on_status_update(message)
+                return
             for prefix in self._UI_ALLOWED_PREFIXES:
                 if message.startswith(prefix):
                     self.on_status_update(message)
