@@ -203,11 +203,10 @@ async def monitoring_status(
 
     # Desktop license users don't have Subscription rows — treat approved payment as active
     if not is_active:
-        from app.models import Payment, PaymentStatus as PS
         paid = await db.execute(
             select(Payment).where(
                 Payment.user_id == user.id,
-                Payment.status == PS.APPROVED,
+                Payment.status == PaymentStatus.APPROVED,
                 Payment.license_key.isnot(None),
             ).limit(1)
         )
