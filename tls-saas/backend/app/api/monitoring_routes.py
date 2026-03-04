@@ -299,18 +299,32 @@ async def check_results(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get recent check results for monitored branches."""
-    # Get user's monitored branch IDs
+    """Get recent check results for monitored branches — only since user started monitoring."""
+    # Get user's monitored branches with their start dates
     monitors = await db.execute(
-        select(UserBranchMonitor.branch_id)
+        select(UserBranchMonitor)
         .where(UserBranchMonitor.user_id == user.id, UserBranchMonitor.is_active == True)
     )
-    my_branch_ids = [m[0] for m in monitors.all()]
+    my_monitors = monitors.scalars().all()
+    my_branch_ids = [m.branch_id for m in my_monitors]
 
     if not my_branch_ids:
         return []
 
-    query = select(CheckResult, Branch).join(Branch, CheckResult.branch_id == Branch.id)
+    # Join UserBranchMonitor so we can filter: only show results since user started monitoring
+    query = (
+        select(CheckResult, Branch)
+        .join(Branch, CheckResult.branch_id == Branch.id)
+        .join(
+            UserBranchMonitor,
+            and_(
+                UserBranchMonitor.branch_id == CheckResult.branch_id,
+                UserBranchMonitor.user_id == user.id,
+                UserBranchMonitor.is_active == True,
+                CheckResult.checked_at >= UserBranchMonitor.created_at,
+            ),
+        )
+    )
 
     if branch_id and branch_id in my_branch_ids:
         query = query.where(CheckResult.branch_id == branch_id)

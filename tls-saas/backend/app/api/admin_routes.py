@@ -1079,16 +1079,30 @@ async def activity_log(
 # ── Scheduler Control ───────────────────────────────────────────────
 
 @router.post("/checker/start", response_model=MessageResponse)
-async def start_checker(admin=Depends(get_current_admin)):
+async def start_checker(admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
     from app.services.scheduler import scheduler_service
     scheduler_service.start()
+    # Persist state so backend auto-resumes after restart
+    setting = (await db.execute(select(SystemSetting).where(SystemSetting.key == "scheduler_running"))).scalar_one_or_none()
+    if setting:
+        setting.value = "true"
+    else:
+        db.add(SystemSetting(key="scheduler_running", value="true"))
+    await db.commit()
     return MessageResponse(message="Checker scheduler started")
 
 
 @router.post("/checker/stop", response_model=MessageResponse)
-async def stop_checker(admin=Depends(get_current_admin)):
+async def stop_checker(admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
     from app.services.scheduler import scheduler_service
     scheduler_service.stop()
+    # Persist state so backend does NOT auto-resume after restart
+    setting = (await db.execute(select(SystemSetting).where(SystemSetting.key == "scheduler_running"))).scalar_one_or_none()
+    if setting:
+        setting.value = "false"
+    else:
+        db.add(SystemSetting(key="scheduler_running", value="false"))
+    await db.commit()
     return MessageResponse(message="Checker scheduler stopped")
 
 

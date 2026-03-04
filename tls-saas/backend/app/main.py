@@ -15,7 +15,7 @@ from sqlalchemy import select, text
 from app.config import settings
 from app.database import create_tables, async_session
 from app.models import (
-    User, Plan, Branch, PlanType, ServiceType, UserCredential,
+    User, Plan, Branch, PlanType, ServiceType, UserCredential, SystemSetting,
 )
 from app.auth import hash_password, decode_token, get_current_user
 from app.websocket import ws_manager
@@ -388,10 +388,18 @@ async def lifespan(app: FastAPI):
 
     await seed_data()
 
-    # Auto-start the scheduler so monitoring resumes after backend restarts
+    # Resume scheduler if it was running before restart (persisted in system settings)
     from app.services.scheduler import scheduler_service
-    scheduler_service.start()
-    logger.info("Server ready. Monitoring scheduler started automatically.")
+    async with async_session() as db:
+        resume_r = await db.execute(
+            select(SystemSetting).where(SystemSetting.key == "scheduler_running")
+        )
+        resume_setting = resume_r.scalar_one_or_none()
+        if resume_setting and resume_setting.value == "true":
+            scheduler_service.start()
+            logger.info("Server ready. Monitoring scheduler auto-resumed (was running before restart).")
+        else:
+            logger.info("Server ready. Start monitoring manually from Admin → Monitoring.")
 
     yield
 
