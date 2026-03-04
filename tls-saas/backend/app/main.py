@@ -390,12 +390,21 @@ async def lifespan(app: FastAPI):
             ))
             count = result.scalar()
             if count and count > 0:
+                # If the renamed target already exists, just delete the old duplicate rows
+                await db.execute(text(
+                    "DELETE FROM branches WHERE name LIKE '% - Normal Legalization' "
+                    "AND EXISTS ("
+                    "  SELECT 1 FROM branches b2 WHERE b2.name = REPLACE(branches.name, ' - Normal Legalization', ' - Legalization')"
+                    "  AND b2.service_type = branches.service_type"
+                    ")"
+                ))
+                # Rename any remaining rows where target doesn't exist yet
                 await db.execute(text(
                     "UPDATE branches SET name = REPLACE(name, ' - Normal Legalization', ' - Legalization') "
                     "WHERE name LIKE '% - Normal Legalization' AND UPPER(service_type) = 'LEGALIZATION'"
                 ))
                 await db.commit()
-                logger.info("Migration: renamed 'Normal Legalization' branches to 'Legalization'")
+                logger.info("Migration: cleaned up 'Normal Legalization' branch duplicates")
         except Exception as e:
             logger.warning(f"Branch rename migration skipped: {e}")
 
