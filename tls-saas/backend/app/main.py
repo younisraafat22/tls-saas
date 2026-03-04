@@ -100,7 +100,7 @@ async def seed_data():
                 "price_monthly": settings.PRICE_PREMIUM_MONTHLY,
                 "features": [
                     "Server-based monitoring — no PC needed",
-                    "Legalization & visa branches covered",
+                    "1 service: legalization or visa (your choice)",
                     "Email & web push notifications",
                     "Real-time dashboard",
                     "Priority support",

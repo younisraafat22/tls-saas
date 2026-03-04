@@ -447,7 +447,7 @@ function Pricing() {
 
   const TRIAL_PLAN = {
     id: 0, plan_type: "trial", display_name: "Free Trial", price_monthly: 0, currency: "EGP",
-    features: ["3 checks per day (free)", "Email notifications", "Real-time dashboard", "No payment needed", "Desktop app — PC must stay on"],
+    features: ["3 checks — 1-day trial only", "Email notifications", "Real-time dashboard", "No payment needed", "Desktop app — PC must stay on"],
     sort_order: 0,
   };
 
@@ -461,7 +461,7 @@ function Pricing() {
           { id: 1, plan_type: "legalization", display_name: "Legalization Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice", "Email & web push notifications", "Real-time dashboard", "60-minute check interval", "No TLS credentials needed", "Desktop app — PC must stay on"], sort_order: 1 },
           { id: 2, plan_type: "visa", display_name: "Visa Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice", "Individual check using your TLS credentials", "Email & web push notifications", "Real-time dashboard", "60-minute check interval", "Desktop app — PC must stay on"], sort_order: 2 },
           { id: 4, plan_type: "all_in_one", display_name: "Legalization + Visa", price_monthly: 900, currency: "EGP", features: ["Both legalization & visa monitoring", "Switch service type anytime", "All branches available", "Email & web push notifications", "Real-time dashboard", "60-minute check interval", "Desktop app — PC must stay on"], sort_order: 3 },
-          { id: 3, plan_type: "premium", display_name: "Premium — Server Monitored", price_monthly: 2500, currency: "EGP", features: ["Server-based monitoring — no PC needed", "Legalization & visa branches covered", "Email & web push notifications", "Real-time dashboard", "Priority support", "30-minute check interval"], sort_order: 4 },
+          { id: 3, plan_type: "premium", display_name: "Premium — Server Monitored", price_monthly: 2500, currency: "EGP", features: ["Server-based monitoring — no PC needed", "1 service: legalization or visa (your choice)", "Email & web push notifications", "Real-time dashboard", "Priority support", "30-minute check interval"], sort_order: 4 },
         ]);
       });
   }, []);
