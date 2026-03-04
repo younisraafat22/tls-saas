@@ -148,7 +148,7 @@ export default function DashboardPage() {
       </div>
 
       {/* No subscription banner */}
-      {!hasActiveSubscription && !pendingPayment && (
+      {!hasActiveSubscription && !pendingPayment && !licenseKey && (
         <motion.div initial={fadeUp.hidden} animate={fadeUp.visible} className="glass-card p-6 border-amber-500/20">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -334,6 +334,16 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Empty state — desktop license but no checks yet */}
+      {!hasActiveSubscription && licenseKey && results.length === 0 && (
+        <div className="glass-card p-12 text-center">
+          <Monitor className="w-12 h-12 text-accent-green mx-auto mb-4" />
+          <h3 className="font-semibold text-lg mb-2 text-accent-green">Desktop App Connected</h3>
+          <p className="text-gray-400 text-sm mb-2">Your license key is ready. Install and activate it in the desktop app to start monitoring.</p>
+          <p className="text-gray-500 text-xs">Check results from the desktop app will appear here automatically.</p>
         </div>
       )}
 
