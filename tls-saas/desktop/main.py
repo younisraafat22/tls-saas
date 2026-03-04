@@ -37,7 +37,7 @@ if sys.platform == "win32":
         pass  # pywin32 not installed
 
 # App version
-VERSION = "2.0.0"
+VERSION = "1.0.0"
 
 # Update check URL — fetched from backend /api/app/version
 UPDATE_CHECK_URL = f"{Config.BACKEND_URL}/api/app/version"
@@ -589,6 +589,30 @@ class TLSApp:
                         settings.branch = "Sheikh Zayed"
                         settings.branch_url = Config.LEGALIZATION_BRANCHES["Sheikh Zayed"]
                 db.commit()
+
+                # ── Fetch server-assigned branch and override ──────────────
+                # Admin may have locked this license to a specific branch.
+                # Always ask the backend and override whatever default was set above.
+                try:
+                    lic = get_license_status()
+                    lic_key = lic.get('key', '') if lic else ''
+                    if lic_key:
+                        server_url = Config.LICENSE_SERVER_URL or Config.BACKEND_URL
+                        req = urllib.request.Request(
+                            f"{server_url.rstrip('/')}/api/payments/license-branch?license_key={lic_key}",
+                            headers={"Accept": "application/json"},
+                            method="GET",
+                        )
+                        with urllib.request.urlopen(req, timeout=8) as resp:
+                            data = json.loads(resp.read())
+                        assigned_name = data.get('branch_name')
+                        assigned_url  = data.get('branch_url')
+                        if assigned_name and assigned_url:
+                            settings.branch     = assigned_name
+                            settings.branch_url = assigned_url
+                            db.commit()
+                except Exception:
+                    pass  # Offline or no branch set on server — keep default
         finally:
             db.close()
 
@@ -1429,6 +1453,38 @@ class TLSApp:
         # If branch not in options (service type changed), reset to default
         if branch_value not in branch_options_list:
             branch_value = default_branch
+
+        # For locked plans, silently ask the server for the admin-assigned branch.
+        # This corrects any stale/default value in the local DB on every load.
+        if service_locked and license_status:
+            try:
+                lic_key = license_status.get('key', '')
+                if lic_key:
+                    server_url = Config.LICENSE_SERVER_URL or Config.BACKEND_URL
+                    req = urllib.request.Request(
+                        f"{server_url.rstrip('/')}/api/payments/license-branch?license_key={lic_key}",
+                        headers={"Accept": "application/json"},
+                        method="GET",
+                    )
+                    with urllib.request.urlopen(req, timeout=5) as resp:
+                        data = json.loads(resp.read())
+                    assigned_name = data.get('branch_name')
+                    assigned_url  = data.get('branch_url')
+                    if assigned_name and assigned_url:
+                        branch_value = assigned_name
+                        # Persist so checker_service uses the correct URL
+                        _db2 = SessionLocal()
+                        try:
+                            _s2 = _db2.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
+                            if _s2 and (_s2.branch != assigned_name or _s2.branch_url != assigned_url):
+                                _s2.branch = assigned_name
+                                _s2.branch_url = assigned_url
+                                _db2.commit()
+                        finally:
+                            _db2.close()
+            except Exception:
+                pass  # Offline or no branch assigned — keep local value
+
         interval_value = str(settings.check_interval if settings else 120)
         notification_value = settings.notification_email if settings and settings.notification_email else ""
 
@@ -1450,11 +1506,12 @@ class TLSApp:
         )
 
         config_branch_dropdown = ft.Dropdown(
-            label="TLS Branch",
+            label="TLS Branch" + (" (locked by license)" if service_locked else ""),
             value=branch_value,
             width=_FIELD_W, border_radius=10,
             options=[ft.dropdown.Option(b, b) for b in branch_options_list],
             text_size=13, label_style=ft.TextStyle(size=12),
+            disabled=service_locked,
         )
 
         def _on_service_type_change(e):
@@ -1863,15 +1920,9 @@ class TLSApp:
                 plan_badge,
                 self.create_website_icon_button(),
                 ft.IconButton(
-                    icon=ft.Icons.CHAT,
-                    tooltip="WhatsApp Support",
-                    on_click=lambda e: webbrowser.open("https://wa.me/201060263887"),
-                    icon_color="#00D9FF",
-                ),
-                ft.IconButton(
-                    icon=ft.Icons.PHOTO_LIBRARY,
-                    tooltip="View Screenshots",
-                    on_click=view_screenshots,
+                    icon=ft.Icons.SUPPORT_AGENT,
+                    tooltip="Contact Support",
+                    on_click=show_support_dialog,
                     icon_color="#00D9FF",
                 ),
                 ft.IconButton(
