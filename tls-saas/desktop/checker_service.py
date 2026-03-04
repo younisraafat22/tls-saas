@@ -186,6 +186,7 @@ class TLSCheckerService:
         "\U0001F50D Check at ",
         "\u274c TLS credentials",
         "[ERROR]",
+        "\u274c License no longer valid",  # Triggers license-invalid dialog
     )
 
     def _log(self, message: str):

@@ -105,6 +105,7 @@ class TLSApp:
         self.checker = None
         self.status_text = None
         self.countdown_text = None
+        self.last_check_text = None
         self._ui_queue = queue.Queue()
         self._log_history = []  # Persist log messages across page rebuilds
         self._developer_mode = False  # Hidden developer mode (Ctrl+Shift+D)
@@ -1267,12 +1268,13 @@ class TLSApp:
             width=_STAT_W, height=_STAT_H, padding=_STAT_PAD,
         )
 
+        self.last_check_text = ft.Text(last_check, size=16, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
         last_check_card = self.create_glass_container(
             ft.Column(
                 [
                     ft.Icon(ft.Icons.ACCESS_TIME, size=18, color="#00D9FF"),
                     ft.Container(height=4),
-                    ft.Text(last_check, size=16, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+                    self.last_check_text,
                     ft.Text("Last Check", size=9, color=ft.Colors.GREY_500),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1474,14 +1476,20 @@ class TLSApp:
                         _db2.commit()
                 finally:
                     _db2.close()
-                # Update dropdown if it exists and value differs
-                if dropdown_ref and dropdown_ref.value != assigned_name and assigned_name in options_ref:
-                    dropdown_ref.value = assigned_name
-                    try:
-                        if page_ref:
-                            page_ref.update()
-                    except Exception:
-                        pass
+                # Also persist to local .license file so offline step is correct next launch
+                try:
+                    from license_service import update_license_branch
+                    update_license_branch(assigned_name, assigned_url,
+                                         data.get('service_type'))
+                except Exception:
+                    pass
+                # Update dropdown via thread-safe UI queue
+                if dropdown_ref and assigned_name in options_ref and dropdown_ref.value != assigned_name:
+                    _name = assigned_name  # capture for closure
+                    _dd = dropdown_ref
+                    def _apply():
+                        _dd.value = _name
+                    self._ui_queue.put(_apply)
             except Exception:
                 pass  # Offline or no branch assigned — silently keep local value
 
@@ -2357,6 +2365,10 @@ class TLSApp:
                         _s = db.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
                         if _s and hasattr(self, 'checks_count_text') and self.checks_count_text:
                             self.checks_count_text.value = str(_s.total_checks)
+                        if _s and _s.last_check_at and hasattr(self, 'last_check_text') and self.last_check_text:
+                            _lct = _s.last_check_at.strftime('%H:%M')
+                            _lcd = _s.last_check_at.strftime('%m/%d')
+                            self.last_check_text.value = f"{_lcd}\n{_lct}"
                         db.close()
                         _ls = get_license_status()
                         if _ls and hasattr(self, 'checks_today_text') and self.checks_today_text:

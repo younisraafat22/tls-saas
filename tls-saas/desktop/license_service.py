@@ -342,6 +342,28 @@ def _write_license_file(data: dict):
 
 # ---------- public API ----------
 
+def update_license_branch(branch_name: str, branch_url: str, service_type: str = None):
+    """Update the branch/service_type fields in the local license file.
+    Called by the background thread in the UI after a successful server fetch,
+    so the offline step is correct on the next app launch.
+    """
+    data = _read_license_file()
+    if not data:
+        return
+    changed = False
+    if data.get("branch_name") != branch_name:
+        data["branch_name"] = branch_name
+        changed = True
+    if data.get("branch_url") != branch_url:
+        data["branch_url"] = branch_url
+        changed = True
+    if service_type and data.get("service_type") != service_type:
+        data["service_type"] = service_type
+        changed = True
+    if changed:
+        _write_license_file(data)
+
+
 def activate_license(key: str) -> tuple[bool, str]:
     """
     Activate a license key on this device.
@@ -374,20 +396,21 @@ def activate_license(key: str) -> tuple[bool, str]:
     }
 
     # Fetch branch info from backend (if available)
+    # Use urllib.request (stdlib) — reliable in PyInstaller bundles where
+    # the requests library may have SSL cert path issues.
     try:
         from config import Config
-        import requests
-        resp = requests.get(
-            f"{Config.BACKEND_URL}/api/payments/license-branch",
-            params={"license_key": key.strip().upper()},
-            timeout=10,
-        )
-        if resp.status_code == 200:
-            branch_data = resp.json()
-            if branch_data.get("branch_name"):
-                license_data["branch_name"] = branch_data["branch_name"]
-                license_data["branch_url"] = branch_data["branch_url"]
-                license_data["service_type"] = branch_data["service_type"]
+        import urllib.request as _ureq
+        _url = (f"{(Config.LICENSE_SERVER_URL or Config.BACKEND_URL).rstrip('/')}"
+                f"/api/payments/license-branch"
+                f"?license_key={key.strip().upper()}")
+        _req = _ureq.Request(_url, headers={"Accept": "application/json"}, method="GET")
+        with _ureq.urlopen(_req, timeout=10) as _resp:
+            branch_data = json.loads(_resp.read())
+        if branch_data.get("branch_name"):
+            license_data["branch_name"] = branch_data["branch_name"]
+            license_data["branch_url"] = branch_data["branch_url"]
+            license_data["service_type"] = branch_data["service_type"]
     except Exception:
         pass  # Branch info is optional — don't block activation
 
