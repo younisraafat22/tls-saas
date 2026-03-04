@@ -408,6 +408,19 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Branch rename migration skipped: {e}")
 
+    # Deactivate sub-type legalization branches (Students / Normal) — only 2 plain legalization branches should be active
+    async with async_session() as db:
+        try:
+            await db.execute(text(
+                "UPDATE branches SET is_active = 0 "
+                "WHERE UPPER(service_type) = 'LEGALIZATION' "
+                "AND (name LIKE '% - Students Legalization' OR name LIKE '% - Normal Legalization')"
+            ))
+            await db.commit()
+            logger.info("Migration: deactivated sub-type legalization branches (Students/Normal)")
+        except Exception as e:
+            logger.warning(f"Legalization sub-type deactivation migration skipped: {e}")
+
     await seed_data()
 
     # Resume scheduler if it was running before restart (persisted in system settings)
