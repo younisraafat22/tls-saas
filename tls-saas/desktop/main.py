@@ -589,30 +589,7 @@ class TLSApp:
                         settings.branch = "Sheikh Zayed"
                         settings.branch_url = Config.LEGALIZATION_BRANCHES["Sheikh Zayed"]
                 db.commit()
-
-                # ── Fetch server-assigned branch and override ──────────────
-                # Admin may have locked this license to a specific branch.
-                # Always ask the backend and override whatever default was set above.
-                try:
-                    lic = get_license_status()
-                    lic_key = lic.get('key', '') if lic else ''
-                    if lic_key:
-                        server_url = Config.LICENSE_SERVER_URL or Config.BACKEND_URL
-                        req = urllib.request.Request(
-                            f"{server_url.rstrip('/')}/api/payments/license-branch?license_key={lic_key}",
-                            headers={"Accept": "application/json"},
-                            method="GET",
-                        )
-                        with urllib.request.urlopen(req, timeout=8) as resp:
-                            data = json.loads(resp.read())
-                        assigned_name = data.get('branch_name')
-                        assigned_url  = data.get('branch_url')
-                        if assigned_name and assigned_url:
-                            settings.branch     = assigned_name
-                            settings.branch_url = assigned_url
-                            db.commit()
-                except Exception:
-                    pass  # Offline or no branch set on server — keep default
+                # Server-assigned branch will be fetched asynchronously by show_monitoring_page.
         finally:
             db.close()
 
@@ -1454,11 +1431,8 @@ class TLSApp:
         if branch_value not in branch_options_list:
             branch_value = default_branch
 
-        # For locked plans, resolve the correct branch:
-        # 1. First try the license file itself (works offline) — strip old suffixes
-        # 2. Then ask the server to confirm/override (corrects stale DB value)
+        # Step 1 (offline): license file may store "Hurghada - Legalization" — strip to get "Hurghada"
         if service_locked and license_status:
-            # Step 1: license file may store "Hurghada - Legalization" — strip to get "Hurghada"
             lic_branch_raw = license_status.get('branch_name') or ''
             if lic_branch_raw:
                 clean = (lic_branch_raw
@@ -1469,34 +1443,47 @@ class TLSApp:
                 if clean in branch_options_list:
                     branch_value = clean
 
-            # Step 2: ask server (always up-to-date, corrects everything)
+        # Step 2 (online, non-blocking): ask the server in a background thread.
+        # Updates the DB and the branch dropdown AFTER the page is already loaded.
+        def _fetch_and_apply_server_branch(dropdown_ref, options_ref, page_ref):
             try:
+                if not (service_locked and license_status):
+                    return
                 lic_key = license_status.get('key', '')
-                if lic_key:
-                    server_url = Config.LICENSE_SERVER_URL or Config.BACKEND_URL
-                    req = urllib.request.Request(
-                        f"{server_url.rstrip('/')}/api/payments/license-branch?license_key={lic_key}",
-                        headers={"Accept": "application/json"},
-                        method="GET",
-                    )
-                    with urllib.request.urlopen(req, timeout=5) as resp:
-                        data = json.loads(resp.read())
-                    assigned_name = data.get('branch_name')
-                    assigned_url  = data.get('branch_url')
-                    if assigned_name and assigned_url:
-                        branch_value = assigned_name
-                        # Persist so checker_service uses the correct URL
-                        _db2 = SessionLocal()
-                        try:
-                            _s2 = _db2.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
-                            if _s2 and (_s2.branch != assigned_name or _s2.branch_url != assigned_url):
-                                _s2.branch = assigned_name
-                                _s2.branch_url = assigned_url
-                                _db2.commit()
-                        finally:
-                            _db2.close()
+                if not lic_key:
+                    return
+                server_url = Config.LICENSE_SERVER_URL or Config.BACKEND_URL
+                req = urllib.request.Request(
+                    f"{server_url.rstrip('/')}/api/payments/license-branch?license_key={lic_key}",
+                    headers={"Accept": "application/json"},
+                    method="GET",
+                )
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    data = json.loads(resp.read())
+                assigned_name = data.get('branch_name')
+                assigned_url  = data.get('branch_url')
+                if not assigned_name or not assigned_url:
+                    return
+                # Persist to DB
+                _db2 = SessionLocal()
+                try:
+                    _s2 = _db2.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
+                    if _s2 and (_s2.branch != assigned_name or _s2.branch_url != assigned_url):
+                        _s2.branch = assigned_name
+                        _s2.branch_url = assigned_url
+                        _db2.commit()
+                finally:
+                    _db2.close()
+                # Update dropdown if it exists and value differs
+                if dropdown_ref and dropdown_ref.value != assigned_name and assigned_name in options_ref:
+                    dropdown_ref.value = assigned_name
+                    try:
+                        if page_ref:
+                            page_ref.update()
+                    except Exception:
+                        pass
             except Exception:
-                pass  # Offline or no branch assigned — keep local value
+                pass  # Offline or no branch assigned — silently keep local value
 
         interval_value = str(settings.check_interval if settings else 120)
         notification_value = settings.notification_email if settings and settings.notification_email else ""
@@ -1526,6 +1513,13 @@ class TLSApp:
             text_size=13, label_style=ft.TextStyle(size=12),
             disabled=service_locked,
         )
+
+        # Launch non-blocking background thread to fetch & correct server-assigned branch.
+        threading.Thread(
+            target=_fetch_and_apply_server_branch,
+            args=(config_branch_dropdown, branch_options_list, self.page),
+            daemon=True,
+        ).start()
 
         def _on_service_type_change(e):
             """Update branch dropdown when service type changes."""
