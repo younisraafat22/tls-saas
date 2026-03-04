@@ -922,15 +922,9 @@ class TLSApp:
                 copy_btn.text = "Copied!"
                 copy_btn.style = ft.ButtonStyle(color=ft.Colors.GREEN_400)
             except ImportError:
-                # Fallback to Flet's clipboard if pyperclip not available
-                try:
-                    self.page.clipboard = hw_id
-                    self.page.update()
-                    copy_btn.text = "Copied!"
-                    copy_btn.style = ft.ButtonStyle(color=ft.Colors.GREEN_400)
-                except Exception as ex:
-                    copy_btn.text = "Ctrl+C to copy"
-                    copy_btn.style = ft.ButtonStyle(color=ft.Colors.ORANGE_400)
+                # Fallback: nothing — pyperclip not available
+                copy_btn.text = "Ctrl+C to copy"
+                copy_btn.style = ft.ButtonStyle(color=ft.Colors.ORANGE_400)
             except Exception as ex:
                 copy_btn.text = "Ctrl+C to copy"
                 copy_btn.style = ft.ButtonStyle(color=ft.Colors.ORANGE_400)
@@ -1920,17 +1914,22 @@ class TLSApp:
             else "#00D9FF"
         )
 
-        def _copy_hw_id(e):
+        def _do_copy(text: str, label: str):
+            try:
+                import pyperclip
+                pyperclip.copy(text)
+            except Exception:
+                pass  # pyperclip failed — text still shown for manual copy
             if self.page:
-                self.page.clipboard = _hw_id
-                self.page.update()
-                self.page.show_dialog(ft.SnackBar(content=ft.Text("Hardware ID copied to clipboard", size=13, color=ft.Colors.WHITE), bgcolor="#1A3A2A", duration=2000))
+                self.page.show_dialog(ft.SnackBar(
+                    content=ft.Text(f"{label} copied to clipboard", size=13, color=ft.Colors.WHITE),
+                    bgcolor="#1A3A2A", duration=2000))
+
+        def _copy_hw_id(e):
+            _do_copy(_hw_id, "Hardware ID")
 
         def _copy_lic_key(e):
-            if self.page:
-                self.page.clipboard = _lic_key
-                self.page.update()
-                self.page.show_dialog(ft.SnackBar(content=ft.Text("License key copied to clipboard", size=13, color=ft.Colors.WHITE), bgcolor="#1A3A2A", duration=2000))
+            _do_copy(_lic_key, "License key")
 
         info_card = self.create_glass_container(
             ft.Column([
