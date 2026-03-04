@@ -281,6 +281,90 @@ class NotificationService:
 </html>"""
         return self.send_email(user_email, subject, html)
 
+    def send_monitoring_reminder(self, user_email: str, slot_details: str = ""):
+        """Send 12-hour reminder that appointments are still available."""
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        html = f"""<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #0a0e27; color: #fff; margin: 0; padding: 0; }}
+  .container {{ max-width: 600px; margin: 0 auto; padding: 30px; }}
+  .header {{ background: linear-gradient(135deg, #ffaa00 0%, #ff6600 100%); padding: 30px; border-radius: 16px 16px 0 0; text-align: center; }}
+  .header h1 {{ margin: 0; font-size: 24px; color: #fff; }}
+  .body {{ background: #141832; padding: 30px; border-radius: 0 0 16px 16px; }}
+  .badge {{ display: inline-block; background: #ffaa00; color: #000; padding: 8px 20px; border-radius: 20px; font-weight: bold; font-size: 16px; margin: 15px 0; }}
+  .cta {{ display: inline-block; background: linear-gradient(135deg, #ffaa00, #ff6600); color: #fff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 20px 0; }}
+  .footer {{ text-align: center; padding: 20px; color: #8892b0; font-size: 12px; }}
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>⏰ 12-Hour Reminder — Slots Still Available</h1>
+    </div>
+    <div class="body">
+      <p>Hi there,</p>
+      <div style="text-align: center;"><span class="badge">REMINDER</span></div>
+      <p style="font-size: 16px; margin-top: 16px;">This is a reminder that <strong>appointment slots are still available</strong> on the TLS website. We notified you 12 hours ago and haven't detected any changes.</p>
+      <p style="color: #ffaa00; font-size: 15px;">⚡ If you haven't booked yet, now is the time!</p>
+      {'<p style="color: #8892b0; font-size: 13px;">Details: ' + slot_details + '</p>' if slot_details else ''}
+      <p style="color: #8892b0; font-size: 12px;">Detected at: {now}</p>
+      <div style="text-align: center;">
+        <a href="{Config.TLS_URL}" class="cta">Book Now &rarr;</a>
+      </div>
+      <p style="color: #8892b0; font-size: 12px; margin-top: 24px;">This is the final automated reminder for this availability window. Monitoring continues in the background.</p>
+    </div>
+    <div class="footer"><p>TLS Appointment Checker &mdash; Automated reminder</p></div>
+  </div>
+</body>
+</html>"""
+        self.send_email(user_email, "⏰ Reminder: TLS Appointment Slots Still Available", html)
+
+    def send_error_notification(self, user_email: str, error_message: str):
+        """Send an alert when a monitoring check fails with an error."""
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        safe_error = str(error_message).replace('<', '&lt;').replace('>', '&gt;')
+        html = f"""<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #0a0e27; color: #fff; margin: 0; padding: 0; }}
+  .container {{ max-width: 600px; margin: 0 auto; padding: 30px; }}
+  .header {{ background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%); padding: 30px; border-radius: 16px 16px 0 0; text-align: center; }}
+  .header h1 {{ margin: 0; font-size: 24px; color: #fff; }}
+  .body {{ background: #141832; padding: 30px; border-radius: 0 0 16px 16px; }}
+  .error-box {{ background: #2a1520; border: 1px solid #ff4444; border-radius: 8px; padding: 16px; margin: 16px 0; font-family: monospace; font-size: 13px; color: #ff8888; word-break: break-all; }}
+  .footer {{ text-align: center; padding: 20px; color: #8892b0; font-size: 12px; }}
+  .tip {{ background: #1a2040; border-left: 3px solid #00d9ff; padding: 12px 16px; margin: 16px 0; border-radius: 0 8px 8px 0; }}
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>&#9888; Monitoring Check Failed</h1>
+    </div>
+    <div class="body">
+      <p>Hi there,</p>
+      <p>The TLS monitoring check encountered an error at <strong>{now}</strong> and could not complete successfully.</p>
+      <div class="error-box">{safe_error}</div>
+      <div class="tip">
+        <p style="margin:0; color: #00d9ff; font-weight: 600;">Common fixes:</p>
+        <ul style="margin: 8px 0 0 0; color: #8892b0;">
+          <li>Verify your TLS email and password are correct in the app settings</li>
+          <li>Check your internet connection</li>
+          <li>The TLS website may be temporarily down or under maintenance</li>
+          <li>If the error persists, try restarting the monitoring</li>
+        </ul>
+      </div>
+      <p style="color: #8892b0; font-size: 13px;">Monitoring will automatically retry. You will only receive this email once per hour for repeated errors.</p>
+    </div>
+    <div class="footer"><p>TLS Appointment Checker &mdash; Error alert</p></div>
+  </div>
+</body>
+</html>"""
+        self.send_email(user_email, "⚠️ TLS Monitoring Error — Action May Be Required", html)
+
 
 # Global notification service instance
 notification_service = NotificationService()

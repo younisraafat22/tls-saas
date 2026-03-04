@@ -134,6 +134,11 @@ class TLSCheckerService:
         self.on_countdown_update = on_countdown_update  # Callback for countdown timer
         self.last_status_report = None
         self.developer_mode = False  # When True, ALL log messages are forwarded to the UI
+        # Email notification throttling: send at most 2 emails per slot-available cycle
+        # (1 immediate + 1 reminder after 12 hours). Reset when no slots found.
+        self._slots_notif_count = 0          # 0=not sent, 1=first sent, 2=reminder sent
+        self._slots_first_notif_time = None  # datetime of first notification
+        self._last_error_email_time = None   # throttle error emails (max 1/hr)
     
     def _report_to_backend(self, branch_name: str, service_type: str,
                            slots_available: bool, slot_details: str = "",
@@ -2104,19 +2109,24 @@ class TLSCheckerService:
                 self.driver.save_screenshot(screenshot_path)
                 self._log(f"📸 Screenshot saved: {screenshot_path}")
 
-                # Send notification
-                db = SessionLocal()
-                try:
-                    settings = db.query(UserSettings).filter(UserSettings.user_id == self.user_id).first()
-                    if settings:
-                        notification_service.send_slots_available_notification(
-                            settings.notification_email,
-                            settings.get_notification_types(),
-                            screenshot_path
-                        )
-                        self._log("📧 Notification sent!")
-                finally:
-                    db.close()
+                # Send first-alert notification (at most once per slot-available cycle)
+                if self._slots_notif_count == 0:
+                    db = SessionLocal()
+                    try:
+                        settings = db.query(UserSettings).filter(UserSettings.user_id == self.user_id).first()
+                        if settings:
+                            notification_service.send_slots_available_notification(
+                                settings.notification_email,
+                                settings.get_notification_types(),
+                                screenshot_path
+                            )
+                            self._slots_notif_count = 1
+                            self._slots_first_notif_time = datetime.now()
+                            self._log("📧 Notification sent!")
+                    finally:
+                        db.close()
+                else:
+                    self._log("📧 Notification already sent — skipping duplicate")
 
                 # Discover new months that may have appeared after navigating to this month
                 newly_available = self._get_available_months()
@@ -2251,15 +2261,20 @@ class TLSCheckerService:
                 screenshot_path = os.path.join(str(Config.BASE_DIR), f"slots_found_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
                 self.driver.save_screenshot(screenshot_path)
                 self._log(f"📸 Screenshot saved: {screenshot_path}")
-                db = SessionLocal()
-                try:
-                    settings = db.query(UserSettings).filter(UserSettings.user_id == self.user_id).first()
-                    if settings:
-                        notification_service.send_slots_available_notification(
-                            settings.notification_email, settings.get_notification_types(), screenshot_path)
-                        self._log("📧 Notification sent!")
-                finally:
-                    db.close()
+                if self._slots_notif_count == 0:
+                    db = SessionLocal()
+                    try:
+                        settings = db.query(UserSettings).filter(UserSettings.user_id == self.user_id).first()
+                        if settings:
+                            notification_service.send_slots_available_notification(
+                                settings.notification_email, settings.get_notification_types(), screenshot_path)
+                            self._slots_notif_count = 1
+                            self._slots_first_notif_time = datetime.now()
+                            self._log("📧 Notification sent!")
+                    finally:
+                        db.close()
+                else:
+                    self._log("📧 Notification already sent — skipping duplicate")
                 return True, "Appointments available!"
         except Exception as e:
             self._log(f"Error checking slots (legacy): {e}")
@@ -2375,12 +2390,29 @@ class TLSCheckerService:
             increment_check_count()
             
             db.commit()
-            
-            # Notifications are sent from _check_slots() / _check_slots_legacy() with the actual screenshot
-            
-            # Status reports only when appointments are found
-            # (notifications are sent from _check_slots with screenshot)
-            
+
+            # --- Notification throttle logic ---
+            if slots_available:
+                # 12h reminder: if first email was sent >12 hours ago and reminder not yet sent
+                if self._slots_notif_count == 1 and self._slots_first_notif_time:
+                    elapsed = (datetime.now() - self._slots_first_notif_time).total_seconds()
+                    if elapsed >= 12 * 3600:
+                        db_n = SessionLocal()
+                        try:
+                            s = db_n.query(UserSettings).filter(UserSettings.user_id == self.user_id).first()
+                            if s and s.notification_email:
+                                notification_service.send_monitoring_reminder(
+                                    s.notification_email, message)
+                                self._slots_notif_count = 2
+                                self._log("📧 12h reminder sent!")
+                        finally:
+                            db_n.close()
+            else:
+                # Reset cycle so re-notification happens if slots appear again later
+                if self._slots_notif_count > 0:
+                    self._slots_notif_count = 0
+                    self._slots_first_notif_time = None
+
             # Report result to backend so dashboard shows recent checks
             self._report_to_backend(
                 branch_name=getattr(settings, 'branch', '') or '',
@@ -2394,10 +2426,43 @@ class TLSCheckerService:
             
         except Exception as e:
             import traceback
+            from datetime import timedelta
             error_msg = f"{type(e).__name__}: {str(e)}"
             trace = traceback.format_exc()
-            self._log(f"Check cycle error: {error_msg}")
+            self._log(f"[ERROR] Check cycle error: {error_msg}")
             print(f"Full traceback:\n{trace}")
+
+            # Send error email — throttled to at most 1 per hour
+            now = datetime.now()
+            should_send = (
+                self._last_error_email_time is None or
+                (now - self._last_error_email_time).total_seconds() >= 3600
+            )
+            if should_send:
+                try:
+                    db_e = SessionLocal()
+                    try:
+                        s_e = db_e.query(UserSettings).filter(UserSettings.user_id == self.user_id).first()
+                        if s_e and s_e.notification_email:
+                            notification_service.send_error_notification(
+                                s_e.notification_email, error_msg)
+                            self._last_error_email_time = now
+                    finally:
+                        db_e.close()
+                except Exception:
+                    pass
+
+            # Report error to backend so dashboard shows it
+            try:
+                self._report_to_backend(
+                    branch_name=getattr(settings, 'branch', '') if 'settings' in dir() else '',
+                    service_type=service_type if 'service_type' in dir() else 'visa',
+                    slots_available=False,
+                    error=error_msg,
+                )
+            except Exception:
+                pass
+
             self._cleanup_driver()
             return False  # Retry immediately
         finally:

@@ -199,6 +199,20 @@ async def monitoring_status(
                 active_subs.append(s)
     sub = active_subs[0] if active_subs else None
     is_active = len(active_subs) > 0
+
+    # Desktop license users don't have Subscription rows — treat approved payment as active
+    if not is_active:
+        from app.models import Payment, PaymentStatus as PS
+        paid = await db.execute(
+            select(Payment).where(
+                Payment.user_id == user.id,
+                Payment.status == PS.APPROVED,
+                Payment.license_key.isnot(None),
+            ).limit(1)
+        )
+        if paid.scalar_one_or_none():
+            is_active = True
+
     plan_types = list(dict.fromkeys(
         s.plan.plan_type.value for s in active_subs if s.plan
     ))

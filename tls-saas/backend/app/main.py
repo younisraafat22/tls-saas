@@ -374,9 +374,19 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Admin email migration skipped: {e}")
 
-    await seed_data()
+    # Rename 'Normal Legalization' branches — drop the 'Normal' qualifier
+    async with async_session() as db:
+        try:
+            await db.execute(text(
+                "UPDATE branches SET name = REPLACE(name, ' - Normal Legalization', ' - Legalization') "
+                "WHERE name LIKE '% - Normal Legalization' AND UPPER(service_type) = 'LEGALIZATION'"
+            ))
+            await db.commit()
+            logger.info("Migration: renamed 'Normal Legalization' branches to 'Legalization'")
+        except Exception as e:
+            logger.warning(f"Branch rename migration skipped: {e}")
 
-    # NOTE: Monitoring scheduler is NOT started automatically.
+    await seed_data()
     # Start it manually from the Admin → Monitoring dashboard.
     logger.info("Server ready. Start monitoring manually from Admin → Monitoring.")
 
