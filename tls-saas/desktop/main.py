@@ -1454,9 +1454,22 @@ class TLSApp:
         if branch_value not in branch_options_list:
             branch_value = default_branch
 
-        # For locked plans, silently ask the server for the admin-assigned branch.
-        # This corrects any stale/default value in the local DB on every load.
+        # For locked plans, resolve the correct branch:
+        # 1. First try the license file itself (works offline) — strip old suffixes
+        # 2. Then ask the server to confirm/override (corrects stale DB value)
         if service_locked and license_status:
+            # Step 1: license file may store "Hurghada - Legalization" — strip to get "Hurghada"
+            lic_branch_raw = license_status.get('branch_name') or ''
+            if lic_branch_raw:
+                clean = (lic_branch_raw
+                         .replace(' - Normal Legalization', '')
+                         .replace(' - Students Legalization', '')
+                         .replace(' - Legalization', '')
+                         .replace(' - Visa', ''))
+                if clean in branch_options_list:
+                    branch_value = clean
+
+            # Step 2: ask server (always up-to-date, corrects everything)
             try:
                 lic_key = license_status.get('key', '')
                 if lic_key:
