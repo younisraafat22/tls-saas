@@ -183,6 +183,7 @@ class CheckResult(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     branch_id = Column(Integer, ForeignKey("branches.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     checked_at = Column(DateTime(timezone=True), default=utcnow, index=True)
     slots_available = Column(Boolean, default=False)
     slot_details = Column(JSON, nullable=True)  # {"dates": [...], "count": N}
@@ -196,6 +197,7 @@ class CheckResult(Base):
 
     __table_args__ = (
         Index("ix_check_results_branch_time", "branch_id", "checked_at"),
+        Index("ix_check_results_user_time", "user_id", "checked_at"),
     )
 
 

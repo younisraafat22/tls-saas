@@ -299,37 +299,15 @@ async def check_results(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get recent check results for monitored branches — only since user started monitoring."""
-    # Get user's monitored branches with their start dates
-    monitors = await db.execute(
-        select(UserBranchMonitor)
-        .where(UserBranchMonitor.user_id == user.id, UserBranchMonitor.is_active == True)
-    )
-    my_monitors = monitors.scalars().all()
-    my_branch_ids = [m.branch_id for m in my_monitors]
-
-    if not my_branch_ids:
-        return []
-
-    # Join UserBranchMonitor so we can filter: only show results since user started monitoring
+    """Get recent check results belonging to this user."""
     query = (
         select(CheckResult, Branch)
         .join(Branch, CheckResult.branch_id == Branch.id)
-        .join(
-            UserBranchMonitor,
-            and_(
-                UserBranchMonitor.branch_id == CheckResult.branch_id,
-                UserBranchMonitor.user_id == user.id,
-                UserBranchMonitor.is_active == True,
-                CheckResult.checked_at >= UserBranchMonitor.created_at,
-            ),
-        )
+        .where(CheckResult.user_id == user.id)
     )
 
-    if branch_id and branch_id in my_branch_ids:
+    if branch_id:
         query = query.where(CheckResult.branch_id == branch_id)
-    else:
-        query = query.where(CheckResult.branch_id.in_(my_branch_ids))
 
     query = query.order_by(CheckResult.checked_at.desc()).limit(min(limit, 100))
     result = await db.execute(query)
@@ -425,6 +403,7 @@ async def report_desktop_check(
     # Create check result
     cr = CheckResult(
         branch_id=branch.id,
+        user_id=user.id,
         checked_at=datetime.now(timezone.utc),
         slots_available=body.slots_available,
         slot_details=body.slot_details or "",
@@ -531,9 +510,10 @@ async def report_desktop_check_by_license(
         except Exception:
             screenshot_path = ""
 
-    # Create check result
+    # Create check result — tagged with user_id so their dashboard shows only their checks
     cr = CheckResult(
         branch_id=branch.id,
+        user_id=payment.user_id,
         checked_at=datetime.now(timezone.utc),
         slots_available=body.slots_available,
         slot_details=body.slot_details or "",

@@ -155,6 +155,14 @@ async def lifespan(app: FastAPI):
     # Run lightweight migrations for new columns
     async with async_session() as db:
         try:
+            await db.execute(text("ALTER TABLE check_results ADD COLUMN user_id INTEGER REFERENCES users(id)"))
+            await db.commit()
+            logger.info("Migration: added user_id to check_results table")
+        except Exception:
+            pass  # Column already exists
+
+    async with async_session() as db:
+        try:
             await db.execute(text("ALTER TABLE payments ADD COLUMN branch_id INTEGER REFERENCES branches(id)"))
             await db.commit()
             logger.info("Migration: added branch_id to payments table")

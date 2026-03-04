@@ -455,6 +455,7 @@ class SchedulerService:
                 screenshot_path = await _save_screenshot(res, branch.name)
                 db_result = CheckResult(
                     branch_id=branch_id,
+                    user_id=user.id,
                     slots_available=res["slots_available"],
                     slot_details=res["slot_details"],
                     error=res.get("error", ""),
@@ -522,17 +523,25 @@ class SchedulerService:
         await self._persist_and_notify(db, branch, res, active_users)
 
     async def _persist_and_notify(self, db, branch, check_result: dict, active_users: list):
-        """Save check result and notify all subscribers."""
+        """Save one CheckResult per subscriber and notify each individually."""
         screenshot_path = await _save_screenshot(check_result, branch.name)
-        db_result = CheckResult(
-            branch_id=branch.id,
-            slots_available=check_result["slots_available"],
-            slot_details=check_result["slot_details"],
-            error=check_result.get("error", ""),
-            duration_seconds=check_result["duration"],
-            screenshot_path=screenshot_path,
-        )
-        db.add(db_result)
+
+        # Create an individual result row for each subscriber so their dashboards
+        # show only their own checks, not results shared with other users.
+        user_results: dict = {}  # user.id -> db_result
+        for user in active_users:
+            db_result = CheckResult(
+                branch_id=branch.id,
+                user_id=user.id,
+                slots_available=check_result["slots_available"],
+                slot_details=check_result["slot_details"],
+                error=check_result.get("error", ""),
+                duration_seconds=check_result["duration"],
+                screenshot_path=screenshot_path,
+            )
+            db.add(db_result)
+            user_results[user.id] = db_result
+
         await db.flush()
 
         await ws_manager.broadcast_check_result(
@@ -546,7 +555,7 @@ class SchedulerService:
         if check_result["slots_available"]:
             logger.info(f"[{branch.name}] *** SLOTS  Notifying {len(active_users)} users ***")
             for user in active_users:
-                await _notify_user_email(db, self._scheduler, user, db_result, branch, check_result["slot_details"])
+                await _notify_user_email(db, self._scheduler, user, user_results[user.id], branch, check_result["slot_details"])
 
         await db.commit()
         msg = "SLOTS AVAILABLE!" if check_result["slots_available"] else (
