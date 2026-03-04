@@ -4,7 +4,7 @@ Pydantic schemas for request/response validation.
 
 from __future__ import annotations
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from pydantic import BaseModel, EmailStr, Field
 from app.models import (
     PlanType, SubscriptionStatus, PaymentStatus, PaymentMethod,
@@ -152,7 +152,7 @@ class CheckResultPublic(BaseModel):
     branch_service_type: ServiceType
     checked_at: datetime
     slots_available: bool
-    slot_details: Optional[dict] = None
+    slot_details: Optional[Any] = None  # str (desktop) or dict (server)
     duration_seconds: float
     error: str
 
