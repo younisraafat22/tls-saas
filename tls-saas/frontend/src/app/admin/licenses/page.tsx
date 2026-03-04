@@ -89,16 +89,25 @@ function CreateLicenseModal({ onClose, onCreated }: CreateModalProps) {
     customer_name: "",
     customer_email: "",
     notes: "",
+    branch_id: null as number | null,
   });
+  const [branches, setBranches] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ key: string; email: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
+  useEffect(() => {
+    adminApi.getBranches().then((data: any) => setBranches(Array.isArray(data) ? data : [])).catch(() => {});
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.hardware_id.trim()) { setError("Hardware ID is required"); return; }
     if (!form.plan_key) { setError("Plan is required"); return; }
+    if ((form.plan_key === "visa" || form.plan_key === "legalization") && !form.branch_id) {
+      setError("Branch is required for this plan"); return;
+    }
     setError("");
     setLoading(true);
     try {
@@ -172,7 +181,7 @@ function CreateLicenseModal({ onClose, onCreated }: CreateModalProps) {
               </label>
               <select
                 value={form.plan_key}
-                onChange={(e) => setForm({ ...form, plan_key: e.target.value })}
+                onChange={(e) => setForm({ ...form, plan_key: e.target.value, branch_id: null })}
                 className="input-field"
               >
                 {PLAN_OPTIONS.map((p) => (
@@ -180,6 +189,26 @@ function CreateLicenseModal({ onClose, onCreated }: CreateModalProps) {
                 ))}
               </select>
             </div>
+
+            {(form.plan_key === "visa" || form.plan_key === "legalization") && (
+              <div>
+                <label className="block text-sm text-gray-400 mb-1.5">
+                  Branch <span className="text-red-400">*</span>
+                </label>
+                <select
+                  value={form.branch_id ?? ""}
+                  onChange={(e) => setForm({ ...form, branch_id: e.target.value ? Number(e.target.value) : null })}
+                  className="input-field"
+                >
+                  <option value="">— Select branch —</option>
+                  {branches
+                    .filter((b: any) => b.is_active && b.service_type === (form.plan_key === "visa" ? "visa" : "legalization"))
+                    .map((b: any) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                </select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>

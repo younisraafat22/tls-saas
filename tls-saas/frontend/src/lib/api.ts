@@ -81,12 +81,19 @@ class ApiClient {
         const errorData = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
-        errorMessage = await response.text();
+        errorMessage = await response.text().catch(() => errorMessage);
       }
       throw new ApiError(response.status, errorMessage);
     }
 
-    return response.json();
+    // Handle empty responses (204 No Content or empty body)
+    const contentType = response.headers.get("content-type") || "";
+    if (response.status === 204 || !contentType.includes("application/json")) {
+      return {} as T;
+    }
+    const text = await response.text();
+    if (!text.trim()) return {} as T;
+    return JSON.parse(text) as T;
   }
 
   private async refreshToken(): Promise<boolean> {
@@ -291,7 +298,7 @@ export const adminApi = {
     if (search) params.set("search", search);
     return api.get(`/api/admin/licenses?${params.toString()}`);
   },
-  createLicense: (data: { hardware_id: string; plan_key: string; customer_name?: string; customer_email?: string; notes?: string }) =>
+  createLicense: (data: { hardware_id: string; plan_key: string; customer_name?: string; customer_email?: string; notes?: string; branch_id?: number | null }) =>
     api.post("/api/admin/licenses/create", data),
   revokeLicense: (paymentId: number) =>
     api.post(`/api/admin/licenses/${paymentId}/revoke`),

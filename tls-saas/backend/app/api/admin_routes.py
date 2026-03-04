@@ -597,11 +597,18 @@ async def create_license_directly(
     customer_name = (body.get("customer_name") or "").strip()
     customer_email = (body.get("customer_email") or "").strip()
     notes = (body.get("notes") or "").strip()
+    branch_id: int | None = body.get("branch_id") or None
 
     if not hardware_id:
         raise HTTPException(400, "hardware_id is required")
     if not plan_key:
         raise HTTPException(400, "plan_key is required")
+
+    # Validate branch if provided
+    if branch_id:
+        branch_result = await db.execute(select(Branch).where(Branch.id == branch_id))
+        if not branch_result.scalar_one_or_none():
+            raise HTTPException(400, "Branch not found")
 
     license_key = _generate_license_key(plan_key, hardware_id)
     now = datetime.now(timezone.utc)
@@ -620,6 +627,7 @@ async def create_license_directly(
         submitter_name=customer_name or "Direct Issue",
         submitter_email=customer_email or "",
         license_key=license_key,
+        branch_id=branch_id,
     )
     db.add(payment)
     db.add(ActivityLog(
@@ -742,7 +750,7 @@ async def revoke_license(
     payment = result.scalar_one_or_none()
     if not payment:
         raise HTTPException(404, "License record not found")
-    if not payment.license_key and payment.status != PaymentStatus.APPROVED:
+    if not payment.license_key and payment.status not in (PaymentStatus.APPROVED, PaymentStatus.PENDING):
         raise HTTPException(400, "No active license to revoke")
 
     payment.status = PaymentStatus.REJECTED
