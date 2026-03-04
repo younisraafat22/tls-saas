@@ -517,9 +517,19 @@ async def report_desktop_check_by_license(
     db.add(cr)
     await db.commit()
 
-    # If slots found, notify via backend email too
-    if body.slots_available and user:
-        try:
+    # Broadcast to user's dashboard via WebSocket so it auto-refreshes
+    try:
+        from app.websocket import ws_manager
+        await ws_manager.broadcast_check_result(
+            branch_name=branch.name,
+            service_type=branch.service_type.value,
+            slots_available=body.slots_available,
+            slot_details=None,
+            subscriber_user_ids=[payment.user_id],
+        )
+    except Exception as e:
+        logger.warning(f"WebSocket broadcast failed (non-fatal): {e}")
+
             from app.services.email_service import EmailService
             email_svc = EmailService()
             email_svc.send_appointment_alert(

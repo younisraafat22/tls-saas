@@ -34,6 +34,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadData();
+    // Auto-refresh every 30s to catch desktop app check results
+    const interval = setInterval(loadData, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   // Handle real-time WebSocket messages
@@ -65,15 +68,20 @@ export default function DashboardPage() {
       const [statusData, resultsData, paymentsData] = await Promise.all([
         monitoringApi.getStatus(),
         monitoringApi.getResults(undefined, 10),
-        paymentApi.getMyPayments().catch(() => []),
+        paymentApi.getMyPayments().catch(() => null), // null = failed, [] = empty
       ]);
       setStatus(statusData);
       setResults(resultsData);
-      const approvedPayment = Array.isArray(paymentsData)
-        ? paymentsData.find((p: any) => p.license_key && p.status === "approved")
-        : null;
-      setLicenseKey(approvedPayment?.license_key ?? null);
-      setLicensePlan(approvedPayment?.plan_key ?? null);
+      // Only update license key if the API actually responded (not errored)
+      if (paymentsData !== null) {
+        const approvedPayment = Array.isArray(paymentsData)
+          ? paymentsData.find((p: any) => p.license_key && p.status === "approved")
+          : null;
+        if (approvedPayment?.license_key) {
+          setLicenseKey(approvedPayment.license_key);
+          setLicensePlan(approvedPayment.plan_key ?? null);
+        }
+      }
     } catch (err) {
       console.error("Failed to load data:", err);
     } finally {
