@@ -103,7 +103,7 @@ export default function DashboardPage() {
   const maintenanceMode = status?.maintenance_mode;
   const planType = status?.plan_type || "";
   const planTypes: string[] = status?.plan_types || [];
-  const isPremium = planTypes.includes("PREMIUM");
+  const isPremium = planTypes.some((p: string) => p.toUpperCase() === "PREMIUM");
 
   return (
     <div className="space-y-6">
