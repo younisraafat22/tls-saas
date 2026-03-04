@@ -36,7 +36,7 @@ class Config:
     
     # App Info
     APP_NAME = os.getenv("APP_NAME", "TLS Appointment Checker")
-    APP_VERSION = os.getenv("APP_VERSION", "2.0.0")
+    APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
     
     # Database
     DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR}/tls_app.db")

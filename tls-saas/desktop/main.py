@@ -1936,8 +1936,47 @@ class TLSApp:
                     ft.Text("License & Device", size=14, weight=ft.FontWeight.BOLD),
                 ], alignment=ft.MainAxisAlignment.START, spacing=6),
                 ft.Divider(height=1, color=ft.Colors.with_opacity(0.2, "#00D9FF")),
+                ft.Container(height=4),
+                # Row 1: License key | Hardware ID
+                ft.Row([
+                    # Column 1: License key
+                    ft.Column([
+                        ft.Text("License key", size=11, color=ft.Colors.GREY_500),
+                        ft.Row([
+                            ft.Text(_lic_key_display, size=9, color=ft.Colors.GREY_300,
+                                    font_family="monospace", selectable=True, expand=True),
+                            ft.IconButton(
+                                icon=ft.Icons.COPY, icon_size=13,
+                                tooltip="Copy License Key",
+                                icon_color=ft.Colors.GREY_500,
+                                on_click=_copy_lic_key,
+                                padding=2,
+                            ),
+                        ], spacing=4),
+                    ], spacing=2, expand=True),
+                    ft.Container(
+                        width=1, height=40,
+                        bgcolor=ft.Colors.with_opacity(0.2, "#00D9FF"),
+                    ),
+                    # Column 2: Hardware ID
+                    ft.Column([
+                        ft.Text("Hardware ID", size=11, color=ft.Colors.GREY_500),
+                        ft.Row([
+                            ft.Text(_hw_id, size=9, color=ft.Colors.GREY_300,
+                                    font_family="monospace", selectable=True, expand=True),
+                            ft.IconButton(
+                                icon=ft.Icons.COPY, icon_size=13,
+                                tooltip="Copy Hardware ID",
+                                icon_color=ft.Colors.GREY_500,
+                                on_click=_copy_hw_id,
+                                padding=2,
+                            ),
+                        ], spacing=4),
+                    ], spacing=2, expand=True),
+                ], spacing=16, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, "#00D9FF")),
                 ft.Container(height=2),
-                # 2x2 grid layout
+                # Row 2: Plan + Days remaining | Version + Change button
                 ft.Row([
                     # Column 1: Plan + Days remaining
                     ft.Column([
@@ -1952,7 +1991,10 @@ class TLSApp:
                             ft.Text(str(_days_rem), size=11, weight=ft.FontWeight.W_600, color=_days_color),
                         ]),
                     ], spacing=6, expand=True),
-                    ft.VerticalDivider(width=1, color=ft.Colors.with_opacity(0.15, "#00D9FF")),
+                    ft.Container(
+                        width=1, height=40,
+                        bgcolor=ft.Colors.with_opacity(0.2, "#00D9FF"),
+                    ),
                     # Column 2: Version + Change button
                     ft.Column([
                         ft.Row([
@@ -1975,46 +2017,7 @@ class TLSApp:
                             ),
                         ]),
                     ], spacing=6, expand=True),
-                ], spacing=12, vertical_alignment=ft.CrossAxisAlignment.START),
-                ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, "#00D9FF")),
-                # Row 2: License key + Hardware ID
-                ft.Row([
-                    # Column 1: License key
-                    ft.Column([
-                        ft.Row([
-                            ft.Text("License key", size=11, color=ft.Colors.GREY_500),
-                        ]),
-                        ft.Row([
-                            ft.Text(_lic_key_display, size=9, color=ft.Colors.GREY_300,
-                                    font_family="monospace", selectable=True, expand=True),
-                            ft.IconButton(
-                                icon=ft.Icons.COPY, icon_size=13,
-                                tooltip="Copy License Key",
-                                icon_color=ft.Colors.GREY_500,
-                                on_click=_copy_lic_key,
-                                padding=2,
-                            ),
-                        ], spacing=4),
-                    ], spacing=2, expand=True),
-                    ft.VerticalDivider(width=1, color=ft.Colors.with_opacity(0.15, "#00D9FF")),
-                    # Column 2: Hardware ID
-                    ft.Column([
-                        ft.Row([
-                            ft.Text("Hardware ID", size=11, color=ft.Colors.GREY_500),
-                        ]),
-                        ft.Row([
-                            ft.Text(_hw_id, size=9, color=ft.Colors.GREY_300,
-                                    font_family="monospace", selectable=True, expand=True),
-                            ft.IconButton(
-                                icon=ft.Icons.COPY, icon_size=13,
-                                tooltip="Copy Hardware ID",
-                                icon_color=ft.Colors.GREY_500,
-                                on_click=_copy_hw_id,
-                                padding=2,
-                            ),
-                        ], spacing=4),
-                    ], spacing=2, expand=True),
-                ], spacing=12, vertical_alignment=ft.CrossAxisAlignment.START),
+                ], spacing=16, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             ], spacing=6),
             padding=12,
         )
@@ -2046,9 +2049,10 @@ class TLSApp:
                                     ft.Container(height=12),
                                     config_card,
                                 ],
+                                width=520,
                             ),
 
-                            # Right column — recent checks (stretches to match left column)
+                            # Right column — recent checks
                             ft.Container(
                                 content=self.create_glass_container(
                                     ft.Column(
@@ -2072,19 +2076,19 @@ class TLSApp:
                                             ft.Container(content=self.status_list, expand=True),
                                         ],
                                         spacing=8,
-                                        expand=True,
                                     ),
-                                    padding=10,
+                                    padding=10, height=630,
                                 ),
                                 expand=True,
                             ),
                         ],
                         alignment=ft.MainAxisAlignment.START,
                         spacing=15,
-                        vertical_alignment=ft.CrossAxisAlignment.STRETCH,
+                        vertical_alignment=ft.CrossAxisAlignment.START,
                     ),
                     # Full-width License & Device card below both columns
                     info_card,
+                    ft.Container(height=15),
                 ],
                 spacing=15,
                 scroll=ft.ScrollMode.AUTO,

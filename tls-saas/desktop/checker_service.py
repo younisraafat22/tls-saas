@@ -135,6 +135,41 @@ class TLSCheckerService:
         self.last_status_report = None
         self.developer_mode = False  # When True, ALL log messages are forwarded to the UI
     
+    def _report_to_backend(self, branch_name: str, service_type: str,
+                           slots_available: bool, slot_details: str = "",
+                           error: str = ""):
+        """Fire-and-forget: report check result to backend so the web dashboard can show it."""
+        def _do_report():
+            try:
+                from license_service import get_license_status
+                import json as _json
+                import urllib.request
+                import urllib.error
+
+                lic = get_license_status()
+                if not lic or not lic.get("key"):
+                    return  # No license key — skip
+
+                payload = _json.dumps({
+                    "license_key": lic["key"],
+                    "branch_name": branch_name,
+                    "service_type": service_type,
+                    "slots_available": slots_available,
+                    "slot_details": slot_details,
+                    "error": error,
+                }).encode("utf-8")
+
+                url = f"{Config.BACKEND_URL.rstrip('/')}/api/monitoring/report-desktop-license"
+                req = urllib.request.Request(url, data=payload,
+                                            headers={"Content-Type": "application/json"},
+                                            method="POST")
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    pass  # 200 OK is enough
+            except Exception as e:
+                print(f"[Checker] Backend report failed (non-fatal): {e}")
+
+        threading.Thread(target=_do_report, daemon=True).start()
+
     # Messages allowed in the UI activity log (prefix match).
     # Everything else is printed to terminal only.
     # Messages shown in the "Recent Checks" UI panel (prefix match).
@@ -2345,6 +2380,14 @@ class TLSCheckerService:
             
             # Status reports only when appointments are found
             # (notifications are sent from _check_slots with screenshot)
+            
+            # Report result to backend so dashboard shows recent checks
+            self._report_to_backend(
+                branch_name=getattr(settings, 'branch', '') or '',
+                service_type=service_type,
+                slots_available=slots_available,
+                slot_details=message,
+            )
             
             self._cleanup_driver()
             return True  # Check completed successfully

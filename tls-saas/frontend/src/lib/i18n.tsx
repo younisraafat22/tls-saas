@@ -101,7 +101,6 @@ export const translations = {
       requirements: "Requires Windows 10/11 and Chrome browser",
       features: [
         "Runs locally on your machine — your credentials never leave your device",
-        "Anti-detection browser automation with audio CAPTCHA solver",
         "Windows toast + email notifications when slots are found",
         "Supports all Egypt branches (Legalization & Visa)",
       ],
@@ -488,7 +487,6 @@ export const translations = {
       requirements: "يتطلب ويندوز 10/11 ومتصفح كروم",
       features: [
         "يعمل محلياً على جهازك — بياناتك لا تغادر جهازك أبداً",
-        "تشغيل متصفح مضاد للكشف مع حل CAPTCHA الصوتي",
         "إشعارات ويندوز + بريد إلكتروني عند إيجاد مواعيد",
         "يدعم جميع فروع مصر (توثيق وتأشيرات)",
       ],
@@ -875,7 +873,6 @@ export const translations = {
       requirements: "Erfordert Windows 10/11 und Chrome-Browser",
       features: [
         "Läuft lokal auf deinem Rechner — deine Zugangsdaten verlassen nie dein Gerät",
-        "Anti-Erkennungs-Browser-Automatisierung mit Audio-CAPTCHA-Löser",
         "Windows-Benachrichtigungen + E-Mail wenn Termine gefunden werden",
         "Unterstützt alle Ägypten-Filialen (Beglaubigung & Visa)",
       ],

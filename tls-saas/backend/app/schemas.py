@@ -308,6 +308,7 @@ class AdminUserUpdate(BaseModel):
 
 class DesktopCheckReport(BaseModel):
     """Report from the desktop app after a local TLS check."""
+    license_key: str = ""
     branch_name: str
     service_type: str
     slots_available: bool

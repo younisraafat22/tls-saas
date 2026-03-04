@@ -113,10 +113,12 @@ async def seed_data():
             result = await db.execute(select(Plan).where(Plan.plan_type == pd["plan_type"]))
             existing_plan = result.scalar_one_or_none()
             if existing_plan:
-                # Upsert: update price and features if plan already exists
+                # Upsert: update price, features, sort_order on existing plans
                 existing_plan.price_monthly = pd["price_monthly"]
                 existing_plan.features = pd["features"]
                 existing_plan.display_name = pd["display_name"]
+                existing_plan.description = pd["description"]
+                existing_plan.sort_order = pd["sort_order"]
             else:
                 db.add(Plan(**pd))
 
