@@ -406,6 +406,7 @@ class SchedulerService:
 
             active_users = await _get_active_subscribers(db, branch_id)
             if not active_users:
+                await _emit_log("info", "No active subscribers, skipping", branch.name)
                 return
 
             await _emit_log("info", f"Visa: {len(active_users)} user(s) queued sequentially", branch.name)
