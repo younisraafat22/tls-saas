@@ -209,11 +209,12 @@ async def get_license_branch(
     if not branch:
         return {"branch_name": None, "branch_url": None, "service_type": None}
 
-    # Clean display name (strip suffixes)
+    # Clean display name (strip location suffixes to match desktop app Config keys)
     display_name = (
         branch.name
         .replace(" - Normal Legalization", "")
         .replace(" - Students Legalization", "")
+        .replace(" - Legalization", "")
         .replace(" - Visa", "")
     )
 
