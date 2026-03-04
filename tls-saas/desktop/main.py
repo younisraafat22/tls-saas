@@ -924,7 +924,8 @@ class TLSApp:
             except ImportError:
                 # Fallback to Flet's clipboard if pyperclip not available
                 try:
-                    self.page.set_clipboard(hw_id)
+                    self.page.clipboard = hw_id
+                    self.page.update()
                     copy_btn.text = "Copied!"
                     copy_btn.style = ft.ButtonStyle(color=ft.Colors.GREEN_400)
                 except Exception as ex:
@@ -1921,12 +1922,14 @@ class TLSApp:
 
         def _copy_hw_id(e):
             if self.page:
-                self.page.set_clipboard(_hw_id)
+                self.page.clipboard = _hw_id
+                self.page.update()
                 self.page.show_dialog(ft.SnackBar(content=ft.Text("Hardware ID copied to clipboard", size=13, color=ft.Colors.WHITE), bgcolor="#1A3A2A", duration=2000))
 
         def _copy_lic_key(e):
             if self.page:
-                self.page.set_clipboard(_lic_key)
+                self.page.clipboard = _lic_key
+                self.page.update()
                 self.page.show_dialog(ft.SnackBar(content=ft.Text("License key copied to clipboard", size=13, color=ft.Colors.WHITE), bgcolor="#1A3A2A", duration=2000))
 
         info_card = self.create_glass_container(
