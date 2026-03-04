@@ -66,6 +66,13 @@ try:
 except ImportError:
     UNDETECTED_CHROME_AVAILABLE = False
 
+# Window transparency helper for "invisible" mode
+try:
+    from window_hider import ChromeWindowHider, get_chrome_hwnds, find_new_chrome_hwnd
+    WINDOW_HIDER_AVAILABLE = True
+except ImportError:
+    WINDOW_HIDER_AVAILABLE = False
+
 
 def _get_chrome_major_version() -> int | None:
     """Detect the installed Chrome/Chromium major version number.
@@ -121,6 +128,7 @@ class TLSCheckerService:
         self._is_seleniumbase = False
         self.is_running = False
         self._window_hidden = False  # Track if window has been hidden in background mode
+        self._chrome_hider = ChromeWindowHider() if WINDOW_HIDER_AVAILABLE else None
         self.check_thread = None
         self.on_status_update = on_status_update  # Callback for UI updates
         self.on_countdown_update = on_countdown_update  # Callback for countdown timer
@@ -129,34 +137,15 @@ class TLSCheckerService:
     
     # Messages allowed in the UI activity log (prefix match).
     # Everything else is printed to terminal only.
+    # Messages shown in the "Recent Checks" UI panel (prefix match).
+    # Only check outcomes and start/stop events — everything else goes
+    # to the debug log file only.  Developer mode does NOT override this;
+    # verbose step-by-step logs are always debug-file-only.
     _UI_ALLOWED_PREFIXES = (
-        "✅ Monitoring started",
-        "Opening TLS",
-        "Logging in",
-        "✅ Login successful",
-        "Selecting group",
-        "📋 Group selected",
-        "⏱️ Waiting",
-        "⏹️ Monitoring stopped",
-        "Checking for appointments",
-        "📆 Starting with",
-        "🔍 Checking",
-        "📅 ",
-        "━━━",
-        "❌ NO APPOINTMENTS",
-        "🎉",
-        "📸 Screenshot",
-        "📧 Notification",
-        "✓ Configuration saved",
-        "ℹ️",
-        "⚠️ ",
-        "❌ TLS credentials",
+        "\u23f9\ufe0f Monitoring stopped",
+        "\U0001F50D Check at ",
+        "\u274c TLS credentials",
         "[ERROR]",
-        "Check cycle error",
-        "No appointments",
-        "❌ No application",
-        "Error setting up browser",
-        "SeleniumBase driver failed",
     )
 
     def _log(self, message: str):
@@ -187,32 +176,41 @@ class TLSCheckerService:
             # If all else fails, silently continue - don't break the app
             print(f"[Checker] Warning: Could not write to debug log: {e}")
         
-        # Forward messages to the UI
+        # Forward ONLY result messages to the UI — always filtered regardless
+        # of developer mode.  Verbose step-by-step logs stay in the debug file.
         if self.on_status_update:
-            if getattr(self, 'developer_mode', False):
-                # Developer mode: send every message regardless of prefix
-                self.on_status_update(message)
-                return
             for prefix in self._UI_ALLOWED_PREFIXES:
                 if message.startswith(prefix):
                     self.on_status_update(message)
                     return
     
     def _hide_chrome_window(self):
-        """Minimize Chrome to the taskbar in background mode.
-        
-        Chrome must have been visible on screen first (maximize_window in
-        _setup_driver) so that Google reCAPTCHA trusts it as a real browser.
-        We then minimize to the taskbar after navigation.
-        
-        The CSS viewport is locked to 1920x1080 via CDP
-        Emulation.setDeviceMetricsOverride, so the TLS website still sees
-        a desktop layout even though the OS window is minimized.
+        """Make Chrome practically invisible in background mode.
+
+        Uses Win32 layered-window transparency (alpha ≈ 0%) so the window
+        is still rendered on-screen at normal coordinates.  Anti-bot systems
+        see a fully visible, non-minimized window and pass all checks.
+        The window is also removed from the taskbar and placed behind all
+        other windows so it doesn't interfere with the user.
+
+        Falls back to CDP viewport lock + minimize if the transparency
+        helper is unavailable.
         """
         if self._window_hidden or not Config.BROWSER_HEADLESS or not self.driver:
             return
+
+        # Strategy 1: Win32 transparency (preferred — anti-bot friendly)
+        if self._chrome_hider and self._chrome_hider.hwnd:
+            try:
+                self._chrome_hider.hide()
+                self._window_hidden = True
+                self._log("Chrome window hidden (transparent mode)")
+                return
+            except Exception as e:
+                print(f"[Checker] Transparency hide failed: {e}")
+
+        # Strategy 2: Fallback — CDP viewport lock + minimize
         try:
-            # Lock CSS viewport so TLS renders desktop layout when minimized
             self.driver.execute_cdp_cmd(
                 "Emulation.setDeviceMetricsOverride",
                 {"width": 1920, "height": 1080,
@@ -225,6 +223,35 @@ class TLSCheckerService:
             self._window_hidden = True
         except Exception:
             pass
+    def _inject_visibility_override(self):
+        """Inject a CDP script that makes every page always report
+        document.visibilityState = 'visible' and document.hidden = false.
+
+        This persists across all page navigations for the lifetime of the
+        browser session, ensuring that anti-bot / login pages never see a
+        'hidden' visibility state even when the OS window is pushed to the
+        bottom of the Z-order by the transparent-window hider.
+        """
+        if not self.driver:
+            return
+        try:
+            self.driver.execute_cdp_cmd(
+                "Page.addScriptToEvaluateOnNewDocument",
+                {
+                    "source": (
+                        "Object.defineProperty(document, 'hidden', "
+                        "  { get: () => false, configurable: true });"
+                        "Object.defineProperty(document, 'visibilityState', "
+                        "  { get: () => 'visible', configurable: true });"
+                        "window.addEventListener('visibilitychange', "
+                        "  function(e) { e.stopImmediatePropagation(); }, true);"
+                    )
+                },
+            )
+            print("[Checker] Visibility override injected via CDP")
+        except Exception as e:
+            print(f"[Checker] Could not inject visibility override: {e}")
+
     def log(self, message: str):
         """Public log method (alias for _log)"""
         self._log(message)
@@ -240,8 +267,11 @@ class TLSCheckerService:
         writable_drivers = os.path.join(str(BASE_DIR), "drivers")
         os.makedirs(writable_drivers, exist_ok=True)
 
-        # Redirect SeleniumBase paths to writable directory and pre-seed with
-        # bundled chromedriver so no internet download is needed on first run.
+        # Redirect SeleniumBase paths to writable directory.
+        # Do NOT pre-seed with a bundled chromedriver — the bundled version
+        # will almost certainly mismatch the user's installed Chrome.
+        # Instead let SeleniumBase download the matching chromedriver at
+        # runtime (requires internet, which the app needs anyway).
         try:
             from seleniumbase.core import browser_launcher
             browser_launcher.DRIVER_DIR = writable_drivers
@@ -252,25 +282,50 @@ class TLSCheckerService:
                 writable_drivers, "uc_driver.exe"
             )
 
-            # Always overwrite writable driver dir with the bundled chromedriver.exe.
-            # This ensures any stale/wrong-version driver from a previous install
-            # is replaced with the correct version bundled for this Chrome release.
-            import shutil as _shutil
-            bundled_cd = None
-            for _search in [
-                os.path.join(getattr(sys, "_MEIPASS", ""), "seleniumbase", "drivers", "chromedriver.exe"),
-                os.path.join(os.path.dirname(sys.executable), "_internal", "seleniumbase", "drivers", "chromedriver.exe"),
-            ]:
-                if os.path.exists(_search):
-                    bundled_cd = _search
-                    break
-            if bundled_cd:
-                for _dest in [browser_launcher.LOCAL_CHROMEDRIVER, browser_launcher.LOCAL_UC_DRIVER]:
-                    try:
-                        _shutil.copy2(bundled_cd, _dest)
-                        print(f"[Checker] Seeded driver from bundle: {_dest}")
-                    except Exception as _ce:
-                        print(f"[Checker] Could not seed driver to {_dest}: {_ce}")
+            # Only seed from bundle if NO driver exists yet AND the bundled
+            # version matches the installed Chrome major version.  Otherwise
+            # let SeleniumBase download the correct version automatically.
+            chrome_major = _get_chrome_major_version()
+            local_cd = browser_launcher.LOCAL_CHROMEDRIVER
+            if not os.path.exists(local_cd):
+                import shutil as _shutil
+                bundled_cd = None
+                for _search in [
+                    os.path.join(getattr(sys, "_MEIPASS", ""), "seleniumbase", "drivers", "chromedriver.exe"),
+                    os.path.join(os.path.dirname(sys.executable), "_internal", "seleniumbase", "drivers", "chromedriver.exe"),
+                ]:
+                    if os.path.exists(_search):
+                        bundled_cd = _search
+                        break
+                if bundled_cd:
+                    # Try to read the bundled driver's version to check compatibility
+                    _version_ok = True
+                    if chrome_major:
+                        try:
+                            import subprocess as _sp
+                            _out = _sp.check_output(
+                                [bundled_cd, "--version"],
+                                timeout=5,
+                                creationflags=_sp.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                            ).decode()
+                            import re as _re
+                            _m = _re.search(r"(\d+)\.", _out)
+                            if _m and int(_m.group(1)) != chrome_major:
+                                _version_ok = False
+                                print(f"[Checker] Bundled chromedriver is v{_m.group(1)} but Chrome is v{chrome_major} — skipping seed, will download correct version")
+                        except Exception:
+                            pass  # Can't check version — try seeding anyway
+                    if _version_ok:
+                        for _dest in [browser_launcher.LOCAL_CHROMEDRIVER, browser_launcher.LOCAL_UC_DRIVER]:
+                            try:
+                                _shutil.copy2(bundled_cd, _dest)
+                                print(f"[Checker] Seeded driver from bundle: {_dest}")
+                            except Exception as _ce:
+                                print(f"[Checker] Could not seed driver to {_dest}: {_ce}")
+                else:
+                    print("[Checker] No bundled chromedriver found — SeleniumBase will download one")
+            else:
+                print(f"[Checker] Using existing driver at {local_cd}")
         except Exception as e:
             print(f"[Checker] Warning: driver path redirect failed: {e}")
 
@@ -292,6 +347,10 @@ class TLSCheckerService:
     def _setup_driver(self):
         """Setup Selenium driver"""
         try:
+
+            # Record existing Chrome windows BEFORE launch so we can
+            # identify the new one afterwards (for the window hider).
+            _pre_chrome_hwnds = get_chrome_hwnds() if WINDOW_HIDER_AVAILABLE else set()
 
             # Use AppData for browser downloads to avoid permission issues
             from config import BASE_DIR
@@ -345,9 +404,10 @@ class TLSCheckerService:
                     # Standard UC driver — no extra chromium flags.
                     # Anti-throttle flags like --disable-renderer-backgrounding
                     # change Chrome's JS fingerprint and cause Google reCAPTCHA
-                    # to block audio challenges. Off-screen positioning at (-3000, 0)
-                    # hides the window without triggering Chrome's minimize/occlude
-                    # throttling (which only fires for minimized or occluded states).
+                    # to block audio challenges.  In "invisible" mode, the window
+                    # is made nearly-transparent via Win32 layered-window API
+                    # (see window_hider.py) so Chrome stays at normal screen
+                    # coordinates and passes all anti-bot visibility checks.
                     driver_kwargs = {
                         "uc": True,
                         "headless": False,
@@ -371,12 +431,24 @@ class TLSCheckerService:
 
                     # Maximize the window — the OS preserves maximized state
                     # even across SeleniumBase UC reconnects.  For background
-                    # mode, the window is moved off-screen AFTER navigation
-                    # (uc_open_with_reconnect resets position/CDP state).
+                    # mode the window is made transparent AFTER navigation.
                     try:
                         self.driver.maximize_window()
                     except Exception:
                         pass
+
+                    # Attach the window hider to the NEW Chrome window and
+                    # hide it immediately so it never appears to the user.
+                    if WINDOW_HIDER_AVAILABLE and self._chrome_hider and Config.BROWSER_HEADLESS:
+                        new_hwnd = find_new_chrome_hwnd(_pre_chrome_hwnds, timeout=8)
+                        if new_hwnd:
+                            self._chrome_hider.attach(new_hwnd)
+                            self._chrome_hider.hide()
+                            self._window_hidden = True
+                            print(f"[Checker] Chrome hidden immediately (hwnd {new_hwnd})")
+                        else:
+                            print("[Checker] Warning: could not find new Chrome window for hider")
+
                     self._is_seleniumbase = True
                     return True
                 except Exception as e:
@@ -395,7 +467,9 @@ class TLSCheckerService:
                 options.add_argument('--disable-dev-shm-usage')
                 options.add_argument('--no-sandbox')
                 options.add_experimental_option("prefs", download_prefs)
-                if Config.BROWSER_HEADLESS:
+                # Only use real headless if window hider is unavailable;
+                # otherwise Chrome starts visible and is made transparent.
+                if Config.BROWSER_HEADLESS and not WINDOW_HIDER_AVAILABLE:
                     options.add_argument('--headless=new')
                     options.add_argument('--window-size=1920,1080')
                 options.add_argument('--start-maximized')
@@ -432,6 +506,12 @@ class TLSCheckerService:
                     pass
                 self.driver = uc.Chrome(options=options, version_main=chrome_ver_uc)
                 self.driver.maximize_window()
+                if WINDOW_HIDER_AVAILABLE and self._chrome_hider and Config.BROWSER_HEADLESS:
+                    new_hwnd = find_new_chrome_hwnd(_pre_chrome_hwnds, timeout=8)
+                    if new_hwnd:
+                        self._chrome_hider.attach(new_hwnd)
+                        self._chrome_hider.hide()
+                        self._window_hidden = True
                 return True
             
             # Fallback to regular Selenium
@@ -443,7 +523,9 @@ class TLSCheckerService:
             options.add_argument('--log-level=3')
             options.add_argument('--disable-logging')
             options.add_experimental_option("prefs", download_prefs)
-            if Config.BROWSER_HEADLESS:
+            # Only use real headless if window hider is unavailable;
+            # otherwise Chrome starts visible and is made transparent.
+            if Config.BROWSER_HEADLESS and not WINDOW_HIDER_AVAILABLE:
                 options.add_argument('--headless=new')
                 options.add_argument('--window-size=1920,1080')
             options.add_argument('--start-maximized')
@@ -451,6 +533,12 @@ class TLSCheckerService:
             self.driver = webdriver.Chrome(options=options)
             self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             self.driver.maximize_window()
+            if WINDOW_HIDER_AVAILABLE and self._chrome_hider and Config.BROWSER_HEADLESS:
+                new_hwnd = find_new_chrome_hwnd(_pre_chrome_hwnds, timeout=8)
+                if new_hwnd:
+                    self._chrome_hider.attach(new_hwnd)
+                    self._chrome_hider.hide()
+                    self._window_hidden = True
             return True
             
         except Exception as e:
@@ -459,6 +547,9 @@ class TLSCheckerService:
     
     def _cleanup_driver(self):
         """Close browser"""
+        # Detach window hider before closing
+        if self._chrome_hider:
+            self._chrome_hider.detach()
         if self.driver:
             try:
                 self.driver.quit()
@@ -1205,13 +1296,8 @@ class TLSCheckerService:
                 try:
                     self.driver.uc_open_with_reconnect(target_url, reconnect_time=4)
                     self._wait_random(2, 3)
-                    # Only attempt GUI captcha click when window is visible (not headless)
-                    # uc_gui_click_captcha uses pyautogui physical clicks which fail off-screen
-                    if not Config.BROWSER_HEADLESS:
-                        try:
-                            self.driver.uc_gui_click_captcha()
-                        except Exception:
-                            pass  # No Turnstile present, that's fine
+                    # UC mode handles Cloudflare Turnstile automatically via
+                    # uc_open_with_reconnect. No manual click needed.
                 except Exception:
                     # Fallback to regular get if UC method not available
                     self.driver.get(target_url)
@@ -1241,10 +1327,9 @@ class TLSCheckerService:
             # ── Restore window state after uc_open_with_reconnect ───────────
             # uc_open_with_reconnect disconnects/reconnects CDP which resets
             # window size to 800x600. We must fix this AFTER navigation.
-            # For background mode: Chrome stays FULLY VISIBLE ON SCREEN here —
-            # reCAPTCHA checks window.screenX/Y and document.visibilityState,
-            # so any hidden/off-screen/minimized state blocks audio challenges.
-            # Chrome is only minimized AFTER login succeeds.
+            # Chrome stays FULLY VISIBLE (though transparent in invisible mode)
+            # so that reCAPTCHA and Cloudflare see a real browser.
+            # Chrome is made transparent AFTER login succeeds.
             try:
                 self.driver.execute_cdp_cmd(
                     "Emulation.setDeviceMetricsOverride",
@@ -1434,12 +1519,22 @@ class TLSCheckerService:
                 return False, "PAGE_NOT_LOADED: Login button not found on form."
             
             login_button.click()
-            self._wait_random(3, 5)
+            self._wait_random(4, 6)
+
+            # Wait for redirect to complete (visa site can be slower)
+            try:
+                WebDriverWait(self.driver, 10).until(
+                    lambda d: not any(x in d.current_url.lower() for x in [
+                        "openid-connect/auth", "kc-login", "/auth/realms/"
+                    ])
+                )
+            except TimeoutException:
+                pass  # Continue checks below
             
-            # Check for error message (try multiple selectors)
+            # Check for error message (try specific selectors first)
             try:
                 for err_sel in ["#kc-feedback-text", ".kc-feedback-text", ".alert-error", ".error-message",
-                                "#input-error", ".kc-error-message", "[class*='error']", "[class*='Error']"]:
+                                "#input-error", ".kc-error-message"]:
                     try:
                         error_element = self.driver.find_element(By.CSS_SELECTOR, err_sel)
                         error_text = error_element.text.strip()
@@ -1737,6 +1832,8 @@ class TLSCheckerService:
                     except Exception:
                         pass
                     
+                    check_time = datetime.now().strftime("%I:%M %p").lstrip("0")
+                    self._log(f"🔍 Check at {check_time} — No appointments found")
                     return False, "No appointments available (popup)"
                 else:
                     print(f"[Checker] Popup found but text doesn't indicate no slots: {popup_text[:100]}")
@@ -1967,8 +2064,8 @@ class TLSCheckerService:
                 self._log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 all_results.append(f"{month_name}: {len(available_buttons)} slots found")
 
-                # Take screenshot
-                screenshot_path = f"slots_found_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                # Take screenshot (save into AppData so gallery works in installed app)
+                screenshot_path = os.path.join(str(Config.BASE_DIR), f"slots_found_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
                 self.driver.save_screenshot(screenshot_path)
                 self._log(f"📸 Screenshot saved: {screenshot_path}")
 
@@ -1997,8 +2094,27 @@ class TLSCheckerService:
                 self._log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 self._log(f"❌ NO APPOINTMENTS in any month (checked {len(checked_months)} months)")
                 self._log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                # Emit a single UI-friendly summary for Recent Checks
+                check_time = datetime.now().strftime("%I:%M %p").lstrip("0")
+                self._log(f"🔍 Check at {check_time} — No appointments found")
                 return False, "No appointments available"
 
+            # Emit a single UI-friendly summary for Recent Checks
+            check_time = datetime.now().strftime("%I:%M %p").lstrip("0")
+            # Build a formatted multi-line summary
+            slot_lines = []
+            no_slot_lines = []
+            for r in all_results:
+                if "slots found" in r.lower():
+                    slot_lines.append(f"  🎉 {r}")
+                else:
+                    no_slot_lines.append(f"  ⬚ {r}")
+            summary_parts = [f"🔍 Check at {check_time} — Slots available!"]
+            summary_parts.extend(slot_lines)
+            if no_slot_lines:
+                summary_parts.extend(no_slot_lines)
+            summary_msg = "\n".join(summary_parts)
+            self._log(summary_msg)
             return True, "; ".join(all_results)
 
         except Exception as e:
@@ -2097,7 +2213,7 @@ class TLSCheckerService:
                 self._log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 self._log("🎉 APPOINTMENTS AVAILABLE!")
                 self._log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                screenshot_path = f"slots_found_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                screenshot_path = os.path.join(str(Config.BASE_DIR), f"slots_found_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
                 self.driver.save_screenshot(screenshot_path)
                 self._log(f"📸 Screenshot saved: {screenshot_path}")
                 db = SessionLocal()
@@ -2152,7 +2268,12 @@ class TLSCheckerService:
             # Setup browser
             if not self._setup_driver():
                 return False  # Retry immediately
-            
+
+            # Override document.visibilityState/hidden on every future page so
+            # the TLS site always sees a "visible" window, even after the OS
+            # window is sent to the bottom of the Z-order by the window hider.
+            self._inject_visibility_override()
+
             # Login
             login_success, login_error = self._login(
                 settings.tls_email, tls_password,
@@ -2160,9 +2281,10 @@ class TLSCheckerService:
                 is_retry=is_retry,
             )
 
-            # Minimize Chrome to taskbar AFTER login (including CAPTCHA solving).
-            # Chrome was visible on screen during the entire login flow so that
-            # Google sees a real browser. Now it's safe to hide it.
+            # Make Chrome transparent AFTER login (including CAPTCHA solving).
+            # Chrome was visible (though transparent alpha=1 is imperceptible)
+            # during the entire login flow so anti-bot systems see a real
+            # browser.  Now it's safe to fully hide it.
             if login_success:
                 self._hide_chrome_window()
 

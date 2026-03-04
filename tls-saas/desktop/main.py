@@ -124,8 +124,8 @@ class TLSApp:
 
         # ---- Page chrome ----
         self.page.title = Config.APP_NAME
-        self.page.window.width = 1400
-        self.page.window.height = 1150
+        self.page.window.width = 1100
+        self.page.window.height = 850
         self.page.window.min_width = 990
         self.page.window.min_height = 750
         self.page.window.resizable = True
@@ -386,19 +386,63 @@ class TLSApp:
                     except Exception:
                         pass
 
+    _DEV_PASSWORD = "tls2026dev"
+
     def on_keyboard_event(self, e: ft.KeyboardEvent):
-        """Handle keyboard events - Ctrl+Shift+D toggles developer mode."""
-        if e.key == "D" and e.ctrl and e.shift:
-            self._developer_mode = not self._developer_mode
-            status = "enabled" if self._developer_mode else "disabled"
-            # Sync flag to checker so log verbosity changes immediately
-            if self.checker:
-                self.checker.developer_mode = self._developer_mode
-            if self.page:
-                self.page.snack_bar = ft.SnackBar(ft.Text(f"Developer mode {status} — all logs {'visible' if self._developer_mode else 'filtered'}"), open=True)
-                self.page.update()
-                # Rebuild monitoring page to show/hide developer controls
+        """Handle keyboard events — Ctrl+Shift+F12 opens developer mode password dialog."""
+        if e.key == "F12" and e.ctrl and e.shift:
+            if self._developer_mode:
+                # Already in dev mode — just toggle off
+                self._developer_mode = False
+                if self.checker:
+                    self.checker.developer_mode = False
+                if self.page:
+                    self.page.show_dialog(ft.SnackBar(ft.Text("Developer mode disabled")))
+                    self.show_monitoring_page()
+                return
+            self._show_dev_password_dialog()
+
+    def _show_dev_password_dialog(self):
+        pw_field = ft.TextField(
+            label="Password",
+            password=True,
+            can_reveal_password=True,
+            width=300,
+            border_radius=12,
+            autofocus=True,
+        )
+        error_text = ft.Text("", color=ft.Colors.RED_400, size=12)
+
+        def close_dlg(e):
+            self.page.pop_dialog()
+
+        def submit(e):
+            if pw_field.value == self._DEV_PASSWORD:
+                self.page.pop_dialog()
+                self._developer_mode = True
+                if self.checker:
+                    self.checker.developer_mode = True
+                self.page.show_dialog(ft.SnackBar(ft.Text("Developer mode enabled")))
                 self.show_monitoring_page()
+            else:
+                error_text.value = "Incorrect password"
+                error_text.update()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("🔒 Developer Mode", size=18, weight=ft.FontWeight.BOLD),
+            content=ft.Column([
+                ft.Text("Enter developer password to continue.", size=14),
+                pw_field,
+                error_text,
+            ], tight=True, spacing=10),
+            actions=[
+                ft.TextButton("Cancel", on_click=close_dlg),
+                ft.FilledButton("Unlock", on_click=submit,
+                                style=ft.ButtonStyle(bgcolor="#00D9FF", color="#0A0E27")),
+            ],
+        )
+        self.page.show_dialog(dlg)
 
     def _ensure_default_settings(self):
         """Make sure a UserSettings row exists for USER_ID."""
@@ -424,12 +468,11 @@ class TLSApp:
         """Called when a new version is available. Shows update dialog."""
         def show_dialog():
             def close_dlg(e):
-                update_dlg.open = False
-                self.page.update()
+                self.page.pop_dialog()
 
             def open_download(e):
                 self.page.launch_url(download_url)
-                close_dlg(e)
+                self.page.pop_dialog()
 
             update_dlg = ft.AlertDialog(
                 modal=True,
@@ -467,9 +510,7 @@ class TLSApp:
                 ],
                 actions_alignment=ft.MainAxisAlignment.END,
             )
-            self.page.overlay.append(update_dlg)
-            update_dlg.open = True
-            self.page.update()
+            self.page.show_dialog(update_dlg)
 
         # Run on main thread
         try:
@@ -482,9 +523,9 @@ class TLSApp:
         await asyncio.sleep(0.05)
         self.page.window.maximized = False
         self.page.window.full_screen = False
-        self.page.window.width = 1400
-        self.page.window.height = 1150
-        self.page.window.min_width = 1000
+        self.page.window.width = 1100
+        self.page.window.height = 850
+        self.page.window.min_width = 990
         self.page.window.min_height = 750
         self.page.window.maximizable = True
         try:
@@ -493,8 +534,8 @@ class TLSApp:
             user32.SetProcessDPIAware()
             sw = user32.GetSystemMetrics(0)
             sh = user32.GetSystemMetrics(1)
-            self.page.window.left = (sw - 1400) // 2
-            self.page.window.top = max(0, (sh - 1050) // 2)
+            self.page.window.left = (sw - 1100) // 2
+            self.page.window.top = max(0, (sh - 850) // 2)
         except Exception:
             try:
                 import tkinter as tk
@@ -503,8 +544,8 @@ class TLSApp:
                 sw = root.winfo_screenwidth()
                 sh = root.winfo_screenheight()
                 root.destroy()
-                self.page.window.left = (sw - 1400) // 2
-                self.page.window.top = max(0, (sh - 1050) // 2)
+                self.page.window.left = (sw - 1100) // 2
+                self.page.window.top = max(0, (sh - 850) // 2)
             except Exception:
                 self.page.window.left = 100
                 self.page.window.top = 50
@@ -635,6 +676,14 @@ class TLSApp:
     # ==================================================================
     #  CLOUD MONITORING HELPERS
     # ==================================================================
+    def _show_info_snack(self, msg: str, color: str = "#1A3A2A"):
+        """Show an informational snack-bar popup."""
+        try:
+            if self.page:
+                self.page.show_dialog(ft.SnackBar(content=ft.Text(msg, size=14, color=ft.Colors.WHITE), bgcolor=color, duration=4000))
+        except Exception:
+            pass
+
     def _is_premium_plan(self) -> bool:
         """Check if the current license is a premium plan (server monitoring eligible)."""
         try:
@@ -653,12 +702,12 @@ class TLSApp:
 
         # Gate: only premium plans get server monitoring
         if not self._is_premium_plan():
-            self.update_status_log("ℹ️ Local monitoring active — keep your PC on while checking.")
+            self._show_info_snack("Local monitoring active \u2014 keep your PC on while checking.")
             return False
 
         server_url = Config.LICENSE_SERVER_URL
         if not server_url:
-            self.update_status_log("ℹ️ Server URL not configured — starting local monitoring. Keep your PC on.")
+            self._show_info_snack("Server URL not configured \u2014 starting local monitoring. Keep your PC on.")
             return False
         try:
             license_status = get_license_status()
@@ -688,26 +737,22 @@ class TLSApp:
                 result = json.loads(resp.read())
                 if result.get("success"):
                     self._cloud_monitoring = True
-                    self.update_status_log("☁️ Cloud monitoring started!")
-                    self.update_status_log("ℹ️ Your PC does NOT need to stay on — the server handles checking.")
-                    self.update_status_log("ℹ️ You'll receive an email notification when appointments are found.")
+                    self._show_info_snack("\u2601\ufe0f Cloud monitoring started! Your PC does NOT need to stay on.")
                     # Start polling for status
                     self._start_cloud_polling()
                     return True
                 else:
-                    self.update_status_log(f"⚠️ Server: {result.get('error', 'Unknown error')}")
-                    self.update_status_log("ℹ️ Starting local monitoring instead. Keep your PC on.")
+                    self._show_info_snack(f"\u26a0\ufe0f Server: {result.get('error', 'Unknown error')} \u2014 starting local monitoring.")
                     return False
         except urllib.error.HTTPError as e:
             body = e.read().decode(errors='ignore')[:200]
-            self.update_status_log(f"⚠️ Server HTTP {e.code} — could not start cloud monitoring")
-            self.update_status_log("ℹ️ Starting local monitoring instead. Keep your PC on.")
+            self._show_info_snack(f"\u26a0\ufe0f Server HTTP {e.code} \u2014 starting local monitoring. Keep your PC on.")
             return False
         except urllib.error.URLError as e:
-            self.update_status_log("ℹ️ Server unavailable — starting local monitoring. Keep your PC on.")
+            self._show_info_snack("Server unavailable \u2014 starting local monitoring. Keep your PC on.")
             return False
         except Exception as e:
-            self.update_status_log(f"ℹ️ Server unavailable ({type(e).__name__}) — starting local monitoring. Keep your PC on.")
+            self._show_info_snack(f"Server unavailable ({type(e).__name__}) \u2014 starting local monitoring. Keep your PC on.")
             return False
 
     def _try_cloud_stop(self) -> bool:
@@ -729,7 +774,7 @@ class TLSApp:
                 if result.get("success"):
                     self._cloud_monitoring = False
                     self._stop_cloud_polling()
-                    self.update_status_log("☁️ Cloud monitoring stopped")
+                    self._show_info_snack("\u2601\ufe0f Cloud monitoring stopped")
                     return True
         except Exception:
             pass
@@ -755,7 +800,7 @@ class TLSApp:
                     with urllib.request.urlopen(req, timeout=10) as resp:
                         result = json.loads(resp.read())
                         if not result.get("active"):
-                            self.update_status_log("☁️ Cloud monitoring has stopped")
+                            self._show_info_snack("\u2601\ufe0f Cloud monitoring has stopped")
                             self._cloud_poll_active = False
                             break
                         # Show recent logs
@@ -763,7 +808,7 @@ class TLSApp:
                         for log_entry in logs[-5:]:
                             msg = log_entry.get("message", "")
                             if msg and not any(msg == h[0] for h in self._log_history[-10:]):
-                                self.update_status_log(f"☁️ {msg}")
+                                self._show_info_snack(f"\u2601\ufe0f {msg}")
                 except Exception:
                     pass
                 # Poll every 30 seconds
@@ -1127,7 +1172,7 @@ class TLSApp:
                     ft.Icon(ft.Icons.INFO_OUTLINE, size=16, color="#00D9FF"),
                     ft.Column(
                         [
-                            ft.Text("Ready to start monitoring...", size=12, color=ft.Colors.GREY_400),
+                            ft.Text("No checks yet — start monitoring to see results here.", size=12, color=ft.Colors.GREY_400),
                             ft.Text(datetime.now().strftime("%H:%M:%S"), size=10, color=ft.Colors.GREY_600),
                         ],
                         spacing=2, expand=True,
@@ -1162,19 +1207,19 @@ class TLSApp:
         )
 
         # ---- Countdown timer ----
-        self.countdown_text = ft.Text("--:--", size=28, weight=ft.FontWeight.BOLD, color="#00D9FF")
+        self.countdown_text = ft.Text("--:--", size=22, weight=ft.FontWeight.BOLD, color="#00D9FF")
 
-        _STAT_W = 155
-        _STAT_H = 140
-        _STAT_PAD = 15
+        _STAT_W = 120
+        _STAT_H = 110
+        _STAT_PAD = 10
 
         countdown_card = self.create_glass_container(
             ft.Column(
                 [
-                    ft.Icon(ft.Icons.TIMER, size=24, color="#00D9FF"),
-                    ft.Container(height=6),
+                    ft.Icon(ft.Icons.TIMER, size=18, color="#00D9FF"),
+                    ft.Container(height=4),
                     self.countdown_text,
-                    ft.Text("Next Check", size=10, color=ft.Colors.GREY_500),
+                    ft.Text("Next Check", size=9, color=ft.Colors.GREY_500),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 alignment=ft.MainAxisAlignment.CENTER,
@@ -1184,14 +1229,14 @@ class TLSApp:
         )
 
         # ---- Stats cards ----
-        self.checks_count_text = ft.Text(str(total_checks), size=28, weight=ft.FontWeight.BOLD)
+        self.checks_count_text = ft.Text(str(total_checks), size=22, weight=ft.FontWeight.BOLD)
         checks_card = self.create_glass_container(
             ft.Column(
                 [
-                    ft.Icon(ft.Icons.NUMBERS, size=24, color="#00D9FF"),
-                    ft.Container(height=6),
+                    ft.Icon(ft.Icons.NUMBERS, size=18, color="#00D9FF"),
+                    ft.Container(height=4),
                     self.checks_count_text,
-                    ft.Text("Total Checks", size=10, color=ft.Colors.GREY_500),
+                    ft.Text("Total Checks", size=9, color=ft.Colors.GREY_500),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 alignment=ft.MainAxisAlignment.CENTER,
@@ -1210,14 +1255,14 @@ class TLSApp:
             checks_limit_str = f"{checks_limit // 1000}k"
         else:
             checks_limit_str = str(checks_limit)
-        self.checks_today_text = ft.Text(f"{checks_today}/{checks_limit_str}", size=28, weight=ft.FontWeight.BOLD)
+        self.checks_today_text = ft.Text(f"{checks_today}/{checks_limit_str}", size=22, weight=ft.FontWeight.BOLD)
         checks_day_card = self.create_glass_container(
             ft.Column(
                 [
-                    ft.Icon(ft.Icons.TODAY, size=24, color="#00D9FF"),
-                    ft.Container(height=6),
+                    ft.Icon(ft.Icons.TODAY, size=18, color="#00D9FF"),
+                    ft.Container(height=4),
                     self.checks_today_text,
-                    ft.Text("Checks Today", size=10, color=ft.Colors.GREY_500),
+                    ft.Text("Checks Today", size=9, color=ft.Colors.GREY_500),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 alignment=ft.MainAxisAlignment.CENTER,
@@ -1229,10 +1274,10 @@ class TLSApp:
         last_check_card = self.create_glass_container(
             ft.Column(
                 [
-                    ft.Icon(ft.Icons.ACCESS_TIME, size=24, color="#00D9FF"),
-                    ft.Container(height=6),
-                    ft.Text(last_check, size=20, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
-                    ft.Text("Last Check", size=10, color=ft.Colors.GREY_500),
+                    ft.Icon(ft.Icons.ACCESS_TIME, size=18, color="#00D9FF"),
+                    ft.Container(height=4),
+                    ft.Text(last_check, size=16, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+                    ft.Text("Last Check", size=9, color=ft.Colors.GREY_500),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 alignment=ft.MainAxisAlignment.CENTER,
@@ -1242,59 +1287,67 @@ class TLSApp:
         )
 
         # ---- Control callbacks ----
+        def _show_snack(msg, color="#CC3333"):
+            """Show a prominent snack bar message that the user cannot miss."""
+            if self.page:
+                self.page.show_dialog(ft.SnackBar(content=ft.Text(msg, size=14, color=ft.Colors.WHITE), bgcolor=color, duration=5000))
+
         def start_monitoring(e):
-            # Check license first
-            allowed, reason = can_check()
-            if not allowed:
-                self.update_status_log(f"⚠️ {reason}")
-                return
-
-            db = SessionLocal()
-            settings = db.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
-
-            if not settings or not settings.tls_email or not settings.tls_password:
-                db.close()
-                self.update_status_log("[ERROR] Please configure TLS credentials first")
-                return
-
-            if not settings.notification_email or not settings.notification_email.strip():
-                db.close()
-                self.update_status_log("[ERROR] Notification email is required. Please enter your email in the configuration and save.")
-                return
-
-            # Check for unsaved configuration changes
-            unsaved_changes = []
             try:
-                if config_service_dropdown.value and config_service_dropdown.value != (settings.service_type or 'legalization'):
-                    unsaved_changes.append("Service Type")
-                if config_branch_dropdown.value and config_branch_dropdown.value != (settings.branch or ''):
-                    unsaved_changes.append("Branch")
-                if config_interval_dropdown.value and str(config_interval_dropdown.value) != str(settings.check_interval or 60):
-                    unsaved_changes.append("Check Interval")
-                if config_notification_field.value is not None and config_notification_field.value.strip() != (settings.notification_email or ''):
-                    unsaved_changes.append("Notification Email")
-                if config_email_field.value is not None and config_email_field.value.strip() != (settings.tls_email or ''):
-                    unsaved_changes.append("TLS Email")
-            except Exception:
-                pass  # If dropdowns haven't been created yet, skip check
+                print("[UI] start_monitoring entered")
+                # Check license first
+                allowed, reason = can_check()
+                print(f"[UI] can_check: allowed={allowed}, reason={reason}")
+                if not allowed:
+                    _show_snack(f"⚠️ {reason}")
+                    return
 
-            if unsaved_changes:
+                db = SessionLocal()
+                settings = db.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
+
+                if not settings or not settings.tls_email or not settings.tls_password:
+                    db.close()
+                    _show_snack("❌ Please configure your TLS email and password first, then Save.")
+                    return
+
+
+                # Check for unsaved configuration changes
+                unsaved_changes = []
+                try:
+                    if config_service_dropdown.value and config_service_dropdown.value != (settings.service_type or 'legalization'):
+                        unsaved_changes.append("Service Type")
+                    if config_branch_dropdown.value and config_branch_dropdown.value != (settings.branch or ''):
+                        unsaved_changes.append("Branch")
+                    if config_notification_field.value is not None and config_notification_field.value.strip() != (settings.notification_email or ''):
+                        unsaved_changes.append("Notification Email")
+                    if config_email_field.value is not None and config_email_field.value.strip() != (settings.tls_email or ''):
+                        unsaved_changes.append("TLS Email")
+                except Exception:
+                    pass  # Dropdowns not yet created — skip check
+
+                if unsaved_changes:
+                    db.close()
+                    _show_snack(f"⚠️ Unsaved changes in: {', '.join(unsaved_changes)} — click Save first.")
+                    return
+
+                settings.is_monitoring = True
+                db.commit()
+                print("[UI] About to try cloud start")
+
+                # Try cloud monitoring first (server handles everything)
+                if self._try_cloud_start(settings):
+                    print("[UI] Cloud start succeeded")
+                    db.close()
+                    return
+
                 db.close()
-                self.update_status_log(f"⚠️ You have unsaved changes in: {', '.join(unsaved_changes)}")
-                self.update_status_log("⚠️ Please click 'Save Configuration' first before starting monitoring")
-                return
-
-            first_check_done = settings.first_check_done
-            settings.is_monitoring = True
-            db.commit()
-
-            # Try cloud monitoring first (server handles everything)
-            if self._try_cloud_start(settings):
-                db.close()
-                return
-
-            db.close()
-            self.checker.start_monitoring()
+                print("[UI] Starting local monitoring")
+                self.checker.start_monitoring()
+                print("[UI] Local monitoring started")
+            except Exception as exc:
+                print(f"[UI] EXCEPTION in start_monitoring: {exc}")
+                import traceback; traceback.print_exc()
+                _show_snack(f"❌ Error: {exc}")
 
         def stop_monitoring(e):
             db = SessionLocal()
@@ -1334,7 +1387,8 @@ class TLSApp:
             db.commit()
             db.close()
             status = "background" if headless_switch.value else "visible"
-            self.update_status_log(f"“ Browser will run in {status} mode")
+            if self.page:
+                self.page.show_dialog(ft.SnackBar(content=ft.Text(f"Browser will run in {status} mode", size=14, color=ft.Colors.WHITE), bgcolor="#1A3A2A", duration=3000))
 
         # Headless switch
         db = SessionLocal()
@@ -1383,24 +1437,29 @@ class TLSApp:
         interval_value = str(settings.check_interval if settings else 120)
         notification_value = settings.notification_email if settings and settings.notification_email else ""
 
+        _FIELD_W = 460
+
         config_email_field = ft.TextField(
             label="TLS Email",
             value=settings.tls_email if settings and settings.tls_email else "",
-            width=620, border_radius=12, prefix_icon=ft.Icons.EMAIL,
+            width=_FIELD_W, border_radius=10, prefix_icon=ft.Icons.EMAIL,
+            text_size=13, label_style=ft.TextStyle(size=12),
         )
 
         config_password_field = ft.TextField(
             label="TLS Password",
             password=True, can_reveal_password=True,
-            width=620, border_radius=12, prefix_icon=ft.Icons.LOCK,
-            hint_text="Leave blank to keep current password",
+            width=_FIELD_W, border_radius=10, prefix_icon=ft.Icons.LOCK,
+            hint_text="Leave blank to keep current",
+            text_size=13, label_style=ft.TextStyle(size=12),
         )
 
         config_branch_dropdown = ft.Dropdown(
             label="TLS Branch",
             value=branch_value,
-            width=620, border_radius=12,
+            width=_FIELD_W, border_radius=10,
             options=[ft.dropdown.Option(b, b) for b in branch_options_list],
+            text_size=13, label_style=ft.TextStyle(size=12),
         )
 
         def _on_service_type_change(e):
@@ -1419,7 +1478,8 @@ class TLSApp:
         config_service_dropdown = ft.Dropdown(
             label="Service Type" + (" (locked by license)" if service_locked else ""),
             value=current_service_type,
-            width=620, border_radius=12,
+            width=_FIELD_W, border_radius=10,
+            text_size=13, label_style=ft.TextStyle(size=12),
             disabled=service_locked,
             options=[
                 ft.dropdown.Option("legalization", "Document Legalization"),
@@ -1443,85 +1503,120 @@ class TLSApp:
         config_interval_dropdown = ft.Dropdown(
             label="Check Interval",
             value=effective_interval,
-            width=620, border_radius=12,
+            width=_FIELD_W, border_radius=10,
             options=interval_options,
+            text_size=13, label_style=ft.TextStyle(size=12),
             visible=False,  # Hidden by default, shown in developer mode
         )
 
         config_notification_field = ft.TextField(
             label="Notification Email",
             value=notification_value,
-            width=620, border_radius=12, prefix_icon=ft.Icons.NOTIFICATIONS,
+            width=_FIELD_W, border_radius=10, prefix_icon=ft.Icons.NOTIFICATIONS,
+            text_size=13, label_style=ft.TextStyle(size=12),
         )
 
         def save_configuration(e):
-            db = SessionLocal()
-            settings_obj = db.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
-            if not settings_obj:
-                settings_obj = UserSettings(
-                    user_id=USER_ID,
-                    enable_email_notifications=True,
-                    enable_windows_notifications=True,
-                    headless_mode=headless_switch.value,
-                )
-                db.add(settings_obj)
-            
-            # Get old email for comparison
-            old_email = settings_obj.notification_email or ""
-            new_email = config_notification_field.value.strip()
+            try:
+                print("[UI] save_configuration clicked")
+                db = SessionLocal()
+                settings_obj = db.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
+                if not settings_obj:
+                    settings_obj = UserSettings(
+                        user_id=USER_ID,
+                        enable_email_notifications=True,
+                        enable_windows_notifications=True,
+                        headless_mode=headless_switch.value,
+                    )
+                    db.add(settings_obj)
 
-            # Check if TLS credential email change is allowed
-            old_tls_email = settings_obj.tls_email or ""
-            new_tls_email = config_email_field.value.strip()
-            if old_tls_email and new_tls_email and old_tls_email.lower() != new_tls_email.lower():
-                from license_service import can_change_tls_email, record_tls_email_change
-                can_change, message = can_change_tls_email(new_tls_email)
-                
-                if not can_change:
-                    self.update_status_log(f"— {message}")
+                new_email = (config_notification_field.value or "").strip()
+                new_tls_email = (config_email_field.value or "").strip()
+                new_password = (config_password_field.value or "").strip()
+                existing_password = settings_obj.tls_password or ""
+
+                # --- Field validation ---
+                has_error = False
+                if not new_tls_email:
+                    config_email_field.error = "TLS email is required"
+                    has_error = True
+                else:
+                    config_email_field.error = None
+
+                if not new_password and not existing_password:
+                    config_password_field.error = "TLS password is required"
+                    has_error = True
+                else:
+                    config_password_field.error = None
+
+                if not new_email:
+                    config_notification_field.error = "Notification email is required"
+                    has_error = True
+                else:
+                    config_notification_field.error = None
+
+                if has_error:
+                    self.page.update()
                     db.close()
                     return
-                
-                # Record the TLS email change
-                record_tls_email_change(old_tls_email, new_tls_email)
-                self.update_status_log(f"“ {message}")
 
-            settings_obj.tls_email = new_tls_email
-            if config_password_field.value:
-                settings_obj.tls_password = auth_service.encrypt_password(config_password_field.value.strip())
-            settings_obj.notification_email = new_email
-            settings_obj.check_interval = int(config_interval_dropdown.value) if config_interval_dropdown.value else settings_obj.check_interval
+                # Check if TLS credential email change is allowed
+                old_tls_email = settings_obj.tls_email or ""
+                if old_tls_email and new_tls_email and old_tls_email.lower() != new_tls_email.lower():
+                    try:
+                        from license_service import can_change_tls_email, record_tls_email_change
+                        can_change, message = can_change_tls_email(new_tls_email)
+                        if not can_change:
+                            config_email_field.error = message
+                            self.page.update()
+                            db.close()
+                            return
+                        record_tls_email_change(old_tls_email, new_tls_email)
+                    except Exception as ex:
+                        print(f"[UI] TLS email change check failed: {ex}")
 
-            # Save service type
-            svc_type = config_service_dropdown.value or 'legalization'
-            settings_obj.service_type = svc_type
+                settings_obj.tls_email = new_tls_email
+                if new_password:
+                    settings_obj.tls_password = auth_service.encrypt_password(new_password)
+                settings_obj.notification_email = new_email
+                settings_obj.check_interval = int(config_interval_dropdown.value) if config_interval_dropdown.value else settings_obj.check_interval
 
-            # Set branch and resolve branch URL from config maps
-            branch_name = config_branch_dropdown.value
-            settings_obj.branch = branch_name
-            if svc_type == 'visa':
-                settings_obj.branch_url = Config.VISA_BRANCHES.get(
-                    branch_name, list(Config.VISA_BRANCHES.values())[0]
-                )
-            else:
-                settings_obj.branch_url = Config.LEGALIZATION_BRANCHES.get(
-                    branch_name, list(Config.LEGALIZATION_BRANCHES.values())[0]
-                )
+                svc_type = config_service_dropdown.value or 'legalization'
+                settings_obj.service_type = svc_type
 
-            settings_obj.headless_mode = headless_switch.value
+                branch_name = config_branch_dropdown.value
+                settings_obj.branch = branch_name
+                if svc_type == 'visa':
+                    settings_obj.branch_url = Config.VISA_BRANCHES.get(
+                        branch_name, list(Config.VISA_BRANCHES.values())[0]
+                    )
+                else:
+                    settings_obj.branch_url = Config.LEGALIZATION_BRANCHES.get(
+                        branch_name, list(Config.LEGALIZATION_BRANCHES.values())[0]
+                    )
 
-            db.commit()
-            db.close()
-            self.update_status_log("“ Configuration saved")
+                settings_obj.headless_mode = headless_switch.value
+
+                db.commit()
+                db.close()
+                print("[UI] Configuration saved OK")
+                if self.page:
+                    try:
+                        self.page.show_dialog(ft.SnackBar(content=ft.Text("\u2705 Configuration saved successfully", size=14, color=ft.Colors.WHITE), bgcolor="#1A3A2A", duration=3000))
+                    except Exception as snack_exc:
+                        print(f"[UI] show_dialog FAILED: {snack_exc}")
+            except Exception as exc:
+                print(f"[UI] EXCEPTION in save_configuration: {exc}")
+                import traceback; traceback.print_exc()
 
         # Build config card children dynamically
         config_children = [
             ft.Row(
                 [
-                    ft.Icon(ft.Icons.SETTINGS, size=22, color="#00D9FF"),
-                    ft.Text("Configuration", size=16, weight=ft.FontWeight.BOLD),
+                    ft.Icon(ft.Icons.SETTINGS, size=18, color="#00D9FF"),
+                    ft.Text("Configuration", size=14, weight=ft.FontWeight.BOLD),
                 ],
-                alignment=ft.MainAxisAlignment.START, spacing=8,
+                alignment=ft.MainAxisAlignment.START, spacing=6,
             ),
             ft.Divider(height=1, color=ft.Colors.with_opacity(0.2, "#00D9FF")),
             config_email_field,
@@ -1553,7 +1648,7 @@ class TLSApp:
                     ft.FilledButton(
                         "Save Configuration",
                         icon=ft.Icons.SAVE,
-                        width=620, height=45,
+                        width=_FIELD_W, height=40,
                         on_click=save_configuration,
                         style=ft.ButtonStyle(bgcolor="#00D9FF", color="#0A0E27"),
                     ),
@@ -1567,15 +1662,17 @@ class TLSApp:
                 config_children,
                 spacing=12,
             ),
-            padding=16, width=660,
+            padding=12, width=500,
         )
 
         # ---- Toggle monitoring button ----
         def toggle_monitoring(e):
+            print("[UI] toggle_monitoring clicked")
             db = SessionLocal()
             settings = db.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
             current_state = settings.is_monitoring if settings else False
             db.close()
+            print(f"[UI] current_state={current_state}")
 
             if current_state:
                 stop_monitoring(e)
@@ -1609,7 +1706,7 @@ class TLSApp:
             "Start Monitoring" if not is_monitoring else "Stop Monitoring",
             icon=ft.Icons.PLAY_ARROW if not is_monitoring else ft.Icons.STOP,
             on_click=toggle_monitoring,
-            height=50, width=660,
+            height=44, width=500,
             style=ft.ButtonStyle(
                 bgcolor="#00D9FF" if not is_monitoring else ft.Colors.with_opacity(0.3, ft.Colors.RED),
                 color="#0A0E27" if not is_monitoring else "#FF6B6B",
@@ -1738,8 +1835,7 @@ class TLSApp:
                 threading.Thread(target=_send, daemon=True).start()
 
             def close_support(e):
-                support_dlg.open = False
-                self.page.update()
+                self.page.pop_dialog()
 
             support_dlg = ft.AlertDialog(
                 modal=True,
@@ -1764,9 +1860,7 @@ class TLSApp:
                 actions_alignment=ft.MainAxisAlignment.END,
                 bgcolor="#1A1F3A",
             )
-            self.page.overlay.append(support_dlg)
-            support_dlg.open = True
-            self.page.update()
+            self.page.show_dialog(support_dlg)
 
         # ---- Header ----
         header_actions = ft.Row(
@@ -1774,9 +1868,9 @@ class TLSApp:
                 plan_badge,
                 self.create_website_icon_button(),
                 ft.IconButton(
-                    icon=ft.Icons.SUPPORT_AGENT,
-                    tooltip="Contact Support",
-                    on_click=show_support_dialog,
+                    icon=ft.Icons.CHAT,
+                    tooltip="WhatsApp Support",
+                    on_click=lambda e: webbrowser.open("https://wa.me/201060263887"),
                     icon_color="#00D9FF",
                 ),
                 ft.IconButton(
@@ -1811,69 +1905,118 @@ class TLSApp:
             padding=ft.Padding(left=0, right=0, top=15, bottom=10),
         )
 
-        # ---- Help & Support card ----
-        def open_whatsapp_support(e):
-            webbrowser.open("https://wa.me/201060263887")
+        # ---- App Info card ----
+        _lic_data = get_license_status() or {}
+        _plan_raw = _lic_data.get('plan', 'trial') or 'trial'
+        _days_rem = _lic_data.get('days_remaining', '?')
+        _lic_key  = _lic_data.get('key', '') or ''
+        _lic_key_display = _lic_key or "—"
+        _hw_id = get_hardware_id() or "—"
+        _plan_label = _plan_raw.replace('_', ' ').title()
+        _days_color = (
+            ft.Colors.RED_400 if isinstance(_days_rem, int) and _days_rem <= 3
+            else ft.Colors.GREEN_400 if isinstance(_days_rem, int) and _days_rem > 7
+            else "#00D9FF"
+        )
 
-        def open_faq(e):
-            webbrowser.open("https://tls-saas.vercel.app/#faq")
+        def _copy_hw_id(e):
+            if self.page:
+                self.page.set_clipboard(_hw_id)
+                self.page.show_dialog(ft.SnackBar(content=ft.Text("Hardware ID copied to clipboard", size=13, color=ft.Colors.WHITE), bgcolor="#1A3A2A", duration=2000))
 
-        help_card = self.create_glass_container(
+        def _copy_lic_key(e):
+            if self.page:
+                self.page.set_clipboard(_lic_key)
+                self.page.show_dialog(ft.SnackBar(content=ft.Text("License key copied to clipboard", size=13, color=ft.Colors.WHITE), bgcolor="#1A3A2A", duration=2000))
+
+        info_card = self.create_glass_container(
             ft.Column([
                 ft.Row([
-                    ft.Icon(ft.Icons.HELP_CENTER, size=22, color="#00D9FF"),
-                    ft.Text("Help & Support", size=16, weight=ft.FontWeight.BOLD),
-                ], alignment=ft.MainAxisAlignment.START, spacing=8),
+                    ft.Icon(ft.Icons.VERIFIED_USER, size=18, color="#00D9FF"),
+                    ft.Text("License & Device", size=14, weight=ft.FontWeight.BOLD),
+                ], alignment=ft.MainAxisAlignment.START, spacing=6),
                 ft.Divider(height=1, color=ft.Colors.with_opacity(0.2, "#00D9FF")),
-                ft.Container(height=4),
+                ft.Container(height=2),
+                # 2x2 grid layout
                 ft.Row([
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Icon(ft.Icons.CHAT, size=28, color=ft.Colors.GREEN_400),
-                            ft.Text("WhatsApp", size=12, weight=ft.FontWeight.BOLD),
-                            ft.Text("Quick support", size=10, color=ft.Colors.GREY_500),
-                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4),
-                        padding=12, border_radius=12,
-                        bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.GREEN),
-                        border=ft.Border.all(1, ft.Colors.with_opacity(0.2, ft.Colors.GREEN)),
-                        ink=True, on_click=open_whatsapp_support, expand=True,
-                    ),
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Icon(ft.Icons.MENU_BOOK, size=28, color="#00D9FF"),
-                            ft.Text("User Guide", size=12, weight=ft.FontWeight.BOLD),
-                            ft.Text("How to use", size=10, color=ft.Colors.GREY_500),
-                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4),
-                        padding=12, border_radius=12,
-                        bgcolor=ft.Colors.with_opacity(0.05, "#00D9FF"),
-                        border=ft.Border.all(1, ft.Colors.with_opacity(0.2, "#00D9FF")),
-                        ink=True, on_click=open_faq, expand=True,
-                    ),
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Icon(ft.Icons.SUPPORT_AGENT, size=28, color=ft.Colors.AMBER_400),
-                            ft.Text("Support", size=12, weight=ft.FontWeight.BOLD),
-                            ft.Text("Send a ticket", size=10, color=ft.Colors.GREY_500),
-                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4),
-                        padding=12, border_radius=12,
-                        bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.AMBER),
-                        border=ft.Border.all(1, ft.Colors.with_opacity(0.2, ft.Colors.AMBER)),
-                        ink=True, on_click=show_support_dialog, expand=True,
-                    ),
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Icon(ft.Icons.LANGUAGE, size=28, color="#FF6B9D"),
-                            ft.Text("Website", size=12, weight=ft.FontWeight.BOLD),
-                            ft.Text("Learn more", size=10, color=ft.Colors.GREY_500),
-                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4),
-                        padding=12, border_radius=12,
-                        bgcolor=ft.Colors.with_opacity(0.05, "#FF6B9D"),
-                        border=ft.Border.all(1, ft.Colors.with_opacity(0.2, "#FF6B9D")),
-                        ink=True, on_click=lambda e: webbrowser.open("https://tls-saas.vercel.app"), expand=True,
-                    ),
-                ], alignment=ft.MainAxisAlignment.CENTER, spacing=10),
-            ], spacing=8),
-            padding=16, width=660,
+                    # Column 1: Plan + Days remaining
+                    ft.Column([
+                        ft.Row([
+                            ft.Text("Plan", size=11, color=ft.Colors.GREY_500),
+                            ft.Container(expand=True),
+                            ft.Text(_plan_label, size=11, weight=ft.FontWeight.W_600, color="#00D9FF"),
+                        ]),
+                        ft.Row([
+                            ft.Text("Days remaining", size=11, color=ft.Colors.GREY_500),
+                            ft.Container(expand=True),
+                            ft.Text(str(_days_rem), size=11, weight=ft.FontWeight.W_600, color=_days_color),
+                        ]),
+                    ], spacing=6, expand=True),
+                    ft.VerticalDivider(width=1, color=ft.Colors.with_opacity(0.15, "#00D9FF")),
+                    # Column 2: Version + Change button
+                    ft.Column([
+                        ft.Row([
+                            ft.Text("Version", size=11, color=ft.Colors.GREY_500),
+                            ft.Container(expand=True),
+                            ft.Text(Config.APP_VERSION, size=11, weight=ft.FontWeight.W_600),
+                        ]),
+                        ft.Row([
+                            ft.FilledButton(
+                                "Change / Renew License",
+                                icon=ft.Icons.KEY,
+                                on_click=change_plan,
+                                height=30,
+                                style=ft.ButtonStyle(
+                                    bgcolor=ft.Colors.with_opacity(0.15, "#00D9FF"),
+                                    color="#00D9FF",
+                                    side=ft.BorderSide(1, ft.Colors.with_opacity(0.4, "#00D9FF")),
+                                ),
+                                expand=True,
+                            ),
+                        ]),
+                    ], spacing=6, expand=True),
+                ], spacing=12, vertical_alignment=ft.CrossAxisAlignment.START),
+                ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, "#00D9FF")),
+                # Row 2: License key + Hardware ID
+                ft.Row([
+                    # Column 1: License key
+                    ft.Column([
+                        ft.Row([
+                            ft.Text("License key", size=11, color=ft.Colors.GREY_500),
+                        ]),
+                        ft.Row([
+                            ft.Text(_lic_key_display, size=9, color=ft.Colors.GREY_300,
+                                    font_family="monospace", selectable=True, expand=True),
+                            ft.IconButton(
+                                icon=ft.Icons.COPY, icon_size=13,
+                                tooltip="Copy License Key",
+                                icon_color=ft.Colors.GREY_500,
+                                on_click=_copy_lic_key,
+                                padding=2,
+                            ),
+                        ], spacing=4),
+                    ], spacing=2, expand=True),
+                    ft.VerticalDivider(width=1, color=ft.Colors.with_opacity(0.15, "#00D9FF")),
+                    # Column 2: Hardware ID
+                    ft.Column([
+                        ft.Row([
+                            ft.Text("Hardware ID", size=11, color=ft.Colors.GREY_500),
+                        ]),
+                        ft.Row([
+                            ft.Text(_hw_id, size=9, color=ft.Colors.GREY_300,
+                                    font_family="monospace", selectable=True, expand=True),
+                            ft.IconButton(
+                                icon=ft.Icons.COPY, icon_size=13,
+                                tooltip="Copy Hardware ID",
+                                icon_color=ft.Colors.GREY_500,
+                                on_click=_copy_hw_id,
+                                padding=2,
+                            ),
+                        ], spacing=4),
+                    ], spacing=2, expand=True),
+                ], spacing=12, vertical_alignment=ft.CrossAxisAlignment.START),
+            ], spacing=6),
+            padding=12,
         )
 
         # ---- Main layout ----
@@ -1902,24 +2045,18 @@ class TLSApp:
                                     ),
                                     ft.Container(height=12),
                                     config_card,
-                                    ft.Container(height=12),
-                                    help_card,
                                 ],
                             ),
 
-                            # Right column — activity log (expands to fill)
+                            # Right column — recent checks (stretches to match left column)
                             ft.Container(
                                 content=self.create_glass_container(
                                     ft.Column(
                                         [
                                             ft.Row(
                                                 [
-                                                    ft.Icon(ft.Icons.HISTORY, size=20, color="#00D9FF"),
-                                                    ft.Text("Activity Log", size=16, weight=ft.FontWeight.BOLD),
-                                                    *([ft.Container(
-                                                        content=ft.Text("DEV", size=9, weight=ft.FontWeight.BOLD, color="#0A0E27"),
-                                                        bgcolor="#FFD700", border_radius=4, padding=ft.padding.symmetric(horizontal=5, vertical=2),
-                                                    )] if self._developer_mode else []),
+                                                    ft.Icon(ft.Icons.CHECKLIST_ROUNDED, size=20, color="#00D9FF"),
+                                                    ft.Text("Recent Checks", size=16, weight=ft.FontWeight.BOLD),
                                                     ft.Container(expand=True),
                                                     *([ft.IconButton(
                                                         icon=ft.Icons.FOLDER_OPEN,
@@ -1935,16 +2072,19 @@ class TLSApp:
                                             ft.Container(content=self.status_list, expand=True),
                                         ],
                                         spacing=8,
+                                        expand=True,
                                     ),
-                                    padding=10, height=890,
+                                    padding=10,
                                 ),
                                 expand=True,
                             ),
                         ],
                         alignment=ft.MainAxisAlignment.START,
                         spacing=15,
-                        vertical_alignment=ft.CrossAxisAlignment.START,
+                        vertical_alignment=ft.CrossAxisAlignment.STRETCH,
                     ),
+                    # Full-width License & Device card below both columns
+                    info_card,
                 ],
                 spacing=15,
                 scroll=ft.ScrollMode.AUTO,
@@ -1956,8 +2096,8 @@ class TLSApp:
         self.page.add(content)
 
         # Force window size
-        self.page.window.width = 1400
-        self.page.window.height = 1150
+        self.page.window.width = 1100
+        self.page.window.height = 850
         self.page.window.maximizable = True
         self.page.window.maximized = False
         self.page.window.full_screen = False
@@ -1967,8 +2107,8 @@ class TLSApp:
             user32.SetProcessDPIAware()
             screen_width = user32.GetSystemMetrics(0)
             screen_height = user32.GetSystemMetrics(1)
-            self.page.window.left = (screen_width - 1400) // 2
-            self.page.window.top = max(0, (screen_height - 1050) // 2)
+            self.page.window.left = (screen_width - 1100) // 2
+            self.page.window.top = max(0, (screen_height - 850) // 2)
         except Exception:
             pass
 
@@ -1986,8 +2126,7 @@ class TLSApp:
                 db.close()
 
                 if not first_check_done:
-                    self.update_status_log("ℹ️ You'll watch the first check to verify everything works correctly")
-                    self.update_status_log("ℹ️ After that, checks will run in the background")
+                    self._show_info_snack("First check runs visibly to verify setup \u2014 after that, checks run in background.")
 
                 self.checker.start_monitoring()
                 update_toggle_button()
@@ -2001,7 +2140,12 @@ class TLSApp:
         """Show gallery of captured screenshots"""
         self.page.controls.clear()
 
-        screenshots = glob.glob("slots_found_*.png")
+        screenshots_dir = str(Config.BASE_DIR)
+        screenshots = glob.glob(os.path.join(screenshots_dir, "slots_found_*.png"))
+        # Also check CWD for backward compatibility
+        screenshots += glob.glob("slots_found_*.png")
+        # De-duplicate by absolute path
+        screenshots = list(dict.fromkeys(os.path.abspath(s) for s in screenshots))
         screenshots.sort(reverse=True)
 
         def back_to_monitor(e):
@@ -2198,12 +2342,10 @@ class TLSApp:
                 os.startfile(log_path)
             else:
                 if self.page:
-                    self.page.snack_bar = ft.SnackBar(ft.Text(f"Log file not found: {log_path}"), open=True)
-                    self.page.update()
+                    self.page.show_dialog(ft.SnackBar(ft.Text(f"Log file not found: {log_path}")))
         except Exception as ex:
             if self.page:
-                self.page.snack_bar = ft.SnackBar(ft.Text(f"Could not open log: {ex}"), open=True)
-                self.page.update()
+                self.page.show_dialog(ft.SnackBar(ft.Text(f"Could not open log: {ex}")))
 
     def update_status_log(self, message: str):
         try:
@@ -2216,20 +2358,27 @@ class TLSApp:
             if "License no longer valid" in message or "License revoked" in message:
                 self._ui_queue.put(("license_invalid",))
                 return
-            self._ui_queue.put(("log", message))
+            # Only push check results and key status to Recent Checks panel.
+            # Info/config/warning messages from the UI go to debug log only.
+            _RESULT_PREFIXES = (
+                "\u23f9\ufe0f Monitoring stopped",
+                "\U0001F50D Check at ",
+                "\u274c TLS credentials",
+                "[ERROR]",
+            )
+            if any(message.startswith(p) for p in _RESULT_PREFIXES):
+                self._ui_queue.put(("log", message))
         except Exception as e:
             print(f"Error updating log: {e}")
 
     def show_credentials_error_dialog(self):
         def close_dialog(e):
-            error_dialog.open = False
-            self.page.update()
+            self.page.pop_dialog()
 
         def open_configuration(e):
-            error_dialog.open = False
-            self.page.update()
+            self.page.pop_dialog()
             self.show_monitoring_page()
-            self.update_status_log("Update TLS email and password in the configuration card below.")
+            self._show_info_snack("Update TLS email and password in the configuration card below.")
 
         error_dialog = ft.AlertDialog(
             modal=True,
@@ -2256,9 +2405,7 @@ class TLSApp:
             bgcolor="#1A1F3A",
         )
 
-        self.page.overlay.append(error_dialog)
-        error_dialog.open = True
-        self.page.update()
+        self.page.show_dialog(error_dialog)
 
     def update_countdown(self, minutes: int, seconds: int):
         try:
@@ -2281,8 +2428,7 @@ class TLSApp:
         db.close()
 
         def close_dialog(e):
-            no_app_dlg.open = False
-            self.page.update()
+            self.page.pop_dialog()
             self.show_monitoring_page()
 
         no_app_dlg = ft.AlertDialog(
@@ -2324,9 +2470,7 @@ class TLSApp:
             bgcolor="#1A1F3A",
         )
 
-        self.page.overlay.append(no_app_dlg)
-        no_app_dlg.open = True
-        self.page.update()
+        self.page.show_dialog(no_app_dlg)
 
     def show_license_invalid_dialog(self):
         """Show popup when license is revoked or becomes invalid during monitoring."""
@@ -2343,8 +2487,7 @@ class TLSApp:
         db.close()
 
         def go_to_activation(e):
-            license_dlg.open = False
-            self.page.update()
+            self.page.pop_dialog()
             self.show_activation_page()
 
         license_dlg = ft.AlertDialog(
@@ -2389,9 +2532,7 @@ class TLSApp:
             bgcolor="#1A1F3A",
         )
 
-        self.page.overlay.append(license_dlg)
-        license_dlg.open = True
-        self.page.update()
+        self.page.show_dialog(license_dlg)
 
 
 # ==================================================================
