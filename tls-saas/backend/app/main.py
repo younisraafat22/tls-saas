@@ -122,12 +122,10 @@ async def seed_data():
             else:
                 db.add(Plan(**pd))
 
-        # Create branches — Normal + Students legalization + visa for each location
+        # Create branches — 2 legalization + 4 visa branches
         branches_data = [
-            {"name": "Sheikh Zayed - Normal Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home", "service_type": ServiceType.LEGALIZATION},
-            {"name": "Sheikh Zayed - Students Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home", "service_type": ServiceType.LEGALIZATION},
-            {"name": "Hurghada - Normal Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egHRG2de/home", "service_type": ServiceType.LEGALIZATION},
-            {"name": "Hurghada - Students Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egHRG2de/home", "service_type": ServiceType.LEGALIZATION},
+            {"name": "Sheikh Zayed - Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home", "service_type": ServiceType.LEGALIZATION},
+            {"name": "Hurghada - Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egHRG2de/home", "service_type": ServiceType.LEGALIZATION},
             {"name": "New Cairo - Visa", "url": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egHAC2de", "service_type": ServiceType.VISA},
             {"name": "El-Sheikh Zayed - Visa", "url": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egCAI2de", "service_type": ServiceType.VISA},
             {"name": "Alexandria - Visa", "url": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egALY2de", "service_type": ServiceType.VISA},
@@ -422,6 +420,20 @@ async def lifespan(app: FastAPI):
             logger.warning(f"Legalization sub-type deactivation migration skipped: {e}")
 
     await seed_data()
+
+    # Deactivate sub-type legalization branches (Students / Normal) — only 2 plain legalization branches should be active
+    # NOTE: runs AFTER seed_data so seed cannot re-activate them
+    async with async_session() as db:
+        try:
+            await db.execute(text(
+                "UPDATE branches SET is_active = 0 "
+                "WHERE UPPER(service_type) = 'LEGALIZATION' "
+                "AND name NOT IN ('Sheikh Zayed - Legalization', 'Hurghada - Legalization')"
+            ))
+            await db.commit()
+            logger.info("Migration: ensured only 2 active legalization branches")
+        except Exception as e:
+            logger.warning(f"Legalization branch cleanup migration skipped: {e}")
 
     # Resume scheduler if it was running before restart (persisted in system settings)
     from app.services.scheduler import scheduler_service
