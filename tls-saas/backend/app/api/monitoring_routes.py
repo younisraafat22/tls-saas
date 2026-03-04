@@ -14,7 +14,8 @@ from app.database import get_db
 from app.config import settings
 from app.models import (
     User, Branch, CheckResult, UserBranchMonitor,
-    NotificationLog, SubscriptionStatus, Subscription, Payment, PaymentStatus,
+    NotificationLog, NotificationLogStatus, NotificationChannel,
+    SubscriptionStatus, Subscription, Payment, PaymentStatus,
     SystemSetting, ServiceType,
 )
 from app.auth import get_current_user
@@ -530,6 +531,19 @@ async def report_desktop_check_by_license(
     )
     db.add(cr)
     await db.commit()
+    await db.refresh(cr)
+
+    # Log the desktop notification so the user's Notifications page shows it
+    if body.slots_available and user:
+        nl = NotificationLog(
+            user_id=payment.user_id,
+            check_result_id=cr.id,
+            channel=NotificationChannel.EMAIL,
+            destination=user.email,
+            status=NotificationLogStatus.SENT,
+        )
+        db.add(nl)
+        await db.commit()
 
     # Broadcast to user's dashboard via WebSocket so it auto-refreshes
     try:
