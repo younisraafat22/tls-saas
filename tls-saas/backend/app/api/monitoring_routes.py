@@ -530,6 +530,9 @@ async def report_desktop_check_by_license(
     except Exception as e:
         logger.warning(f"WebSocket broadcast failed (non-fatal): {e}")
 
+    # If slots found, notify via backend email too
+    if body.slots_available and user:
+        try:
             from app.services.email_service import EmailService
             email_svc = EmailService()
             email_svc.send_appointment_alert(
