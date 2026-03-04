@@ -252,7 +252,7 @@ export default function DashboardPage() {
           </div>
           <div className="text-sm font-medium">
             {status?.expires_at
-              ? new Date(status.expires_at).toLocaleDateString()
+              ? new Date(status.expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
               : "—"}
           </div>
         </motion.div>
