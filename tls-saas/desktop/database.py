@@ -285,6 +285,18 @@ def migrate_database():
             db.commit()
             print("[OK] Added tls_email_history column to user_settings")
 
+        # Strip old suffix noise from branch names (e.g. "Hurghada - Legalization" → "Hurghada")
+        # This runs on every startup but is idempotent — only updates rows that still have the suffix.
+        _suffixes = [' - Normal Legalization', ' - Students Legalization', ' - Legalization', ' - Visa']
+        _rows = db.execute(text("SELECT id, branch FROM user_settings WHERE branch IS NOT NULL")).fetchall()
+        for _row in _rows:
+            _clean = _row[1]
+            for _sfx in _suffixes:
+                _clean = _clean.replace(_sfx, '')
+            if _clean != _row[1]:
+                db.execute(text("UPDATE user_settings SET branch = :b WHERE id = :i"), {"b": _clean, "i": _row[0]})
+        db.commit()
+
     except Exception as e:
         db.rollback()
         print(f"[INFO] Migration note: {e}")

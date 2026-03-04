@@ -4,7 +4,7 @@
 #define MyAppName "TLS Appointment Checker"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "TLS Appointment Checker"
-#define MyAppURL "https://tls-appointment-checker.netlify.app"
+#define MyAppURL "https://tls-saas.vercel.app"
 #define MyAppExeName "TLSAppointmentChecker.exe"
 #define MyAppSupportEmail "tlsappointmentchecker@gmail.com"
 
@@ -68,6 +68,15 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 
 ; Quick Launch (for older Windows versions)
 Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: quicklaunchicon
+
+[InstallDelete]
+; Remove stale DB on reinstall so settings are fresh (keeps .license file intact)
+Type: files; Name: "{userappdata}\TLSAppointmentChecker\tls_app.db"
+Type: files; Name: "{userappdata}\TLSAppointmentChecker\checker_debug.log"
+
+[UninstallDelete]
+; Clean up all app data on full uninstall
+Type: filesandordirs; Name: "{userappdata}\TLSAppointmentChecker"
 
 [Run]
 ; Launch app after installation
