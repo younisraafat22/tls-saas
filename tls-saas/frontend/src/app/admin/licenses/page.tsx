@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { adminApi } from "@/lib/api";
+import { adminApi, subscriptionApi } from "@/lib/api";
 import {
   KeyRound, Monitor, Copy, CheckCircle2, Clock, Loader2,
   XCircle, Search, RefreshCw, Plus, X, AlertTriangle,
@@ -98,7 +98,7 @@ function CreateLicenseModal({ onClose, onCreated }: CreateModalProps) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    adminApi.getBranches().then((data: any) => setBranches(Array.isArray(data) ? data : [])).catch(() => {});
+    subscriptionApi.getBranches().then((data: any) => setBranches(Array.isArray(data) ? data : [])).catch(() => {});
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
