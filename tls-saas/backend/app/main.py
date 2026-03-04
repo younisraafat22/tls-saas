@@ -382,15 +382,20 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Admin email migration skipped: {e}")
 
-    # Rename 'Normal Legalization' branches — drop the 'Normal' qualifier
+    # Rename 'Normal Legalization' branches — drop the 'Normal' qualifier (skip if already done)
     async with async_session() as db:
         try:
-            await db.execute(text(
-                "UPDATE branches SET name = REPLACE(name, ' - Normal Legalization', ' - Legalization') "
-                "WHERE name LIKE '% - Normal Legalization' AND UPPER(service_type) = 'LEGALIZATION'"
+            result = await db.execute(text(
+                "SELECT COUNT(*) FROM branches WHERE name LIKE '% - Normal Legalization'"
             ))
-            await db.commit()
-            logger.info("Migration: renamed 'Normal Legalization' branches to 'Legalization'")
+            count = result.scalar()
+            if count and count > 0:
+                await db.execute(text(
+                    "UPDATE branches SET name = REPLACE(name, ' - Normal Legalization', ' - Legalization') "
+                    "WHERE name LIKE '% - Normal Legalization' AND UPPER(service_type) = 'LEGALIZATION'"
+                ))
+                await db.commit()
+                logger.info("Migration: renamed 'Normal Legalization' branches to 'Legalization'")
         except Exception as e:
             logger.warning(f"Branch rename migration skipped: {e}")
 
