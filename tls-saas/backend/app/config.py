@@ -76,7 +76,7 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",")]
 
     class Config:
-        env_file = "../.env"
+        env_file = ".env"
         extra = "ignore"
         env_file_encoding = "utf-8"
 

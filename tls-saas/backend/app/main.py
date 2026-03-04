@@ -387,8 +387,11 @@ async def lifespan(app: FastAPI):
             logger.warning(f"Branch rename migration skipped: {e}")
 
     await seed_data()
-    # Start it manually from the Admin → Monitoring dashboard.
-    logger.info("Server ready. Start monitoring manually from Admin → Monitoring.")
+
+    # Auto-start the scheduler so monitoring resumes after backend restarts
+    from app.services.scheduler import scheduler_service
+    scheduler_service.start()
+    logger.info("Server ready. Monitoring scheduler started automatically.")
 
     yield
 
