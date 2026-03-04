@@ -148,8 +148,8 @@ export default function DashboardPage() {
               <Wifi className="w-4 h-4" /> {td.live}
             </span>
           ) : (
-            <span className="flex items-center gap-1.5 text-gray-500">
-              <WifiOff className="w-4 h-4" /> {td.autoRefresh}
+            <span className="flex items-center gap-1.5 text-gray-500" title="Page refreshes automatically every 30 seconds">
+              <WifiOff className="w-4 h-4" /> Auto-refresh (30s)
             </span>
           )}
         </div>
@@ -276,33 +276,56 @@ export default function DashboardPage() {
             <h2 className="font-semibold">{td.monitoredBranches}</h2>
           </div>
           <div className="divide-y divide-white/5">
-            {monitoredBranches.map((branch: any) => (
-              <div key={branch.branch_id} className="p-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${
-                    branch.last_slots_available ? "bg-accent-green shadow-lg shadow-accent-green/50" : "bg-gray-500"
-                  }`} />
-                  <div>
-                    <div className="font-medium text-sm">{(t.branchNames as Record<string, string>)[branch.branch_name] ?? branch.branch_name}</div>
-                    <div className="text-xs text-gray-500">{(t.serviceTypes as Record<string, string>)[branch.service_type] ?? branch.service_type}</div>
+            {monitoredBranches.map((branch: any) => {
+              const lastCheckDate = branch.last_check ? new Date(branch.last_check) : null;
+              const ageMs = lastCheckDate ? Date.now() - lastCheckDate.getTime() : Infinity;
+              const isStale = ageMs > 60 * 60 * 1000; // older than 1 hour
+              const checkTimeStr = lastCheckDate
+                ? lastCheckDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                : null;
+              return (
+                <div key={branch.branch_id} className="p-4 hover:bg-white/[0.02] transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full ${
+                        branch.last_slots_available && !isStale
+                          ? "bg-accent-green shadow-lg shadow-accent-green/50"
+                          : branch.last_slots_available
+                          ? "bg-yellow-400"
+                          : "bg-gray-500"
+                      }`} />
+                      <div>
+                        <div className="font-medium text-sm">{(t.branchNames as Record<string, string>)[branch.branch_name] ?? branch.branch_name}</div>
+                        <div className="text-xs text-gray-500">{(t.serviceTypes as Record<string, string>)[branch.service_type] ?? branch.service_type}</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      {branch.last_slots_available && !isStale ? (
+                        <span className="text-accent-green text-sm font-semibold flex items-center gap-1">
+                          <Sparkles className="w-4 h-4" /> {td.slotsAvailable}
+                        </span>
+                      ) : branch.last_slots_available && isStale ? (
+                        <span className="text-yellow-400 text-xs font-medium flex items-center gap-1">
+                          <Sparkles className="w-3 h-3" /> Slots found (as of {checkTimeStr})
+                        </span>
+                      ) : checkTimeStr ? (
+                        <span className="text-gray-500 text-xs">Last check: {checkTimeStr}</span>
+                      ) : (
+                        <span className="text-gray-600 text-xs">{td.pendingFirstCheck}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  {branch.last_slots_available ? (
-                    <span className="text-accent-green text-sm font-semibold flex items-center gap-1">
-                      <Sparkles className="w-4 h-4" /> {td.slotsAvailable}
-                    </span>
-                  ) : branch.last_check ? (
-                    <span className="text-gray-500 text-xs">
-                      {new Date(branch.last_check).toLocaleTimeString()}
-                    </span>
-                  ) : (
-                    <span className="text-gray-600 text-xs">{td.pendingFirstCheck}</span>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
+          {/* Monitoring-active footer — always visible when subscription is active */}
+          {hasActiveSubscription && (
+            <div className="px-4 py-3 border-t border-white/5 bg-accent-green/5 flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-accent-green animate-pulse" />
+              <span className="text-xs text-accent-green font-medium">Monitoring active — you will be notified as soon as a slot opens</span>
+            </div>
+          )}
         </div>
       )}
 
