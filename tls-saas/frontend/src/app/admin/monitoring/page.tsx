@@ -1,36 +1,28 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { adminApi } from "@/lib/api";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import {
   Activity, Play, Pause, RefreshCw,
-  Key, Plus, Trash2, Eye, EyeOff, Loader2,
+  Key, Plus, Trash2, Loader2,
   CheckCircle2, XCircle, AlertCircle, Zap, Clock,
-  Terminal, ChevronDown, Bell, Monitor,
+  Bell, Monitor, Save,
 } from "lucide-react";
-
-interface LogEntry {
-  ts: string;
-  level: string;
-  branch: string;
-  message: string;
-}
 
 export default function AdminMonitoringPage() {
   const [schedulerStatus, setSchedulerStatus] = useState<any>(null);
   const [branches, setBranches] = useState<any[]>([]);
   const [serviceAccounts, setServiceAccounts] = useState<any[]>([]);
   const [recentResults, setRecentResults] = useState<any[]>([]);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
-  const logEndRef = useRef<HTMLDivElement>(null);
-  const [autoScroll, setAutoScroll] = useState(true);
+  const [settingsInterval, setSettingsInterval] = useState(5);
+  const [savingInterval, setSavingInterval] = useState(false);
 
-  // WebSocket for live logs
-  const { connected, lastMessage } = useWebSocket(true);
+  // WebSocket for live results refresh
+  const { lastMessage } = useWebSocket(true);
 
   // Add service account form
   const [showAddAccount, setShowAddAccount] = useState(false);
@@ -51,46 +43,28 @@ export default function AdminMonitoringPage() {
     loadAll();
   }, []);
 
-  // Handle live WS log messages
+  // Refresh results on live WS events
   useEffect(() => {
     if (!lastMessage) return;
-    if (lastMessage.type === "monitor_log") {
-      const entry: LogEntry = {
-        ts: lastMessage.ts,
-        level: lastMessage.level,
-        branch: lastMessage.branch || "",
-        message: lastMessage.message,
-      };
-      setLogs((prev) => [...prev.slice(-199), entry]);
-    }
     if (lastMessage.type === "admin_check_result") {
-      // Refresh results
       adminApi.getCheckResults(20).then(setRecentResults).catch(() => {});
     }
   }, [lastMessage]);
 
-  // Auto-scroll logs
-  useEffect(() => {
-    if (autoScroll && logEndRef.current) {
-      logEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [logs, autoScroll]);
-
   const loadAll = async () => {
     try {
-      const [brData, saData, schedulerData, resultsData, logsData, headlessData] = await Promise.all([
+      const [brData, saData, schedulerData, resultsData, headlessData] = await Promise.all([
         adminApi.getBranches(),
         adminApi.getServiceAccounts(),
         adminApi.getSchedulerStatus(),
         adminApi.getCheckResults(20),
-        adminApi.getCheckerLogs(100),
         adminApi.getHeadlessMode(),
       ]);
       setBranches(brData);
       setServiceAccounts(saData);
       setSchedulerStatus(schedulerData);
       setRecentResults(resultsData);
-      if (Array.isArray(logsData)) setLogs(logsData);
+      setSettingsInterval(schedulerData?.interval_minutes || 5);
       if (headlessData) setHeadless(headlessData.headless);
     } catch (err) {
       console.error(err);
@@ -139,6 +113,19 @@ export default function AdminMonitoringPage() {
       showToastMsg("error", err?.detail || "Failed — check SMTP settings");
     } finally {
       setTestApptEmailLoading(false);
+    }
+  };
+
+  const saveInterval = async () => {
+    setSavingInterval(true);
+    try {
+      await adminApi.updateSettings({ check_interval_minutes: String(settingsInterval) });
+      setSchedulerStatus((prev: any) => prev ? { ...prev, interval_minutes: settingsInterval } : prev);
+      showToastMsg("success", `Interval set to ${settingsInterval}min`);
+    } catch (err: any) {
+      showToastMsg("error", err?.detail || "Failed to save interval");
+    } finally {
+      setSavingInterval(false);
     }
   };
 
@@ -259,7 +246,7 @@ export default function AdminMonitoringPage() {
               <div className="font-semibold">Checker Scheduler</div>
               <div className="text-sm text-gray-400">
                 {schedulerStatus?.running ? "Running" : "Stopped"}
-                {schedulerStatus?.interval && ` · Every ${schedulerStatus.interval}min`}
+                {schedulerStatus?.interval_minutes && ` · Every ${schedulerStatus.interval_minutes}min`}
               </div>
             </div>
           </div>
@@ -314,6 +301,28 @@ export default function AdminMonitoringPage() {
           >
             {testApptEmailLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
             Test Appointment Email
+          </button>
+        </div>
+
+        {/* Check interval */}
+        <div className="mt-4 pt-4 border-t border-white/5 flex flex-wrap items-center gap-3">
+          <Clock className="w-3.5 h-3.5 text-gray-400" />
+          <span className="text-xs text-gray-400">Check Interval</span>
+          <input
+            type="number"
+            min={1}
+            value={settingsInterval}
+            onChange={(e) => setSettingsInterval(Number(e.target.value))}
+            className="w-20 bg-dark-700 border border-white/10 rounded-lg px-2 py-1 text-center text-sm text-white focus:outline-none focus:border-primary-500/50"
+          />
+          <span className="text-xs text-gray-500">minutes</span>
+          <button
+            onClick={saveInterval}
+            disabled={savingInterval}
+            className="px-3 py-1.5 text-xs font-medium rounded-xl bg-primary-500/10 text-primary-400 hover:bg-primary-500/20 border border-primary-500/20 flex items-center gap-1.5 disabled:opacity-50"
+          >
+            {savingInterval ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+            Save
           </button>
         </div>
       </div>
@@ -443,7 +452,7 @@ export default function AdminMonitoringPage() {
                       )}
                     </div>
                     <div className="text-xs text-gray-500">
-                      {acc.branch_name} &middot; Last used: {acc.last_used_at ? new Date(acc.last_used_at).toLocaleString() : "Never"}
+                      {acc.branch_name} &middot; Last used: {acc.last_used_at ? new Date(acc.last_used_at.includes('Z') || acc.last_used_at.includes('+') ? acc.last_used_at : acc.last_used_at + 'Z').toLocaleString() : "Never"}
                     </div>
                   </div>
                 </div>
@@ -494,7 +503,7 @@ export default function AdminMonitoringPage() {
                   <div>
                     <div className="text-sm font-medium">{r.branch_name}</div>
                     <div className="text-xs text-gray-500">
-                      {new Date(r.checked_at).toLocaleString()}
+                      {new Date(r.checked_at.includes('Z') || r.checked_at.includes('+') ? r.checked_at : r.checked_at + 'Z').toLocaleString()}
                       {r.duration_seconds && ` · ${r.duration_seconds}s`}
                     </div>
                     {r.error && <div className="text-xs text-amber-400 mt-0.5 truncate max-w-md">{r.error}</div>}
@@ -549,67 +558,6 @@ export default function AdminMonitoringPage() {
         )}
       </div>
 
-      {/* Live Monitoring Logs */}
-      <div className="glass-card overflow-hidden">
-        <div className="p-4 border-b border-white/5 flex items-center justify-between">
-          <h2 className="font-semibold flex items-center gap-2">
-            <Terminal className="w-4 h-4 text-primary-400" /> Live Monitoring Log
-            {connected && (
-              <span className="text-xs bg-accent-green/10 text-accent-green px-2 py-0.5 rounded-full ml-1">LIVE</span>
-            )}
-          </h2>
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={autoScroll}
-                onChange={(e) => setAutoScroll(e.target.checked)}
-                className="rounded bg-dark-600 border-white/10 text-primary-500"
-              />
-              Auto-scroll
-            </label>
-            <button
-              onClick={() => setLogs([])}
-              className="text-xs text-gray-500 hover:text-gray-300"
-            >
-              Clear
-            </button>
-          </div>
-        </div>
-        <div className="bg-dark-900/80 max-h-[32rem] overflow-y-auto font-mono text-xs p-3 space-y-0.5 scrollbar-thin">
-          {logs.length === 0 ? (
-            <div className="text-gray-600 text-center py-6">
-              No log entries yet. Logs appear here during check cycles.
-            </div>
-          ) : (
-            logs.map((log, idx) => {
-              const time = new Date(log.ts).toLocaleTimeString();
-              const levelColor =
-                log.level === "error" ? "text-red-400" :
-                log.level === "warn" ? "text-amber-400" :
-                log.level === "success" ? "text-accent-green" :
-                "text-gray-400";
-              const levelBg =
-                log.level === "error" ? "bg-red-500/5" :
-                log.level === "success" ? "bg-accent-green/5" :
-                "";
-              return (
-                <div key={idx} className={`flex gap-2 py-0.5 px-1 rounded ${levelBg}`}>
-                  <span className="text-gray-600 whitespace-nowrap">{time}</span>
-                  <span className={`uppercase w-12 font-semibold ${levelColor}`}>
-                    {log.level === "success" ? "OK" : log.level.toUpperCase().slice(0, 4)}
-                  </span>
-                  {log.branch && (
-                    <span className="text-primary-400 whitespace-nowrap">[{log.branch}]</span>
-                  )}
-                  <span className={`${levelColor}`}>{log.message}</span>
-                </div>
-              );
-            })
-          )}
-          <div ref={logEndRef} />
-        </div>
-      </div>
     </div>
   );
 }

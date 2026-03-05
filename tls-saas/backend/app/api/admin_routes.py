@@ -1126,8 +1126,15 @@ async def stop_checker(admin=Depends(get_current_admin), db: AsyncSession = Depe
 @router.get("/checker/status")
 async def checker_status(admin=Depends(get_current_admin)):
     from app.services.scheduler import scheduler_service
+    # Sync is_running with APScheduler's actual state (handles auto-resume after restart)
+    apscheduler_running = (
+        scheduler_service._scheduler is not None
+        and scheduler_service._scheduler.running
+    )
+    if apscheduler_running and not scheduler_service.is_running:
+        scheduler_service.is_running = True
     return {
-        "running": scheduler_service.is_running,
+        "running": scheduler_service.is_running or apscheduler_running,
         "next_run": scheduler_service.next_run_time,
         "last_run": scheduler_service.last_run_time,
         "interval_minutes": settings.CHECK_INTERVAL_MINUTES,
