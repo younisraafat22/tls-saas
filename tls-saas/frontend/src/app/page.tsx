@@ -183,6 +183,7 @@ function Navbar() {
             <a href="#how-it-works" className="text-gray-400 hover:text-white transition-colors text-sm">{t.nav.howItWorks}</a>
             <a href="#pricing" className="text-gray-400 hover:text-white transition-colors text-sm">{t.nav.pricing}</a>
             <a href="#download" className="text-gray-400 hover:text-white transition-colors text-sm">{t.nav.download}</a>
+            <a href="#guide" className="text-gray-400 hover:text-white transition-colors text-sm">{t.nav.guide}</a>
             <a href="#faq" className="text-gray-400 hover:text-white transition-colors text-sm">{t.nav.faq}</a>
           </div>
 
@@ -222,6 +223,7 @@ function Navbar() {
               <a href="#how-it-works" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.howItWorks}</a>
               <a href="#pricing" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.pricing}</a>
               <a href="#download" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.download}</a>
+              <a href="#guide" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.guide}</a>
               <a href="#faq" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.faq}</a>
               {user ? (
                 <>
@@ -667,7 +669,98 @@ function DownloadApp() {
     </section>
   );
 }
+// ── User Guide ──────────────────────────────────────────────────
 
+function UserGuide() {
+  const { t } = useLanguage();
+  const [tab, setTab] = useState<"app" | "server">("server");
+  const g = t.guide;
+
+  return (
+    <section id="guide" className="py-24 relative bg-dark-700/20">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <AnimatedSection>
+          <motion.div variants={fadeUp} className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl font-display font-bold mb-4">
+              {g.title} <span className="text-primary-400">{g.titleHighlight}</span>
+            </h2>
+            <p className="text-gray-400 max-w-xl mx-auto">{g.sub}</p>
+          </motion.div>
+
+          <motion.div variants={fadeUp} className="flex justify-center gap-3 mb-10 flex-wrap">
+            <button
+              onClick={() => setTab("app")}
+              className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-medium transition-all ${
+                tab === "app"
+                  ? "bg-primary-500/20 border border-primary-500/40 text-primary-300"
+                  : "bg-white/5 border border-white/10 text-gray-400 hover:text-white"
+              }`}
+            >
+              <Laptop className="w-4 h-4" /> {g.appTab}
+            </button>
+            <button
+              onClick={() => setTab("server")}
+              className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-medium transition-all ${
+                tab === "server"
+                  ? "bg-primary-500/20 border border-primary-500/40 text-primary-300"
+                  : "bg-white/5 border border-white/10 text-gray-400 hover:text-white"
+              }`}
+            >
+              <Globe className="w-4 h-4" /> {g.serverTab}
+            </button>
+          </motion.div>
+
+          <motion.div
+            key={tab}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+            className="glass rounded-2xl p-8"
+          >
+            {(() => {
+              const plan = tab === "app" ? g.app : g.server;
+              return (
+                <>
+                  <div className="mb-6">
+                    <span className="text-xs font-medium text-primary-400 bg-primary-500/10 border border-primary-500/20 px-3 py-1 rounded-full inline-block mb-3">
+                      {plan.badge}
+                    </span>
+                    <h3 className="text-xl font-bold">{plan.title}</h3>
+                    <p className="text-gray-400 text-sm mt-2 max-w-lg">{plan.desc}</p>
+                  </div>
+
+                  {tab === "server" && (
+                    <div className="mb-6 p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
+                      <p className="text-yellow-300/90 text-sm">{g.server.limitNote}</p>
+                    </div>
+                  )}
+
+                  <ol className="space-y-5">
+                    {plan.steps.map((step: { n: string; title: string; body: string }, i: number) => (
+                      <li key={i} className="flex gap-4">
+                        <span className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-500/20 border border-primary-500/30 flex items-center justify-center text-primary-400 text-sm font-bold">
+                          {step.n}
+                        </span>
+                        <div>
+                          <p className="font-medium text-white">{step.title}</p>
+                          <p className="text-gray-400 text-sm mt-0.5">{step.body}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+
+                  <div className="mt-6 p-3 rounded-xl bg-white/5 border border-white/10">
+                    <p className="text-gray-400 text-xs">{plan.note}</p>
+                  </div>
+                </>
+              );
+            })()}
+          </motion.div>
+        </AnimatedSection>
+      </div>
+    </section>
+  );
+}
 // ── FAQ ─────────────────────────────────────────────────
 
 function FAQ() {
@@ -794,6 +887,7 @@ export default function LandingPage() {
       <HowItWorks />
       <Pricing />
       <DownloadApp />
+      <UserGuide />
       <FAQ />
       <CTA />
       <Footer />
