@@ -68,7 +68,7 @@ export default function AdminMonitoringPage() {
   const [recentResults, setRecentResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
-  const [settingsInterval, setSettingsInterval] = useState(5);
+  const [settingsInterval, setSettingsInterval] = useState(30);
   const [savingInterval, setSavingInterval] = useState(false);
 
   // Logs state
@@ -191,7 +191,7 @@ export default function AdminMonitoringPage() {
       setServiceAccounts(saData);
       setSchedulerStatus(schedulerData);
       setRecentResults(resultsData);
-      setSettingsInterval(schedulerData?.interval_minutes || 5);
+      setSettingsInterval(schedulerData?.interval_minutes || 30);
       if (headlessData) setHeadless(headlessData.headless);
       // Load logs in parallel (non-blocking)
       fetchMonitorLogs();
