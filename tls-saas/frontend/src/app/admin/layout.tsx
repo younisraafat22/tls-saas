@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import {
   LayoutDashboard, Users, CreditCard, Activity,
-  Settings, ArrowLeft, Shield, Terminal, KeyRound,
+  Settings, ArrowLeft, Shield, KeyRound,
 } from "lucide-react";
 
 const adminNav = [
@@ -15,7 +15,6 @@ const adminNav = [
   { href: "/admin/payments", label: "Payments", icon: CreditCard },
   { href: "/admin/licenses", label: "Licenses", icon: KeyRound },
   { href: "/admin/monitoring", label: "Monitoring", icon: Activity },
-  { href: "/admin/logs", label: "Logs", icon: Terminal },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 

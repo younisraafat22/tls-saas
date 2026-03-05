@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { adminApi } from "@/lib/api";
 import { useWebSocket } from "@/hooks/useWebSocket";
@@ -8,8 +8,58 @@ import {
   Activity, Play, Pause, RefreshCw,
   Key, Plus, Trash2, Loader2,
   CheckCircle2, XCircle, AlertCircle, Zap, Clock,
-  Bell, Monitor, Save,
+  Bell, Monitor, Save, Terminal, Download,
+  ChevronDown, ChevronUp, Wifi, WifiOff, Circle,
 } from "lucide-react";
+
+interface LogEntry {
+  ts: string;
+  level: string;
+  branch: string;
+  message: string;
+}
+
+type LogTab = "monitor" | "system";
+type LineCount = 50 | 100 | 200 | 500;
+
+function logLevelColor(level: string): string {
+  switch (level?.toUpperCase()) {
+    case "ERROR":   return "text-red-400";
+    case "WARNING":
+    case "WARN":    return "text-yellow-400";
+    case "INFO":    return "text-green-400";
+    case "DEBUG":   return "text-blue-400";
+    default:        return "text-gray-300";
+  }
+}
+
+function logLevelBg(level: string): string {
+  switch (level?.toUpperCase()) {
+    case "ERROR":   return "bg-red-500/10 border-red-500/20";
+    case "WARNING":
+    case "WARN":    return "bg-yellow-500/10 border-yellow-500/20";
+    case "INFO":    return "bg-green-500/10 border-green-500/20";
+    case "DEBUG":   return "bg-blue-500/10 border-blue-500/20";
+    default:        return "bg-white/3 border-white/5";
+  }
+}
+
+function sysLogLevel(line: string): string {
+  const l = line.toLowerCase();
+  if (l.includes(" error") || l.includes("[error]"))    return "ERROR";
+  if (l.includes(" warning") || l.includes("[warn"))   return "WARNING";
+  if (l.includes(" info") || l.includes("[info]"))     return "INFO";
+  if (l.includes(" debug") || l.includes("[debug]"))   return "DEBUG";
+  return "DEFAULT";
+}
+
+function formatTs(ts: string): string {
+  try {
+    return new Date(ts).toLocaleTimeString("en-GB", { hour12: false });
+  } catch {
+    return ts?.slice(11, 19) ?? "";
+  }
+}
 
 export default function AdminMonitoringPage() {
   const [schedulerStatus, setSchedulerStatus] = useState<any>(null);
@@ -21,8 +71,21 @@ export default function AdminMonitoringPage() {
   const [settingsInterval, setSettingsInterval] = useState(5);
   const [savingInterval, setSavingInterval] = useState(false);
 
-  // WebSocket for live results refresh
-  const { lastMessage } = useWebSocket(true);
+  // Logs state
+  const [logTab, setLogTab] = useState<LogTab>("monitor");
+  const [lineCount, setLineCount] = useState<LineCount>(200);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [monitorLogs, setMonitorLogs] = useState<LogEntry[]>([]);
+  const [monitorLoading, setMonitorLoading] = useState(false);
+  const [systemLines, setSystemLines] = useState<string[]>([]);
+  const [systemLoading, setSystemLoading] = useState(false);
+  const [lastLogRefresh, setLastLogRefresh] = useState<Date | null>(null);
+  const logEndRef = useRef<HTMLDivElement>(null);
+  const logIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // WebSocket for live results + logs
+  const { connected, lastMessage } = useWebSocket(true);
 
   // Add service account form
   const [showAddAccount, setShowAddAccount] = useState(false);
@@ -43,13 +106,77 @@ export default function AdminMonitoringPage() {
     loadAll();
   }, []);
 
-  // Refresh results on live WS events
+  // Live WS: results + monitor logs
   useEffect(() => {
     if (!lastMessage) return;
     if (lastMessage.type === "admin_check_result") {
       adminApi.getCheckResults(20).then(setRecentResults).catch(() => {});
     }
+    if (lastMessage.type === "monitor_log") {
+      const entry: LogEntry = {
+        ts: lastMessage.ts,
+        level: lastMessage.level,
+        branch: lastMessage.branch || "",
+        message: lastMessage.message,
+      };
+      setMonitorLogs((prev) => [...prev.slice(-299), entry]);
+    }
   }, [lastMessage]);
+
+  const fetchMonitorLogs = useCallback(async () => {
+    setMonitorLoading(true);
+    try {
+      const data = await adminApi.getCheckerLogs(lineCount);
+      if (Array.isArray(data)) setMonitorLogs(data);
+    } catch {}
+    setMonitorLoading(false);
+  }, [lineCount]);
+
+  const fetchSystemLogs = useCallback(async () => {
+    setSystemLoading(true);
+    try {
+      const data: any = await adminApi.getSystemLogs(lineCount);
+      setSystemLines(data?.lines ?? []);
+      setLastLogRefresh(new Date());
+    } catch {}
+    setSystemLoading(false);
+  }, [lineCount]);
+
+  // Auto-refresh system logs every 10s
+  useEffect(() => {
+    if (logIntervalRef.current) clearInterval(logIntervalRef.current);
+    if (autoRefresh && logTab === "system") {
+      logIntervalRef.current = setInterval(fetchSystemLogs, 10000);
+    }
+    return () => { if (logIntervalRef.current) clearInterval(logIntervalRef.current); };
+  }, [autoRefresh, logTab, fetchSystemLogs]);
+
+  // Auto-scroll logs
+  useEffect(() => {
+    if (autoScroll && logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [monitorLogs, systemLines, autoScroll]);
+
+  const copyLogs = () => {
+    const text = logTab === "system"
+      ? systemLines.join("\n")
+      : monitorLogs.map(e => `[${e.ts}] [${e.level}] ${e.branch ? `[${e.branch}] ` : ""}${e.message}`).join("\n");
+    navigator.clipboard.writeText(text).catch(() => {});
+  };
+
+  const downloadLogs = () => {
+    const text = logTab === "system"
+      ? systemLines.join("\n")
+      : monitorLogs.map(e => `[${e.ts}] [${e.level}] ${e.branch ? `[${e.branch}] ` : ""}${e.message}`).join("\n");
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tls-${logTab}-logs-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const loadAll = async () => {
     try {
@@ -66,6 +193,9 @@ export default function AdminMonitoringPage() {
       setRecentResults(resultsData);
       setSettingsInterval(schedulerData?.interval_minutes || 5);
       if (headlessData) setHeadless(headlessData.headless);
+      // Load logs in parallel (non-blocking)
+      fetchMonitorLogs();
+      fetchSystemLogs();
     } catch (err) {
       console.error(err);
     } finally {
@@ -558,6 +688,158 @@ export default function AdminMonitoringPage() {
         )}
       </div>
 
+      {/* Backend Logs */}
+      <div className="bg-dark-900 border border-white/5 rounded-2xl overflow-hidden">
+        {/* Log header */}
+        <div className="flex items-center justify-between flex-wrap gap-3 px-4 py-3 border-b border-white/5 bg-dark-800">
+          <div className="flex items-center gap-3">
+            <Terminal className="w-4 h-4 text-primary-400" />
+            <span className="font-semibold text-sm">Logs</span>
+            {/* Tabs */}
+            <div className="flex gap-1 bg-dark-700 border border-white/5 rounded-lg p-0.5">
+              {(["monitor", "system"] as LogTab[]).map((key) => (
+                <button
+                  key={key}
+                  onClick={() => setLogTab(key)}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                    logTab === key ? "bg-primary-500/20 text-primary-400" : "text-gray-400 hover:text-white"
+                  }`}
+                >
+                  {key === "monitor" ? "Monitoring" : "System (journalctl)"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* WS indicator */}
+            <div className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border ${
+              connected ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-red-500/10 border-red-500/20 text-red-400"
+            }`}>
+              {connected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+              {connected ? "Live" : "Offline"}
+            </div>
+
+            {/* Line count */}
+            <select
+              value={lineCount}
+              onChange={(e) => setLineCount(Number(e.target.value) as LineCount)}
+              className="bg-dark-700 border border-white/10 text-gray-300 text-xs rounded-lg px-2 py-1"
+            >
+              <option value={50}>50 lines</option>
+              <option value={100}>100 lines</option>
+              <option value={200}>200 lines</option>
+              <option value={500}>500 lines</option>
+            </select>
+
+            {/* Auto-scroll */}
+            <button
+              onClick={() => setAutoScroll(!autoScroll)}
+              className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-all ${
+                autoScroll ? "bg-primary-500/10 border-primary-500/20 text-primary-400" : "bg-dark-700 border-white/10 text-gray-400"
+              }`}
+            >
+              {autoScroll ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
+              Auto-scroll
+            </button>
+
+            {/* Auto-refresh (system tab) */}
+            {logTab === "system" && (
+              <button
+                onClick={() => setAutoRefresh(!autoRefresh)}
+                className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-all ${
+                  autoRefresh ? "bg-primary-500/10 border-primary-500/20 text-primary-400" : "bg-dark-700 border-white/10 text-gray-400"
+                }`}
+              >
+                <Circle className={`w-2 h-2 ${autoRefresh ? "fill-primary-400" : "fill-gray-500"}`} />
+                Auto-refresh
+              </button>
+            )}
+
+            {/* Refresh */}
+            <button
+              onClick={logTab === "system" ? fetchSystemLogs : fetchMonitorLogs}
+              disabled={logTab === "system" ? systemLoading : monitorLoading}
+              className="btn-secondary flex items-center gap-1 text-xs px-2.5 py-1"
+            >
+              <RefreshCw className={`w-3 h-3 ${(logTab === "system" ? systemLoading : monitorLoading) ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+
+            {/* Download */}
+            <button onClick={downloadLogs} className="btn-secondary flex items-center gap-1 text-xs px-2.5 py-1">
+              <Download className="w-3 h-3" />
+              Download
+            </button>
+
+            {/* Clear monitor logs */}
+            {logTab === "monitor" && (
+              <button
+                onClick={() => setMonitorLogs([])}
+                className="btn-secondary flex items-center gap-1 text-xs px-2.5 py-1 text-red-400 border-red-500/20 hover:bg-red-500/10"
+              >
+                <Trash2 className="w-3 h-3" />
+                Clear
+              </button>
+            )}
+
+            <button onClick={copyLogs} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+              Copy all
+            </button>
+          </div>
+        </div>
+
+        {/* Pane sub-header */}
+        <div className="px-4 py-1.5 border-b border-white/5 bg-dark-800/60">
+          <span className="text-xs text-gray-500 font-mono">
+            {logTab === "system"
+              ? `${systemLines.length} lines${lastLogRefresh ? ` · refreshed ${lastLogRefresh.toLocaleTimeString()}` : ""}`
+              : `${monitorLogs.length} entries · ${connected ? "live via WebSocket" : "WebSocket disconnected"}`}
+          </span>
+        </div>
+
+        {/* Log output */}
+        <div className="h-[60vh] overflow-y-auto font-mono text-xs p-3 space-y-0.5">
+          {logTab === "system" ? (
+            systemLoading && systemLines.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-gray-500">
+                <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading system logs...
+              </div>
+            ) : systemLines.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-gray-600">No logs available</div>
+            ) : (
+              systemLines.map((line, i) => {
+                const lvl = sysLogLevel(line);
+                return (
+                  <div key={i} className={`px-2 py-0.5 rounded border ${logLevelBg(lvl)} leading-relaxed`}>
+                    <span className={logLevelColor(lvl)}>{line}</span>
+                  </div>
+                );
+              })
+            )
+          ) : (
+            monitorLoading && monitorLogs.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-gray-500">
+                <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading monitoring logs...
+              </div>
+            ) : monitorLogs.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-gray-600">
+                No monitoring logs yet — start the scheduler to see activity here
+              </div>
+            ) : (
+              monitorLogs.map((entry, i) => (
+                <div key={i} className={`px-2 py-0.5 rounded border ${logLevelBg(entry.level)} leading-relaxed`}>
+                  <span className="text-gray-600">{formatTs(entry.ts)} </span>
+                  <span className={`font-semibold ${logLevelColor(entry.level)}`}>[{entry.level?.toUpperCase() || "INFO"}] </span>
+                  {entry.branch && <span className="text-primary-400/70">[{entry.branch}] </span>}
+                  <span className="text-gray-200 break-all whitespace-pre-wrap">{entry.message}</span>
+                </div>
+              ))
+            )
+          )}
+          <div ref={logEndRef} />
+        </div>
+      </div>
     </div>
   );
 }
