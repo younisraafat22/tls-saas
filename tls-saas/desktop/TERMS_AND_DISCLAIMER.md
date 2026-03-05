@@ -1,7 +1,7 @@
 ﻿# TLS Appointment Checker  Terms & Disclaimer
 
 **Version:** 2.0.0
-**Last Updated:** February 2026
+**Last Updated:** March 2026
 
 ---
 
@@ -30,9 +30,9 @@
 - **Your computer must remain powered on and connected to the internet**
 
 ### Premium Plan
-- Monitors both visa and legalization appointments
-- Monitoring runs **on our servers**  your PC does **not** need to stay on
-- **No TLS credentials required**
+- Monitors **1 service of your choice**: either legalization **or** visa
+- Monitoring runs **on our servers** — your PC does **not** need to stay on
+- No TLS credentials required for legalization; required only if you choose visa
 - More reliable 24/7 monitoring uptime
 
 ---

@@ -112,11 +112,11 @@ class NotificationService:
       <h1>🎉 Appointment Slots Available!</h1>
     </div>
     <div class="body">
-      <p>Hi there,</p>
+      <p style="color: #fff;">Hi there,</p>
       <div style="text-align: center;">
         <span class="badge">SLOTS OPEN NOW</span>
       </div>
-      <p style="font-size: 16px; margin-top: 16px;">Great news! Our monitoring detected <strong>available appointment slots</strong> on the TLS website.</p>
+      <p style="color: #fff; font-size: 16px; margin-top: 16px;">Great news! Our monitoring detected <strong>available appointment slots</strong> on the TLS website.</p>
       <div class="info-row">
         <span class="info-label">Detected At</span>
         <span class="info-value">{now}</span>

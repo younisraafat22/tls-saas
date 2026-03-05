@@ -9,24 +9,42 @@ By installing this application you agree to the following terms.
 -----------------------------------------------------------------------
 1. SUBSCRIPTION PLANS & PERMITTED USE
 -----------------------------------------------------------------------
-This software is offered under three monthly subscription plans:
+This software is offered under the following plans:
 
-  a) VISA PLAN
-     - Monitors TLS visa appointment availability using YOUR personal
-       TLS account credentials
-     - Credentials are encrypted and stored LOCALLY on this device only
-     - Credentials are NEVER uploaded to our servers
-     - Your computer must remain powered on and connected
+  a) FREE TRIAL
+     - 3 checks total, valid for 1 day only
+     - Email notifications
+     - Desktop app — your PC must remain powered on
+     - No payment required
 
-  b) LEGALIZATION PLAN
-     - Monitors legalization appointment availability
+  b) LEGALIZATION PLAN (Monthly)
+     - Monitors ONE legalization branch of your choice
      - No TLS account credentials required
-     - Your computer must remain powered on and connected
+     - Email & web push notifications
+     - 60-minute check interval
+     - Desktop app — your PC must remain powered on
 
-  c) PREMIUM PLAN
-     - Monitors both visa and legalization appointments
-     - Monitoring runs on our servers; your PC does NOT need to stay on
-     - No TLS account credentials required
+  c) VISA PLAN (Monthly)
+     - Monitors ONE visa branch of your choice
+     - Uses YOUR personal TLS account credentials
+     - Credentials are encrypted and stored LOCALLY — never uploaded
+     - Email & web push notifications
+     - 60-minute check interval
+     - Desktop app — your PC must remain powered on
+
+  d) ALL-IN-ONE PLAN (Monthly)
+     - Monitors both legalization and visa
+     - Switch between services anytime
+     - Email & web push notifications
+     - 60-minute check interval
+     - Desktop app — your PC must remain powered on
+
+  e) PREMIUM PLAN (Monthly — Server Monitored)
+     - Monitors ONE service of your choice: legalization OR visa
+     - Runs on our servers — your PC does NOT need to stay on
+     - 30-minute check interval
+     - Email & web push notifications
+     - Priority support
 
 The license is bound to a single device (Hardware ID).
 Each user requires their own active subscription and license key.

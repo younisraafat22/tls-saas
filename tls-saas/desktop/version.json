@@ -1,5 +1,5 @@
 {
   "version": "1.0.0",
-  "download_url": "https://example.com/download/TLSAppointmentChecker-v1.0.0.exe",
-  "release_notes": "Initial release with automated CAPTCHA solving and license system"
+  "download_url": "https://tls-saas.vercel.app/download",
+  "release_notes": "v2.0.0: Per-user check results, contact support form, branch locked by license plan, updated plan descriptions"
 }
