@@ -66,9 +66,9 @@ class Settings(BaseSettings):
     LICENSE_HMAC_SECRET: str = "TLS-CHECKER-2026-HMAC-SECRET-KEY-DONT-SHARE"
 
     # ── Desktop App Release ──────────────────────────────
-    DESKTOP_APP_VERSION: str = "2.0.0"
-    DESKTOP_DOWNLOAD_URL: str = ""  # Set to GitHub Releases URL when published
-    DESKTOP_RELEASE_NOTES: str = "Initial release with API-based authentication and local monitoring."
+    DESKTOP_APP_VERSION: str = "1.0.0"
+    DESKTOP_DOWNLOAD_URL: str = "https://github.com/younisraafat22/tls-saas/releases/download/v1.0.0/TLS_Appointment_Checker_v1.0.0_Setup.exe"
+    DESKTOP_RELEASE_NOTES: str = "v1.0.0: First stable release with local TLS appointment monitoring."
     DESKTOP_FORCE_UPDATE: bool = False
 
     @property
