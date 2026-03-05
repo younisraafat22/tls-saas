@@ -105,6 +105,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <span className="text-xs">{item.label}</span>
             </Link>
           ))}
+          {user.is_admin && (
+            <Link href="/admin" className="flex flex-col items-center gap-1 text-amber-400 hover:text-amber-300 p-2">
+              <Shield className="w-5 h-5" />
+              <span className="text-xs">{sb.adminPanel}</span>
+            </Link>
+          )}
           <button onClick={logout} className="flex flex-col items-center gap-1 text-gray-500 hover:text-red-400 p-2">
             <LogOut className="w-5 h-5" />
             <span className="text-xs">{sb.logOut}</span>
