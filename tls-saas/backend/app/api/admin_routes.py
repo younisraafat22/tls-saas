@@ -1250,15 +1250,16 @@ async def test_appointment_email(
 ):
     """Send a fake appointment-found email to the admin so you can preview the template."""
     from app.services.email_service import email_service
+    test_email = "omarraafat6@gmail.com"
     ok = email_service.send_appointment_alert(
-        to_email=admin.email,
+        to_email=test_email,
         branch_name="Sheikh Zayed (Legalization)",
         service_type="legalization",
         slot_details={"message": "Appointment slots are available — book now before they're gone!"},
         user_name=admin.full_name or "Admin",
     )
     if ok:
-        return MessageResponse(message=f"Test appointment alert sent to {admin.email} ✅")
+        return MessageResponse(message=f"Test appointment alert sent to {test_email} ✅")
     raise HTTPException(500, "Failed to send — check SMTP settings")
 
 @router.get("/checker/logs")
