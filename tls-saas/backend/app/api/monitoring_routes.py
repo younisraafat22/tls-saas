@@ -310,16 +310,21 @@ async def check_results(
     query = (
         select(CheckResult, Branch)
         .join(Branch, CheckResult.branch_id == Branch.id)
-        # Only return results for branches this user actually has a monitor entry for.
-        # This prevents orphaned or incorrectly associated records from leaking to other users.
+        # Only return results for branches this user actually has an active monitor entry for.
+        # This prevents orphaned records from leaking to other users.
         .join(
             UserBranchMonitor,
             and_(
                 UserBranchMonitor.user_id == user.id,
                 UserBranchMonitor.branch_id == CheckResult.branch_id,
+                UserBranchMonitor.is_active == True,
             ),
         )
-        .where(CheckResult.user_id == user.id)
+        .where(
+            CheckResult.user_id == user.id,
+            CheckResult.user_id.isnot(None),
+        )
+        .distinct(CheckResult.id)
     )
 
     if branch_id:

@@ -965,11 +965,14 @@ class TLSCheckerService:
                 answer_input = WebDriverWait(self.driver, 5).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, "#audio-response"))
                 )
-                answer_input.clear()
-                # Type character-by-character (human-like)
-                for ch in transcript:
-                    answer_input.send_keys(ch)
-                    time.sleep(random.uniform(0.04, 0.09))
+                # Inject via JS — immune to user keyboard interference in
+                # the background/transparent window mode.
+                self.driver.execute_script(
+                    "arguments[0].focus(); arguments[0].value = arguments[1];"
+                    "arguments[0].dispatchEvent(new Event('input', {bubbles:true}));"
+                    "arguments[0].dispatchEvent(new Event('change', {bubbles:true}));",
+                    answer_input, transcript
+                )
                 self._wait_random(0.5, 1)
             except Exception as e:
                 self._log(f"❌ Could not type answer: {e}")
@@ -1533,13 +1536,23 @@ class TLSCheckerService:
             except Exception as e:
                 return False, "PAGE_NOT_LOADED: Login form not found. Website may be loading slowly. Will retry immediately."
             
-            email_field.clear()
-            email_field.send_keys(email)
-            self._wait_random(1, 2)
-            
-            password_field.clear()
-            password_field.send_keys(password)
-            self._wait_random(1, 2)
+            # Use JavaScript to set values directly — avoids any risk of the
+            # user's keyboard input interfering with the hidden browser window.
+            self.driver.execute_script(
+                "arguments[0].focus(); arguments[0].value = arguments[1];"
+                "arguments[0].dispatchEvent(new Event('input', {bubbles:true}));"
+                "arguments[0].dispatchEvent(new Event('change', {bubbles:true}));",
+                email_field, email
+            )
+            self._wait_random(0.5, 1)
+
+            self.driver.execute_script(
+                "arguments[0].focus(); arguments[0].value = arguments[1];"
+                "arguments[0].dispatchEvent(new Event('input', {bubbles:true}));"
+                "arguments[0].dispatchEvent(new Event('change', {bubbles:true}));",
+                password_field, password
+            )
+            self._wait_random(0.5, 1)
             
             # Handle reCAPTCHA if present
             captcha_solved = self._handle_recaptcha()
