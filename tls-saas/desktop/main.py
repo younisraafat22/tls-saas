@@ -100,7 +100,13 @@ class TLSApp:
         self.lock_file = None
         if not self.ensure_single_instance(page):
             return
-            
+
+        # Log key config info for diagnostics (visible in console / log file)
+        import sys as _sys
+        _frozen = getattr(_sys, 'frozen', False)
+        print(f"[STARTUP] frozen={_frozen} BACKEND_URL={Config.BACKEND_URL} "
+              f"LICENSE_SERVER_URL={Config.LICENSE_SERVER_URL} BASE_DIR={Config.BASE_DIR}")
+
         self.page = page
         self.checker = None
         self.status_text = None
@@ -573,20 +579,42 @@ class TLSApp:
             self.show_activation_page()
 
     def _save_service_type_to_db(self):
-        """Persist the selected service_type from flow_data into the DB."""
-        svc = self.flow_data.get('service_type', 'legalization') or 'legalization'
+        """Persist the selected service_type from flow_data into the DB.
+        Derives service type from the active license plan when available,
+        so the correct branch defaults are applied."""
+        # Derive service type from the license plan (authoritative source)
+        lic = get_license_status()
+        if lic and lic.get('valid'):
+            plan = lic.get('plan', '')
+            if plan.startswith('visa'):
+                svc = 'visa'
+            elif plan.startswith('legalization'):
+                svc = 'legalization'
+            else:
+                # all_in_one / trial — use flow_data or DB
+                svc = self.flow_data.get('service_type', 'legalization') or 'legalization'
+        else:
+            svc = self.flow_data.get('service_type', 'legalization') or 'legalization'
+
         db = SessionLocal()
         try:
             settings = db.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
             if settings:
                 settings.service_type = svc
-                # Also set appropriate default branch/URL for the chosen service
-                if svc == 'visa':
-                    if not settings.branch or settings.branch not in Config.VISA_BRANCHES:
+
+                # Apply branch from the license file first (set during activation)
+                lic_branch = lic.get('branch_name') if lic else None
+                lic_branch_url = lic.get('branch_url') if lic else None
+                branches = Config.VISA_BRANCHES if svc == 'visa' else Config.LEGALIZATION_BRANCHES
+                if lic_branch and lic_branch in branches:
+                    settings.branch = lic_branch
+                    settings.branch_url = lic_branch_url or branches[lic_branch]
+                elif not settings.branch or settings.branch not in branches:
+                    # Fall back to default branch for the service type
+                    if svc == 'visa':
                         settings.branch = "El-Sheikh Zayed"
                         settings.branch_url = Config.VISA_BRANCHES["El-Sheikh Zayed"]
-                else:
-                    if not settings.branch or settings.branch not in Config.LEGALIZATION_BRANCHES:
+                    else:
                         settings.branch = "Sheikh Zayed"
                         settings.branch_url = Config.LEGALIZATION_BRANCHES["Sheikh Zayed"]
                 db.commit()
@@ -1448,50 +1476,75 @@ class TLSApp:
         # Step 2 (online, non-blocking): ask the server in a background thread.
         # Updates the DB and the branch dropdown AFTER the page is already loaded.
         def _fetch_and_apply_server_branch(dropdown_ref, options_ref, page_ref):
-            try:
-                if not (service_locked and license_status):
-                    return
-                lic_key = license_status.get('key', '')
-                if not lic_key:
-                    return
-                server_url = Config.LICENSE_SERVER_URL or Config.BACKEND_URL
-                req = urllib.request.Request(
-                    f"{server_url.rstrip('/')}/api/payments/license-branch?license_key={lic_key}",
-                    headers={"Accept": "application/json"},
-                    method="GET",
-                )
-                with urllib.request.urlopen(req, timeout=8) as resp:
-                    data = json.loads(resp.read())
-                assigned_name = data.get('branch_name')
-                assigned_url  = data.get('branch_url')
-                if not assigned_name or not assigned_url:
-                    return
-                # Persist to DB
-                _db2 = SessionLocal()
+            if not (service_locked and license_status):
+                return
+            lic_key = license_status.get('key', '')
+            if not lic_key:
+                return
+            server_url = (Config.LICENSE_SERVER_URL or Config.BACKEND_URL or "").rstrip("/")
+            if not server_url:
+                return
+
+            # Retry up to 3 times with backoff (handles transient network issues in exe)
+            for _attempt in range(3):
                 try:
-                    _s2 = _db2.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
-                    if _s2 and (_s2.branch != assigned_name or _s2.branch_url != assigned_url):
-                        _s2.branch = assigned_name
-                        _s2.branch_url = assigned_url
-                        _db2.commit()
-                finally:
-                    _db2.close()
-                # Also persist to local .license file so offline step is correct next launch
-                try:
-                    from license_service import update_license_branch
-                    update_license_branch(assigned_name, assigned_url,
-                                         data.get('service_type'))
-                except Exception:
-                    pass
-                # Update dropdown via thread-safe UI queue
-                if dropdown_ref and assigned_name in options_ref and dropdown_ref.value != assigned_name:
-                    _name = assigned_name  # capture for closure
-                    _dd = dropdown_ref
-                    def _apply():
-                        _dd.value = _name
-                    self._ui_queue.put(_apply)
-            except Exception:
-                pass  # Offline or no branch assigned — silently keep local value
+                    import ssl as _ssl
+                    try:
+                        import certifi as _certifi
+                        _ctx = _ssl.create_default_context(cafile=_certifi.where())
+                    except Exception:
+                        _ctx = _ssl.create_default_context()
+
+                    req = urllib.request.Request(
+                        f"{server_url}/api/payments/license-branch?license_key={lic_key}",
+                        headers={"Accept": "application/json"},
+                        method="GET",
+                    )
+                    url_str = req.full_url
+                    if url_str.startswith("https"):
+                        resp = urllib.request.urlopen(req, timeout=10, context=_ctx)
+                    else:
+                        resp = urllib.request.urlopen(req, timeout=10)
+
+                    with resp:
+                        data = json.loads(resp.read())
+                    assigned_name = data.get('branch_name')
+                    assigned_url  = data.get('branch_url')
+                    if not assigned_name or not assigned_url:
+                        print(f"[BRANCH] Server returned no branch info: {data}")
+                        return
+                    print(f"[BRANCH] Server returned branch: {assigned_name} ({assigned_url})")
+                    # Persist to DB
+                    _db2 = SessionLocal()
+                    try:
+                        _s2 = _db2.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
+                        if _s2 and (_s2.branch != assigned_name or _s2.branch_url != assigned_url):
+                            _s2.branch = assigned_name
+                            _s2.branch_url = assigned_url
+                            _db2.commit()
+                            print(f"[BRANCH] Updated DB branch to {assigned_name}")
+                    finally:
+                        _db2.close()
+                    # Also persist to local .license file so offline step is correct next launch
+                    try:
+                        from license_service import update_license_branch
+                        update_license_branch(assigned_name, assigned_url,
+                                             data.get('service_type'))
+                    except Exception:
+                        pass
+                    # Update dropdown via thread-safe UI queue
+                    if dropdown_ref and assigned_name in options_ref and dropdown_ref.value != assigned_name:
+                        _name = assigned_name  # capture for closure
+                        _dd = dropdown_ref
+                        def _apply():
+                            _dd.value = _name
+                        self._ui_queue.put(_apply)
+                    return  # success
+                except Exception as exc:
+                    print(f"[BRANCH] Fetch attempt {_attempt+1}/3 failed ({server_url}): {exc}")
+                    if _attempt < 2:
+                        import time as _time
+                        _time.sleep(2)
 
         interval_value = str(settings.check_interval if settings else 120)
         notification_value = settings.notification_email if settings and settings.notification_email else ""

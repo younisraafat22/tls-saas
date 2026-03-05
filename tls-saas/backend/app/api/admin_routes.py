@@ -1089,6 +1089,15 @@ async def activity_log(
 @router.post("/checker/start", response_model=MessageResponse)
 async def start_checker(admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
     from app.services.scheduler import scheduler_service
+    # Read custom interval from system settings (if admin changed it)
+    interval_setting = (await db.execute(
+        select(SystemSetting).where(SystemSetting.key == "check_interval_minutes")
+    )).scalar_one_or_none()
+    if interval_setting:
+        try:
+            settings.CHECK_INTERVAL_MINUTES = max(5, int(interval_setting.value))
+        except (ValueError, TypeError):
+            pass
     scheduler_service.start()
     # Persist state so backend auto-resumes after restart
     setting = (await db.execute(select(SystemSetting).where(SystemSetting.key == "scheduler_running"))).scalar_one_or_none()
@@ -1097,7 +1106,7 @@ async def start_checker(admin=Depends(get_current_admin), db: AsyncSession = Dep
     else:
         db.add(SystemSetting(key="scheduler_running", value="true"))
     await db.commit()
-    return MessageResponse(message="Checker scheduler started")
+    return MessageResponse(message=f"Checker scheduler started (interval: {settings.CHECK_INTERVAL_MINUTES} min)")
 
 
 @router.post("/checker/stop", response_model=MessageResponse)
@@ -1121,6 +1130,7 @@ async def checker_status(admin=Depends(get_current_admin)):
         "running": scheduler_service.is_running,
         "next_run": scheduler_service.next_run_time,
         "last_run": scheduler_service.last_run_time,
+        "interval_minutes": settings.CHECK_INTERVAL_MINUTES,
         "connected_users_ws": ws_manager.connected_users_count,
         "connected_admins_ws": ws_manager.connected_admins_count,
     }

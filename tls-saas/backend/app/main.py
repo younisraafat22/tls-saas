@@ -438,13 +438,25 @@ async def lifespan(app: FastAPI):
     # Resume scheduler if it was running before restart (persisted in system settings)
     from app.services.scheduler import scheduler_service
     async with async_session() as db:
+        # Read custom interval if set by admin
+        interval_r = await db.execute(
+            select(SystemSetting).where(SystemSetting.key == "check_interval_minutes")
+        )
+        interval_setting = interval_r.scalar_one_or_none()
+        if interval_setting:
+            try:
+                settings.CHECK_INTERVAL_MINUTES = max(5, int(interval_setting.value))
+                logger.info(f"Custom check interval: {settings.CHECK_INTERVAL_MINUTES} min")
+            except (ValueError, TypeError):
+                pass
+
         resume_r = await db.execute(
             select(SystemSetting).where(SystemSetting.key == "scheduler_running")
         )
         resume_setting = resume_r.scalar_one_or_none()
         if resume_setting and resume_setting.value == "true":
             scheduler_service.start()
-            logger.info("Server ready. Monitoring scheduler auto-resumed (was running before restart).")
+            logger.info(f"Server ready. Monitoring scheduler auto-resumed (interval: {settings.CHECK_INTERVAL_MINUTES} min).")
         else:
             logger.info("Server ready. Start monitoring manually from Admin → Monitoring.")
 

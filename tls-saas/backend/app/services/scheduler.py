@@ -251,10 +251,20 @@ class SchedulerService:
         self.next_run_time: Optional[str] = None
         self.last_run_time: Optional[str] = None
 
+    def _on_job_error(self, event):
+        """APScheduler error listener — log but never let it kill the scheduler."""
+        logger.error(f"Scheduler job error: {event.exception}", exc_info=event.exception)
+
     def start(self):
         if self.is_running:
             return
         self._scheduler = AsyncIOScheduler()
+        # Listen for job errors so they're logged and the scheduler continues
+        from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_MISSED
+        self._scheduler.add_listener(self._on_job_error, EVENT_JOB_ERROR)
+        self._scheduler.add_listener(
+            lambda e: logger.warning(f"Job missed: {e.job_id}"), EVENT_JOB_MISSED
+        )
         self._scheduler.add_job(
             self._run_all_checks,
             "interval",
@@ -262,10 +272,13 @@ class SchedulerService:
             id="tls_checker",
             replace_existing=True,
             next_run_time=datetime.now(timezone.utc),
+            misfire_grace_time=None,  # never discard missed runs
+            coalesce=True,            # combine missed runs into one
+            max_instances=1,
         )
         self._scheduler.start()
         self.is_running = True
-        logger.info(f"Scheduler started  checking every {settings.CHECK_INTERVAL_MINUTES} min")
+        logger.info(f"Scheduler started — checking every {settings.CHECK_INTERVAL_MINUTES} min")
 
     def stop(self):
         if self._scheduler:
@@ -274,42 +287,68 @@ class SchedulerService:
         self.is_running = False
 
     async def _run_all_checks(self):
-        logger.info("=== Starting check cycle ===")
-        await _emit_log("info", "=== Starting check cycle ===")
-        self.last_run_time = datetime.now(timezone.utc).isoformat()
+        """Main check cycle — called by APScheduler every CHECK_INTERVAL_MINUTES."""
+        try:
+            logger.info("=== Starting check cycle ===")
+            await _emit_log("info", "=== Starting check cycle ===")
+            self.last_run_time = datetime.now(timezone.utc).isoformat()
 
-        async with async_session() as db:
-            result = await db.execute(select(Branch).where(Branch.is_active == True))
-            branches = result.scalars().all()
+            async with async_session() as db:
+                result = await db.execute(select(Branch).where(Branch.is_active == True))
+                branches = result.scalars().all()
 
-        leg_branches = [b for b in branches if b.service_type == ServiceType.LEGALIZATION]
-        visa_branches = [b for b in branches if b.service_type == ServiceType.VISA]
+            leg_branches = [b for b in branches if b.service_type == ServiceType.LEGALIZATION]
+            visa_branches = [b for b in branches if b.service_type == ServiceType.VISA]
 
-        for branch in leg_branches:
-            try:
-                await self._check_legalization_branch(branch.id)
-            except asyncio.CancelledError:
-                return
-            except Exception as e:
-                logger.error(f"Legalization branch error {branch.name}: {e}")
-                await _emit_log("error", str(e), branch.name)
+            # Per-branch timeout to prevent a single stuck check from blocking the cycle
+            BRANCH_TIMEOUT = 300  # 5 minutes per branch
 
-        for branch in visa_branches:
-            try:
-                await self._check_visa_branch(branch.id)
-            except asyncio.CancelledError:
-                return
-            except Exception as e:
-                logger.error(f"Visa branch error {branch.name}: {e}")
-                await _emit_log("error", str(e), branch.name)
+            for branch in leg_branches:
+                try:
+                    await asyncio.wait_for(
+                        self._check_legalization_branch(branch.id),
+                        timeout=BRANCH_TIMEOUT,
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(f"Legalization branch {branch.name} timed out after {BRANCH_TIMEOUT}s")
+                    await _emit_log("error", f"Timed out after {BRANCH_TIMEOUT}s", branch.name)
+                except asyncio.CancelledError:
+                    logger.info("Check cycle cancelled")
+                    return
+                except Exception as e:
+                    logger.error(f"Legalization branch error {branch.name}: {e}", exc_info=True)
+                    await _emit_log("error", str(e), branch.name)
 
-        if self._scheduler:
-            job = self._scheduler.get_job("tls_checker")
-            if job and job.next_run_time:
-                self.next_run_time = job.next_run_time.isoformat()
+            for branch in visa_branches:
+                try:
+                    await asyncio.wait_for(
+                        self._check_visa_branch(branch.id),
+                        timeout=BRANCH_TIMEOUT,
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(f"Visa branch {branch.name} timed out after {BRANCH_TIMEOUT}s")
+                    await _emit_log("error", f"Timed out after {BRANCH_TIMEOUT}s", branch.name)
+                except asyncio.CancelledError:
+                    logger.info("Check cycle cancelled")
+                    return
+                except Exception as e:
+                    logger.error(f"Visa branch error {branch.name}: {e}", exc_info=True)
+                    await _emit_log("error", str(e), branch.name)
 
-        logger.info("=== Check cycle complete ===")
-        await _emit_log("info", "=== Check cycle complete ===")
+            if self._scheduler:
+                job = self._scheduler.get_job("tls_checker")
+                if job and job.next_run_time:
+                    self.next_run_time = job.next_run_time.isoformat()
+                    logger.info(f"Next scheduled run: {self.next_run_time}")
+
+            logger.info("=== Check cycle complete ===")
+            await _emit_log("info", "=== Check cycle complete ===")
+        except asyncio.CancelledError:
+            logger.info("Check cycle cancelled by shutdown")
+        except Exception as e:
+            # Catch-all: NEVER let an exception kill the scheduler
+            logger.error(f"CRITICAL: Check cycle crashed: {e}", exc_info=True)
+            await _emit_log("error", f"Check cycle crashed: {e}")
 
     async def _check_legalization_branch(self, branch_id: int):
         """Shared check: use up to 4 random user credentials, share result with all subscribers."""

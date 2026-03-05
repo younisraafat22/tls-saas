@@ -8,12 +8,26 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables from .env
-# When running as frozen exe, look next to the .exe; otherwise use source dir
+# When running as frozen exe, load the bundled .env first, then allow overrides
+# from the exe directory and AppData (so the user can update BACKEND_URL without
+# rebuilding the exe).
 if getattr(sys, 'frozen', False):
-    _env_path = Path(sys.executable).parent / '.env'
+    _meipass = getattr(sys, '_MEIPASS', None)
+    # 1) Bundled .env (lowest priority — baked in at build time)
+    _bundled_env = Path(_meipass) / '.env' if _meipass else None
+    if _bundled_env and _bundled_env.exists():
+        load_dotenv(_bundled_env)
+    # 2) .env next to the exe (medium priority)
+    _exe_env = Path(sys.executable).parent / '.env'
+    if _exe_env.exists():
+        load_dotenv(_exe_env, override=True)
+    # 3) .env in AppData (highest priority — survives reinstalls)
+    _appdata_env = Path(os.getenv('APPDATA', '')) / 'TLSAppointmentChecker' / '.env'
+    if _appdata_env.exists():
+        load_dotenv(_appdata_env, override=True)
 else:
     _env_path = Path(__file__).resolve().parent / '.env'
-load_dotenv(_env_path, override=True)
+    load_dotenv(_env_path, override=True)
 
 # Base directory - use AppData for installed apps, current dir for development
 if getattr(sys, 'frozen', False):

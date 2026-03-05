@@ -6,13 +6,19 @@ Also supports API-based subscription checking via the backend.
 import hashlib
 import hmac
 import json
+import logging
 import os
+import ssl
 import uuid
 import platform
 import subprocess
 import time
+import urllib.request
+import urllib.error
 from datetime import datetime, timedelta, timezone
 from config import Config, BASE_DIR
+
+logger = logging.getLogger("license")
 
 # ---------- constants ----------
 LICENSE_FILE = os.path.join(str(BASE_DIR), ".license")
@@ -21,6 +27,34 @@ SECRET = "TLS-CHECKER-2026-HMAC-SECRET-KEY-DONT-SHARE"
 # Persistent trial marker (to prevent trial bypass by uninstall/reinstall)
 TRIAL_REGISTRY_KEY = r"SOFTWARE\TLSAppointmentChecker"
 TRIAL_REGISTRY_VALUE = "TrialActivated"
+
+
+# ---------- SSL-safe URL helper (PyInstaller compat) ----------
+
+def _get_ssl_context():
+    """Return an SSL context that works reliably in PyInstaller bundles."""
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        pass
+    try:
+        return ssl.create_default_context()
+    except Exception:
+        # Last resort — unverified (only for HTTP, but keeps things working)
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return ctx
+
+
+def _safe_urlopen(req, timeout=10):
+    """urlopen wrapper with SSL context that works in PyInstaller bundles."""
+    url = req.full_url if hasattr(req, 'full_url') else str(req)
+    if url.startswith("https"):
+        ctx = _get_ssl_context()
+        return urllib.request.urlopen(req, timeout=timeout, context=ctx)
+    return urllib.request.urlopen(req, timeout=timeout)
 
 PLANS = {
     "trial": {
@@ -396,23 +430,26 @@ def activate_license(key: str) -> tuple[bool, str]:
     }
 
     # Fetch branch info from backend (if available)
-    # Use urllib.request (stdlib) — reliable in PyInstaller bundles where
-    # the requests library may have SSL cert path issues.
-    try:
-        from config import Config
-        import urllib.request as _ureq
-        _url = (f"{(Config.LICENSE_SERVER_URL or Config.BACKEND_URL).rstrip('/')}"
-                f"/api/payments/license-branch"
-                f"?license_key={key.strip().upper()}")
-        _req = _ureq.Request(_url, headers={"Accept": "application/json"}, method="GET")
-        with _ureq.urlopen(_req, timeout=10) as _resp:
-            branch_data = json.loads(_resp.read())
-        if branch_data.get("branch_name"):
-            license_data["branch_name"] = branch_data["branch_name"]
-            license_data["branch_url"] = branch_data["branch_url"]
-            license_data["service_type"] = branch_data["service_type"]
-    except Exception:
-        pass  # Branch info is optional — don't block activation
+    # Use _safe_urlopen for reliable SSL handling in PyInstaller bundles.
+    server_url = (Config.LICENSE_SERVER_URL or Config.BACKEND_URL or "").rstrip("/")
+    if server_url:
+        for _attempt in range(3):
+            try:
+                _url = (f"{server_url}/api/payments/license-branch"
+                        f"?license_key={key.strip().upper()}")
+                _req = urllib.request.Request(_url, headers={"Accept": "application/json"}, method="GET")
+                with _safe_urlopen(_req, timeout=10) as _resp:
+                    branch_data = json.loads(_resp.read())
+                if branch_data.get("branch_name"):
+                    license_data["branch_name"] = branch_data["branch_name"]
+                    license_data["branch_url"] = branch_data["branch_url"]
+                    license_data["service_type"] = branch_data["service_type"]
+                    logger.info(f"[LICENSE] Branch fetched: {branch_data['branch_name']}")
+                break  # success
+            except Exception as exc:
+                logger.warning(f"[LICENSE] Branch fetch attempt {_attempt+1}/3 failed: {exc}")
+                if _attempt < 2:
+                    time.sleep(1)
 
     _write_license_file(license_data)
     return True, f"License activated! Type: {plan_info['name']}"
@@ -498,28 +535,32 @@ def get_license_status() -> dict | None:
     # Server-side revocation check (best-effort, non-blocking)
     # Only check for non-trial licenses to reduce server load
     if data["plan"] != "trial" and data.get("key"):
-        try:
-            from config import Config
-            import urllib.request
-            import urllib.error
-            server_url = Config.LICENSE_SERVER_URL
-            if server_url:
-                payload = json.dumps({"license_key": data["key"]}).encode()
-                req = urllib.request.Request(
-                    f"{server_url.rstrip('/')}/api/monitoring/license/verify",
-                    data=payload,
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
-                with urllib.request.urlopen(req, timeout=5) as resp:
-                    result = json.loads(resp.read())
-                    if result.get("found") and not result.get("is_active", True):
-                        # License has been revoked on server
-                        if os.path.exists(LICENSE_FILE):
-                            os.remove(LICENSE_FILE)
-                        return None
-        except Exception:
-            pass  # Network error — allow offline use
+        server_url = (Config.LICENSE_SERVER_URL or "").rstrip("/")
+        if server_url:
+            for _attempt in range(2):
+                try:
+                    payload = json.dumps({"license_key": data["key"]}).encode()
+                    req = urllib.request.Request(
+                        f"{server_url}/api/monitoring/license/verify",
+                        data=payload,
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with _safe_urlopen(req, timeout=8) as resp:
+                        result = json.loads(resp.read())
+                        if result.get("found") and not result.get("is_active", True):
+                            # License has been revoked on server
+                            logger.info("[LICENSE] Revoked by server — removing local license")
+                            if os.path.exists(LICENSE_FILE):
+                                os.remove(LICENSE_FILE)
+                            return None
+                        else:
+                            logger.debug(f"[LICENSE] Server verify OK: is_active={result.get('is_active')}")
+                    break  # success
+                except Exception as exc:
+                    logger.warning(f"[LICENSE] Revocation check attempt {_attempt+1}/2 failed ({server_url}): {exc}")
+                    if _attempt < 1:
+                        time.sleep(1)
 
     plan = data["plan"]
     plan_info = PLANS.get(plan, PLANS["trial"])
@@ -586,28 +627,25 @@ def deactivate_license():
     
     # Also deactivate on server if we have the key and hardware_id
     if data and data.get("key"):
-        try:
-            from config import Config
-            server_url = Config.LICENSE_SERVER_URL
-            if server_url:
-                import urllib.request
-                import urllib.error
+        server_url = (Config.LICENSE_SERVER_URL or "").rstrip("/")
+        if server_url:
+            try:
                 hw_id = get_hardware_id()
                 payload = json.dumps({
                     "license_key": data["key"],
                     "hardware_id": hw_id,
                 }).encode()
                 req = urllib.request.Request(
-                    f"{server_url.rstrip('/')}/api/monitoring/license/deactivate",
+                    f"{server_url}/api/monitoring/license/deactivate",
                     data=payload,
                     headers={"Content-Type": "application/json"},
                     method="POST",
                 )
-                with urllib.request.urlopen(req, timeout=10) as resp:
+                with _safe_urlopen(req, timeout=10) as resp:
                     result = json.loads(resp.read())
-                    print(f"[LICENSE] Server deactivation result: {result}")
-        except Exception as e:
-            print(f"[LICENSE] Server deactivation failed: {e}")
+                    logger.info(f"[LICENSE] Server deactivation result: {result}")
+            except Exception as e:
+                logger.warning(f"[LICENSE] Server deactivation failed: {e}")
 
 
 def can_change_email(new_email: str) -> tuple[bool, str]:
