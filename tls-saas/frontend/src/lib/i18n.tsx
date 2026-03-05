@@ -107,6 +107,7 @@ export const translations = {
       comingSoon: "Download link coming soon",
       whyLocal: "Why Local?",
       whyLocalDesc: "The desktop app runs entirely on your computer. Your TLS credentials are encrypted and stored locally — they are never sent to any server.",
+      smartscreenNote: "Windows may show a SmartScreen warning. Click \"More info\" then \"Run anyway\" to proceed — this is normal for new apps without a paid certificate.",
     },
     footer: {
       desc: "Automated appointment monitoring for German document legalization & visa services in Egypt.",
@@ -493,6 +494,7 @@ export const translations = {
       comingSoon: "رابط التحميل قريباً",
       whyLocal: "لماذا محلياً؟",
       whyLocalDesc: "التطبيق يعمل بالكامل على جهازك. بيانات TLS مشفرة ومخزنة محلياً — لا تُرسل لأي سيرفر.",
+      smartscreenNote: "قد تظهر تحذير Windows SmartScreen. اضغط على \"مزيد من المعلومات\" ثم \"تشغيل على أي حال\" — هذا طبيعي للتطبيقات غير الموقعة رقمياً.",
     },
     footer: {
       desc: "مراقبة آلية لمواعيد توثيق الوثائق الألمانية في مصر.",
@@ -879,6 +881,7 @@ export const translations = {
       comingSoon: "Download-Link kommt bald",
       whyLocal: "Warum lokal?",
       whyLocalDesc: "Die Desktop-App läuft vollständig auf deinem Computer. Deine TLS-Zugangsdaten sind verschlüsselt und lokal gespeichert — sie werden nie an einen Server gesendet.",
+      smartscreenNote: "Windows zeigt möglicherweise eine SmartScreen-Warnung. Klicke auf \"Weitere Informationen\" und dann \"Trotzdem ausführen\" — das ist normal für neue Apps ohne kostenpflichtiges Zertifikat.",
     },
     footer: {
       desc: "Automatische Terminüberwachung für Beglaubigungs- & Visumdienstleistungen in Ägypten.",

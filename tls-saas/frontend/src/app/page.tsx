@@ -652,6 +652,14 @@ function DownloadApp() {
                 <span className="flex items-center gap-1"><HardDrive className="w-3.5 h-3.5" /> {downloadInfo.size_mb} MB</span>
                 <span className="flex items-center gap-1"><Monitor className="w-3.5 h-3.5" /> Windows 10/11</span>
               </div>
+
+              {downloadInfo.download_url && (
+                <div className="mt-5 p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-left">
+                  <p className="text-yellow-300/80 text-xs leading-relaxed">
+                    ⚠️ {dl.smartscreenNote}
+                  </p>
+                </div>
+              )}
             </motion.div>
           </div>
         </AnimatedSection>
