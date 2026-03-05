@@ -190,7 +190,7 @@ function Navbar() {
           <div className="flex items-center gap-2">
             <LangSwitcher />
             {user ? (
-              <Link href={user.is_admin ? "/admin" : "/dashboard"} className="btn-gradient text-sm !py-2 !px-5">
+              <Link href={user.is_admin ? "/admin" : "/dashboard"} className="hidden md:inline-flex btn-gradient text-sm !py-2 !px-5">
                 {t.nav.dashboard}
               </Link>
             ) : (
