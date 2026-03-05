@@ -226,10 +226,13 @@ async def monitoring_status(
 
     branches = []
     for monitor, branch in monitors.all():
-        # Latest check for this branch
+        # Latest check for this user on this branch
         latest = await db.execute(
             select(CheckResult)
-            .where(CheckResult.branch_id == branch.id)
+            .where(
+                CheckResult.branch_id == branch.id,
+                CheckResult.user_id == user.id,
+            )
             .order_by(CheckResult.checked_at.desc())
             .limit(1)
         )
@@ -239,7 +242,11 @@ async def monitoring_status(
         today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         checks_today_result = await db.execute(
             select(func.count(CheckResult.id))
-            .where(CheckResult.branch_id == branch.id, CheckResult.checked_at >= today_start)
+            .where(
+                CheckResult.branch_id == branch.id,
+                CheckResult.user_id == user.id,
+                CheckResult.checked_at >= today_start,
+            )
         )
         checks_today = checks_today_result.scalar() or 0
 
@@ -303,6 +310,15 @@ async def check_results(
     query = (
         select(CheckResult, Branch)
         .join(Branch, CheckResult.branch_id == Branch.id)
+        # Only return results for branches this user actually has a monitor entry for.
+        # This prevents orphaned or incorrectly associated records from leaking to other users.
+        .join(
+            UserBranchMonitor,
+            and_(
+                UserBranchMonitor.user_id == user.id,
+                UserBranchMonitor.branch_id == CheckResult.branch_id,
+            ),
+        )
         .where(CheckResult.user_id == user.id)
     )
 
