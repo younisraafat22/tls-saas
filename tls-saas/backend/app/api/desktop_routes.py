@@ -53,7 +53,7 @@ async def download_info():
         "version": settings.DESKTOP_APP_VERSION,
         "download_url": settings.DESKTOP_DOWNLOAD_URL,
         "platforms": ["windows"],
-        "size_mb": "~80",
+        "size_mb": "~132",
         "requirements": "Windows 10/11, Chrome browser installed",
         "features": [
             "Local TLS appointment monitoring (runs on your machine)",
