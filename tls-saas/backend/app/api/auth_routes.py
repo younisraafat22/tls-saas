@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse
 from jose import JWTError, jwt
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from sqlalchemy.orm import selectinload
@@ -24,6 +24,7 @@ from app.schemas import (
     ChangePasswordRequest, MessageResponse,
     PushSubscriptionRequest,
     ForgotPasswordRequest, ResetPasswordRequest,
+    DeleteAccountRequest,
 )
 from app.websocket import ws_manager
 from app.services.email_service import EmailService
@@ -315,3 +316,25 @@ async def reset_password(body: ResetPasswordRequest, db: AsyncSession = Depends(
     await db.commit()
 
     return {"message": "Your password has been reset successfully. You can now log in."}
+
+
+@router.delete("/me", response_model=MessageResponse)
+async def delete_my_account(
+    body: DeleteAccountRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete the authenticated user's own account after password confirmation."""
+    if not verify_password(body.password, user.password_hash):
+        raise HTTPException(400, "Incorrect password")
+    if user.is_admin:
+        raise HTTPException(403, "Admin accounts cannot be self-deleted")
+
+    uid = user.id
+    await db.execute(text("DELETE FROM notification_logs WHERE user_id = :uid"), {"uid": uid})
+    await db.execute(text("DELETE FROM user_branch_monitors WHERE user_id = :uid"), {"uid": uid})
+    await db.execute(text("DELETE FROM payments WHERE user_id = :uid"), {"uid": uid})
+    await db.execute(text("DELETE FROM subscriptions WHERE user_id = :uid"), {"uid": uid})
+    await db.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": uid})
+    await db.commit()
+    return MessageResponse(message="Account deleted successfully")

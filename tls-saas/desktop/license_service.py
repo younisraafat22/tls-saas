@@ -27,6 +27,7 @@ SECRET = "TLS-CHECKER-2026-HMAC-SECRET-KEY-DONT-SHARE"
 # Persistent trial marker (to prevent trial bypass by uninstall/reinstall)
 TRIAL_REGISTRY_KEY = r"SOFTWARE\TLSAppointmentChecker"
 TRIAL_REGISTRY_VALUE = "TrialActivated"
+CHECKS_TODAY_REGISTRY_VALUE = "ChecksToday"  # "YYYY-MM-DD|count"
 
 
 # ---------- SSL-safe URL helper (PyInstaller compat) ----------
@@ -295,7 +296,37 @@ def _mark_trial_activated():
         pass
 
 
-# ---------- license key generation / validation ----------
+def _get_registry_checks_today() -> tuple[str, int]:
+    """Read ChecksToday from Registry. Returns (date_str, count) or ("", 0) on failure."""
+    if platform.system() != "Windows":
+        return "", 0
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, TRIAL_REGISTRY_KEY, 0, winreg.KEY_READ)
+        try:
+            value, _ = winreg.QueryValueEx(key, CHECKS_TODAY_REGISTRY_VALUE)
+            winreg.CloseKey(key)
+            parts = value.split("|", 1)
+            if len(parts) == 2:
+                return parts[0], int(parts[1])
+        except (FileNotFoundError, ValueError):
+            winreg.CloseKey(key)
+    except Exception:
+        pass
+    return "", 0
+
+
+def _set_registry_checks_today(date_str: str, count: int):
+    """Write ChecksToday to Registry as 'YYYY-MM-DD|count'."""
+    if platform.system() != "Windows":
+        return
+    try:
+        import winreg
+        key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, TRIAL_REGISTRY_KEY, 0, winreg.KEY_WRITE)
+        winreg.SetValueEx(key, CHECKS_TODAY_REGISTRY_VALUE, 0, winreg.REG_SZ, f"{date_str}|{count}")
+        winreg.CloseKey(key)
+    except Exception:
+        pass
 
 def _sign(payload: str) -> str:
     """HMAC-SHA256 signature of payload."""
@@ -572,6 +603,11 @@ def get_license_status() -> dict | None:
     if reset_date != today:
         checks_today = 0
 
+    # Harden against .license deletion: compare with Registry (use whichever is higher)
+    reg_date, reg_count = _get_registry_checks_today()
+    if reg_date == today and reg_count > checks_today:
+        checks_today = reg_count
+
     return {
         "valid": True,
         "expired": False,
@@ -614,6 +650,8 @@ def increment_check_count():
     else:
         data["checks_today"] = data.get("checks_today", 0) + 1
     _write_license_file(data)
+    # Also persist to Registry so deleting .license can't reset the counter
+    _set_registry_checks_today(today, data["checks_today"])
 
 
 def deactivate_license():

@@ -7,9 +7,10 @@ import { authApi, credentialApi } from "@/lib/api";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import {
   User, Lock, Bell, Save, Key,
-  Eye, EyeOff, Loader2, Trash2, Plus,
+  Eye, EyeOff, Loader2, Trash2, Plus, AlertTriangle,
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
+import Cookies from "js-cookie";
 
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth();
@@ -31,6 +32,12 @@ export default function SettingsPage() {
 
   // Toast
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+
+  // Delete account
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
 
   useEffect(() => {
@@ -78,6 +85,27 @@ export default function SettingsPage() {
       showToast("error", err?.detail || "Failed to change password");
     } finally {
       setPasswordSaving(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== "DELETE") {
+      showToast("error", 'Please type "DELETE" to confirm');
+      return;
+    }
+    if (!deletePassword) {
+      showToast("error", "Please enter your password");
+      return;
+    }
+    setDeleting(true);
+    try {
+      await authApi.deleteAccount(deletePassword);
+      Cookies.remove("access_token");
+      Cookies.remove("refresh_token");
+      window.location.href = "/";
+    } catch (err: any) {
+      showToast("error", err?.message || "Failed to delete account");
+      setDeleting(false);
     }
   };
 
@@ -244,6 +272,94 @@ export default function SettingsPage() {
           <p className="text-xs text-gray-500">{ts.notifFooter}</p>
         </motion.div>
       )}
+
+      {/* Danger Zone */}
+      <div className="border border-red-500/30 rounded-xl p-6 space-y-4">
+        <h2 className="font-semibold flex items-center gap-2 text-red-400">
+          <AlertTriangle className="w-5 h-5" /> Danger Zone
+        </h2>
+        <p className="text-sm text-gray-400">
+          Permanently delete your account and all associated data. This action cannot be undone.
+        </p>
+        <button
+          onClick={() => setShowDeleteModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/40 text-red-400 hover:bg-red-500/20 hover:border-red-500/60 rounded-lg text-sm font-medium transition"
+        >
+          <Trash2 className="w-4 h-4" /> Delete My Account
+        </button>
+      </div>
+
+      {/* Delete Account Modal */}
+      <AnimatePresence>
+        {showDeleteModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+            onClick={(e) => e.target === e.currentTarget && setShowDeleteModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-dark-800 border border-red-500/30 rounded-2xl p-6 w-full max-w-md space-y-5"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-500/10 rounded-lg">
+                  <AlertTriangle className="w-6 h-6 text-red-400" />
+                </div>
+                <h3 className="text-lg font-semibold">Delete Account</h3>
+              </div>
+              <p className="text-sm text-gray-400">
+                This will permanently delete your account, subscription history, and all data. You will lose access immediately.
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sm text-gray-400 mb-1.5 block">
+                    Type <span className="text-red-400 font-mono font-bold">DELETE</span> to confirm
+                  </label>
+                  <input
+                    type="text"
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    placeholder="DELETE"
+                    className="input-field"
+                    autoComplete="off"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400 mb-1.5 block">Your password</label>
+                  <input
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="input-field"
+                    autoComplete="current-password"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={() => { setShowDeleteModal(false); setDeletePassword(""); setDeleteConfirmText(""); }}
+                  className="flex-1 px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-sm font-medium transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={deleting || deleteConfirmText !== "DELETE" || !deletePassword}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition"
+                >
+                  {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  Delete Account
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

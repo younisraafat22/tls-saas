@@ -454,6 +454,11 @@ class TLSCheckerService:
                         "headless": False,
                         "headless2": False,
                         "driver_version": driver_ver,
+                        # Disable Chrome's occlusion tracker so it never
+                        # throttles the renderer when the window is behind
+                        # the Flet app window (EXE mode).  Without this flag
+                        # the React SPA stops re-rendering month selectors.
+                        "chromium_arg": "--disable-features=CalculateNativeWinOcclusion",
                     }
                     
                     # If running as frozen app, explicitly set binary location
@@ -507,6 +512,7 @@ class TLSCheckerService:
                 options.add_argument('--disable-blink-features=AutomationControlled')
                 options.add_argument('--disable-dev-shm-usage')
                 options.add_argument('--no-sandbox')
+                options.add_argument('--disable-features=CalculateNativeWinOcclusion')
                 options.add_experimental_option("prefs", download_prefs)
                 # Only use real headless if window hider is unavailable;
                 # otherwise Chrome starts visible and is made transparent.
@@ -563,6 +569,7 @@ class TLSCheckerService:
             options.add_argument('--disable-gpu')
             options.add_argument('--log-level=3')
             options.add_argument('--disable-logging')
+            options.add_argument('--disable-features=CalculateNativeWinOcclusion')
             options.add_experimental_option("prefs", download_prefs)
             # Only use real headless if window hider is unavailable;
             # otherwise Chrome starts visible and is made transparent.
@@ -1941,9 +1948,9 @@ class TLSCheckerService:
                     url = self.driver.current_url
                     title = self.driver.title
                     body_text = self.driver.find_element(By.CSS_SELECTOR, "body").text[:500]
-                    print(f"[Checker DEBUG] URL: {url}")
-                    print(f"[Checker DEBUG] Title: {title}")
-                    print(f"[Checker DEBUG] Body: {body_text[:300]}")
+                    self._log(f"[DEBUG] URL: {url}")
+                    self._log(f"[DEBUG] Title: {title}")
+                    self._log(f"[DEBUG] Body: {body_text[:300]}")
                 except Exception:
                     pass
 
@@ -1951,7 +1958,7 @@ class TLSCheckerService:
                 # current month + next 2 months — works for any tlscontact.com domain
                 current_url = self.driver.current_url
                 if "tlscontact.com" in current_url:
-                    print("[Checker] Using backup month URLs")
+                    self._log("[DEBUG] Using backup month URLs (CSS discovery found nothing)")
                     now = datetime.now()
                     month_names_list = ['January','February','March','April','May','June',
                                         'July','August','September','October','November','December']
@@ -1981,7 +1988,7 @@ class TLSCheckerService:
                         name = f"{month_names_list[m-1]} {y}"
                         url = f"{base_wf}/appointment-booking?month={month_str}{_loc_str}"
                         initial_months.append((name, url))
-                    print(f"[Checker] Generated backup month URLs: {[m[0] for m in initial_months]}")
+                    self._log(f"[DEBUG] Generated backup URLs: {[m[0] for m in initial_months]}")
 
                 if not initial_months:
                     self._log("⚠️ No month selectors found, trying legacy layout...")
@@ -2070,7 +2077,7 @@ class TLSCheckerService:
                     all_results.append(f"{month_name}: No slots")
                     # Wait for SPA to render month selectors before scanning
                     try:
-                        WebDriverWait(self.driver, 5).until(
+                        WebDriverWait(self.driver, 10).until(
                             EC.presence_of_element_located((By.CSS_SELECTOR,
                                 "a.MonthSelector_month-selector_button__An0eF")))
                     except Exception:
@@ -2080,7 +2087,7 @@ class TLSCheckerService:
                     for new_month, new_link in newly_available:
                         if new_month not in checked_months and (new_month, new_link) not in months_to_check:
                             months_to_check.append((new_month, new_link))
-                            print(f"[Checker] Discovered new month: {new_month}")
+                            self._log(f"🗓️ Discovered new month via CSS: {new_month}")
                     continue
 
                 # Look for available slot buttons
@@ -2092,7 +2099,7 @@ class TLSCheckerService:
                     all_results.append(f"{month_name}: No slots")
                     # Wait for SPA to render month selectors before scanning
                     try:
-                        WebDriverWait(self.driver, 5).until(
+                        WebDriverWait(self.driver, 10).until(
                             EC.presence_of_element_located((By.CSS_SELECTOR,
                                 "a.MonthSelector_month-selector_button__An0eF")))
                     except Exception:
@@ -2102,7 +2109,7 @@ class TLSCheckerService:
                     for new_month, new_link in newly_available:
                         if new_month not in checked_months and (new_month, new_link) not in months_to_check:
                             months_to_check.append((new_month, new_link))
-                            print(f"[Checker] Discovered new month: {new_month}")
+                            self._log(f"🗓️ Discovered new month via CSS: {new_month}")
                     continue
 
                 # — Appointments found! Collect details —
@@ -2166,7 +2173,7 @@ class TLSCheckerService:
                 for new_month, new_link in newly_available:
                     if new_month not in checked_months and (new_month, new_link) not in months_to_check:
                         months_to_check.append((new_month, new_link))
-                        print(f"[Checker] Discovered new month: {new_month}")
+                        self._log(f"🗓️ Discovered new month via CSS: {new_month}")
 
             if not any_slots_found:
                 self._log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

@@ -183,6 +183,9 @@ export const authApi = {
 
   savePushSubscription: (subscription: any) =>
     api.post("/api/auth/push-subscription", { subscription }),
+
+  deleteAccount: (password: string) =>
+    api.request("/api/auth/me", { method: "DELETE", body: { password } }),
 };
 
 // ── Subscription API ──────────────────────────────────
