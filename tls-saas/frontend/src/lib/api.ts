@@ -52,27 +52,36 @@ class ApiClient {
     const response = await fetch(`${this.baseUrl}${endpoint}`, config);
 
     if (response.status === 401) {
-      // Try to refresh token
-      const refreshed = await this.refreshToken();
-      if (refreshed) {
-        // Retry original request
-        requestHeaders["Authorization"] = `Bearer ${this.getToken()}`;
-        const retryResponse = await fetch(`${this.baseUrl}${endpoint}`, {
-          ...config,
-          headers: requestHeaders,
-        });
-        if (!retryResponse.ok) {
-          throw new ApiError(retryResponse.status, await retryResponse.text());
+      if (!noAuth) {
+        // Try to refresh token
+        const refreshed = await this.refreshToken();
+        if (refreshed) {
+          // Retry original request
+          requestHeaders["Authorization"] = `Bearer ${this.getToken()}`;
+          const retryResponse = await fetch(`${this.baseUrl}${endpoint}`, {
+            ...config,
+            headers: requestHeaders,
+          });
+          if (!retryResponse.ok) {
+            throw new ApiError(retryResponse.status, await retryResponse.text());
+          }
+          return retryResponse.json();
         }
-        return retryResponse.json();
+        // Refresh failed — redirect to login
+        if (typeof window !== "undefined") {
+          Cookies.remove("access_token");
+          Cookies.remove("refresh_token");
+          window.location.href = "/login";
+        }
+        throw new ApiError(401, "Session expired");
       }
-      // Refresh failed — redirect to login
-      if (typeof window !== "undefined") {
-        Cookies.remove("access_token");
-        Cookies.remove("refresh_token");
-        window.location.href = "/login";
-      }
-      throw new ApiError(401, "Session expired");
+      // noAuth request got 401 — parse and surface the real error detail
+      let errorDetail = "Invalid email or password";
+      try {
+        const errorData = await response.json();
+        errorDetail = errorData.detail || errorData.message || errorDetail;
+      } catch { }
+      throw new ApiError(401, errorDetail);
     }
 
     if (!response.ok) {

@@ -27,7 +27,19 @@ export default function LoginPage() {
       await login(email, password);
       router.push("/dashboard");
     } catch (err: any) {
-      setError(err.message || tl.errorDefault);
+      // Network / server-down errors
+      if (
+        err instanceof TypeError ||
+        err?.message?.toLowerCase().includes("failed to fetch") ||
+        err?.message?.toLowerCase().includes("networkerror") ||
+        err?.message?.toLowerCase().includes("load failed")
+      ) {
+        setError("Cannot reach the server. Please check your internet connection or try again later.");
+      } else if (err?.status === 403) {
+        setError("Your account has been deactivated. Please contact support.");
+      } else {
+        setError(err.message || tl.errorDefault);
+      }
     } finally {
       setLoading(false);
     }
