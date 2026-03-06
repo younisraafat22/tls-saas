@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from sqlalchemy.orm import selectinload
-from app.models import User, Subscription, UserBranchMonitor
+from app.models import User, Subscription, UserBranchMonitor, ActivityLog
 from app.config import settings
 from app.auth import (
     hash_password, verify_password,
@@ -335,12 +335,18 @@ async def delete_my_account(
         raise HTTPException(403, "Admin accounts cannot be self-deleted")
 
     uid = user.id
-    # Anonymize PII — replace email with a placeholder that keeps it unique
+    original_email = user.email
+    # Anonymize PII — preserve original email in full_name for admin audit trail
     user.email = f"deleted_{uid}@deleted.invalid"
-    user.full_name = "Deleted User"
+    user.full_name = f"[Deleted] {original_email}"
     user.phone = ""
     user.password_hash = ""          # prevents any future login
     user.push_subscription = None    # stop push notifications
     user.is_active = False           # blocks login & API access
+    db.add(ActivityLog(
+        actor_id=uid,
+        action="user_self_deleted",
+        details={"user_id": uid, "email": original_email},
+    ))
     await db.commit()
     return MessageResponse(message="Account deleted successfully")
