@@ -765,7 +765,9 @@ async def revoke_license(
     db: AsyncSession = Depends(get_db),
 ):
     """Revoke a license — marks the record as rejected and clears the license key."""
-    result = await db.execute(select(Payment).where(Payment.id == payment_id))
+    result = await db.execute(
+        select(Payment).where(Payment.id == payment_id).options(selectinload(Payment.subscription))
+    )
     payment = result.scalar_one_or_none()
     if not payment:
         raise HTTPException(404, "License record not found")
@@ -776,6 +778,10 @@ async def revoke_license(
     # Do NOT clear license_key — verify endpoint needs it to return is_active=False
     payment.admin_notes = ((payment.admin_notes or "") + " [REVOKED]").strip()
     payment.processed_at = datetime.now(timezone.utc)
+
+    # Also cancel the linked subscription so it disappears from user management
+    if payment.subscription and payment.subscription.status == SubscriptionStatus.ACTIVE:
+        payment.subscription.status = SubscriptionStatus.CANCELLED
 
     db.add(ActivityLog(
         actor_id=admin.id,
