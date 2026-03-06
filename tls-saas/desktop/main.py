@@ -132,9 +132,9 @@ class TLSApp:
         # ---- Page chrome ----
         self.page.title = Config.APP_NAME
         self.page.window.width = 1100
-        self.page.window.height = 850
+        self.page.window.height = 950
         self.page.window.min_width = 990
-        self.page.window.min_height = 750
+        self.page.window.min_height = 850
         self.page.window.resizable = True
         self.page.window.maximizable = True
         self.page.window.maximized = False
