@@ -2192,7 +2192,8 @@ class TLSCheckerService:
 
             if selected:
                 name = selected[0].text.strip()
-                months.append((name, None))  # None = already on this page
+                if name:  # Guard against empty text (page not fully rendered)
+                    months.append((name, None))  # None = already on this page
 
             # Collect all navigable month links
             month_links = self.driver.find_elements(By.CSS_SELECTOR,

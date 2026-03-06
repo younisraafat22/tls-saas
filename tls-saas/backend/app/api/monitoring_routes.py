@@ -318,6 +318,7 @@ async def check_results(
                 UserBranchMonitor.user_id == user.id,
                 UserBranchMonitor.branch_id == CheckResult.branch_id,
                 UserBranchMonitor.is_active == True,
+                CheckResult.checked_at >= UserBranchMonitor.created_at,
             ),
         )
         .where(
