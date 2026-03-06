@@ -1985,6 +1985,42 @@ class TLSCheckerService:
                     return self._check_slots_legacy()
 
             months_to_check.extend(initial_months)
+
+            # The CSS selector only shows 2 months at a time — always supplement
+            # with direct URLs so we always check at least 3 months (current + 2).
+            try:
+                import re as _re
+                current_url = self.driver.current_url
+                if "visas-de.tlscontact.com" in current_url:
+                    wf_match = _re.search(
+                        r'(https://visas-de\.tlscontact\.com/[^/]+/[^/]+/workflow)',
+                        current_url
+                    ) or _re.search(
+                        r'(https://visas-de\.tlscontact\.com/\S+?/workflow)',
+                        current_url
+                    )
+                    if wf_match:
+                        base_wf = wf_match.group(1)
+                        now_dt = datetime.now()
+                        _month_names = ['January','February','March','April','May','June',
+                                        'July','August','September','October','November','December']
+                        existing_names = {name for name, _ in months_to_check}
+                        for offset in range(3):
+                            m = now_dt.month + offset
+                            y = now_dt.year
+                            if m > 12:
+                                m -= 12
+                                y += 1
+                            name = f"{_month_names[m-1]} {y}"
+                            if name not in existing_names:
+                                month_str = f"{m:02d}-{y}"
+                                url = f"{base_wf}/appointment-booking?month={month_str}"
+                                months_to_check.append((name, url))
+                                existing_names.add(name)
+                                print(f"[Checker] Supplemented missing month: {name}")
+            except Exception as _e:
+                print(f"[Checker] Month supplement failed (non-critical): {_e}")
+
             self._log(f"📆 Starting with {len(months_to_check)} visible month(s)")
 
             # Process months until no new ones discovered
