@@ -758,7 +758,7 @@ class TLSCheckerService:
                     cb = WebDriverWait(self.driver, 8).until(
                         EC.element_to_be_clickable((By.CSS_SELECTOR, "#recaptcha-anchor"))
                     )
-                    cb.click()
+                    self.driver.execute_script("arguments[0].click();", cb)
                     self._wait_random(2, 4)
 
                     # Check if checkbox alone solved it
@@ -825,7 +825,7 @@ class TLSCheckerService:
                     )
                 )
                 self._log("🔊 Clicking audio challenge button...")
-                audio_btn.click()
+                self.driver.execute_script("arguments[0].click();", audio_btn)
                 
                 # Check for and dismiss any alerts (e.g., "Cannot contact reCAPTCHA")
                 try:
@@ -981,7 +981,7 @@ class TLSCheckerService:
 
             try:
                 verify_btn = self.driver.find_element(By.CSS_SELECTOR, "#recaptcha-verify-button")
-                verify_btn.click()
+                self.driver.execute_script("arguments[0].click();", verify_btn)
                 self._wait_random(2, 4)
             except Exception as e:
                 self._log(f"❌ Could not click verify: {e}")
@@ -1571,8 +1571,10 @@ class TLSCheckerService:
                     pass
             if not login_button:
                 return False, "PAGE_NOT_LOADED: Login button not found on form."
-            
-            login_button.click()
+
+            # Use JS click — avoids "element click intercepted" errors caused by
+            # overlays or the transparent-window layer covering the button.
+            self.driver.execute_script("arguments[0].click();", login_button)
             self._wait_random(4, 6)
 
             # Wait for redirect to complete (visa site can be slower)
@@ -1878,7 +1880,7 @@ class TLSCheckerService:
                             "button.tls-button-primary, button[data-tls-value='confirm'], .tls-popup button")
                         for btn in close_btns:
                             try:
-                                btn.click()
+                                self.driver.execute_script("arguments[0].click();", btn)
                                 self._wait_random(1, 2)
                                 break
                             except Exception:
@@ -2256,7 +2258,7 @@ class TLSCheckerService:
                 try:
                     confirm_btn = self.driver.find_element(By.CSS_SELECTOR,
                         "button.tls-button-primary.-uppercase[data-tls-value='confirm']")
-                    confirm_btn.click()
+                    self.driver.execute_script("arguments[0].click();", confirm_btn)
                     self._wait_random(1, 2)
                 except Exception:
                     pass
