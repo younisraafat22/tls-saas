@@ -1988,49 +1988,6 @@ class TLSCheckerService:
                     return self._check_slots_legacy()
 
             months_to_check.extend(initial_months)
-
-            # The CSS selector only shows 2 months at a time — always supplement
-            # with direct URLs so we always check at least 3 months (current + 2).
-            try:
-                import re as _re
-                current_url = self.driver.current_url
-                if "tlscontact.com" in current_url:
-                    # Works for both visas-de.tlscontact.com and legalization-de.tlscontact.com
-                    wf_match = _re.search(
-                        r'(https://[^/]+tlscontact\.com/[^/]+/[^/]+/workflow)',
-                        current_url
-                    ) or _re.search(
-                        r'(https://[^/]+tlscontact\.com/\S+?/workflow)',
-                        current_url
-                    )
-                    if wf_match:
-                        base_wf = wf_match.group(1)
-                        # Preserve the location param (e.g. location=egCAI2de)
-                        from urllib.parse import urlparse, parse_qs
-                        _parsed = urlparse(current_url)
-                        _qs = parse_qs(_parsed.query)
-                        _location = _qs.get('location', [None])[0]
-                        _loc_str = f"&location={_location}" if _location else ""
-                        now_dt = datetime.now()
-                        _month_names = ['January','February','March','April','May','June',
-                                        'July','August','September','October','November','December']
-                        existing_names = {name for name, _ in months_to_check}
-                        for offset in range(3):
-                            m = now_dt.month + offset
-                            y = now_dt.year
-                            if m > 12:
-                                m -= 12
-                                y += 1
-                            name = f"{_month_names[m-1]} {y}"
-                            if name not in existing_names:
-                                month_str = f"{m:02d}-{y}"
-                                url = f"{base_wf}/appointment-booking?month={month_str}{_loc_str}"
-                                months_to_check.append((name, url))
-                                existing_names.add(name)
-                                print(f"[Checker] Supplemented missing month: {name}")
-            except Exception as _e:
-                print(f"[Checker] Month supplement failed (non-critical): {_e}")
-
             self._log(f"📆 Starting with {len(months_to_check)} visible month(s)")
 
             # Process months until no new ones discovered
@@ -2111,6 +2068,13 @@ class TLSCheckerService:
                 if no_slots:
                     self._log(f"📅 {month_name}: No appointments available")
                     all_results.append(f"{month_name}: No slots")
+                    # Wait for SPA to render month selectors before scanning
+                    try:
+                        WebDriverWait(self.driver, 5).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR,
+                                "a.MonthSelector_month-selector_button__An0eF")))
+                    except Exception:
+                        pass
                     # Discover new months that may have appeared
                     newly_available = self._get_available_months()
                     for new_month, new_link in newly_available:
@@ -2126,6 +2090,13 @@ class TLSCheckerService:
                 if not available_buttons:
                     self._log(f"📅 {month_name}: No appointments available")
                     all_results.append(f"{month_name}: No slots")
+                    # Wait for SPA to render month selectors before scanning
+                    try:
+                        WebDriverWait(self.driver, 5).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR,
+                                "a.MonthSelector_month-selector_button__An0eF")))
+                    except Exception:
+                        pass
                     # Discover new months that may have appeared
                     newly_available = self._get_available_months()
                     for new_month, new_link in newly_available:
