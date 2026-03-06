@@ -37,7 +37,10 @@ async def dashboard_stats(
 ):
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
-    total_users = (await db.execute(select(func.count(User.id)))).scalar() or 0
+    total_users = (await db.execute(
+        select(func.count(User.id))
+        .where(User.is_admin == False, User.email.not_like("deleted\_%@deleted.invalid"))
+    )).scalar() or 0
     active_subs = (await db.execute(
         select(func.count(Subscription.id))
         .where(Subscription.status == SubscriptionStatus.ACTIVE)
@@ -89,6 +92,7 @@ async def list_users(
         .options(
             selectinload(User.subscriptions).selectinload(Subscription.plan),
         )
+        .where(User.is_admin == False)
         .order_by(User.created_at.desc())
     )
     if search:
@@ -97,7 +101,7 @@ async def list_users(
         )
 
     # Count total
-    count_query = select(func.count(User.id))
+    count_query = select(func.count(User.id)).where(User.is_admin == False)
     if search:
         count_query = count_query.where(
             User.email.ilike(f"%{search}%") | User.full_name.ilike(f"%{search}%")
