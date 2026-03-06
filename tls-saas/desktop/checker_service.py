@@ -1964,6 +1964,13 @@ class TLSCheckerService:
                     else:
                         base_wf = "https://visas-de.tlscontact.com/en-us/4055204/workflow"
 
+                    # Preserve the location param (e.g. location=egCAI2de)
+                    from urllib.parse import urlparse, parse_qs
+                    _parsed = urlparse(current_url)
+                    _qs = parse_qs(_parsed.query)
+                    _location = _qs.get('location', [None])[0]
+                    _loc_str = f"&location={_location}" if _location else ""
+
                     for offset in range(3):
                         m = now.month + offset
                         y = now.year
@@ -1972,7 +1979,7 @@ class TLSCheckerService:
                             y += 1
                         month_str = f"{m:02d}-{y}"
                         name = f"{month_names_list[m-1]} {y}"
-                        url = f"{base_wf}/appointment-booking?month={month_str}"
+                        url = f"{base_wf}/appointment-booking?month={month_str}{_loc_str}"
                         initial_months.append((name, url))
                     print(f"[Checker] Generated backup month URLs: {[m[0] for m in initial_months]}")
 
@@ -1998,6 +2005,12 @@ class TLSCheckerService:
                     )
                     if wf_match:
                         base_wf = wf_match.group(1)
+                        # Preserve the location param (e.g. location=egCAI2de)
+                        from urllib.parse import urlparse, parse_qs
+                        _parsed = urlparse(current_url)
+                        _qs = parse_qs(_parsed.query)
+                        _location = _qs.get('location', [None])[0]
+                        _loc_str = f"&location={_location}" if _location else ""
                         now_dt = datetime.now()
                         _month_names = ['January','February','March','April','May','June',
                                         'July','August','September','October','November','December']
@@ -2011,7 +2024,7 @@ class TLSCheckerService:
                             name = f"{_month_names[m-1]} {y}"
                             if name not in existing_names:
                                 month_str = f"{m:02d}-{y}"
-                                url = f"{base_wf}/appointment-booking?month={month_str}"
+                                url = f"{base_wf}/appointment-booking?month={month_str}{_loc_str}"
                                 months_to_check.append((name, url))
                                 existing_names.add(name)
                                 print(f"[Checker] Supplemented missing month: {name}")
