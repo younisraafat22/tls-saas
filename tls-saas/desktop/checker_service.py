@@ -1948,24 +1948,20 @@ class TLSCheckerService:
                     pass
 
                 # Strategy 4 (backup): Build direct appointment-booking URLs for
-                # current month + next 2 months using visa URL pattern
+                # current month + next 2 months — works for any tlscontact.com domain
                 current_url = self.driver.current_url
-                if "visas-de.tlscontact.com" in current_url:
-                    print("[Checker] Using backup month URLs for visa site")
+                if "tlscontact.com" in current_url:
+                    print("[Checker] Using backup month URLs")
                     now = datetime.now()
                     month_names_list = ['January','February','March','April','May','June',
                                         'July','August','September','October','November','December']
-                    # Extract base from current URL:
-                    # e.g. https://visas-de.tlscontact.com/en-us/4055204/workflow/...
                     import re as _re
-                    wf_match = _re.search(r'(https://visas-de\.tlscontact\.com/[^/]+/[^/]+/workflow)', current_url)
+                    wf_match = _re.search(r'(https://[^/]+tlscontact\.com/[^/]+/[^/]+/workflow)', current_url)
                     if not wf_match:
-                        # Try to build from the page we're on
-                        wf_match = _re.search(r'(https://visas-de\.tlscontact\.com/\S+?/workflow)', current_url)
+                        wf_match = _re.search(r'(https://[^/]+tlscontact\.com/\S+?/workflow)', current_url)
                     if wf_match:
                         base_wf = wf_match.group(1)
                     else:
-                        # Fallback: use known pattern
                         base_wf = "https://visas-de.tlscontact.com/en-us/4055204/workflow"
 
                     for offset in range(3):
@@ -1991,12 +1987,13 @@ class TLSCheckerService:
             try:
                 import re as _re
                 current_url = self.driver.current_url
-                if "visas-de.tlscontact.com" in current_url:
+                if "tlscontact.com" in current_url:
+                    # Works for both visas-de.tlscontact.com and legalization-de.tlscontact.com
                     wf_match = _re.search(
-                        r'(https://visas-de\.tlscontact\.com/[^/]+/[^/]+/workflow)',
+                        r'(https://[^/]+tlscontact\.com/[^/]+/[^/]+/workflow)',
                         current_url
                     ) or _re.search(
-                        r'(https://visas-de\.tlscontact\.com/\S+?/workflow)',
+                        r'(https://[^/]+tlscontact\.com/\S+?/workflow)',
                         current_url
                     )
                     if wf_match:
