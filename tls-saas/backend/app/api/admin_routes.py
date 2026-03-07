@@ -208,6 +208,35 @@ async def delete_user(
     if user.is_admin:
         raise HTTPException(400, "Cannot delete an admin account")
     email = user.email
+    # Collect all license keys belonging to this user and add them to the
+    # revoked blacklist BEFORE deleting, so the desktop verify endpoint
+    # will correctly block them even after the payment rows are gone.
+    import json as _json
+    keys_result = await db.execute(
+        select(Payment.license_key).where(
+            Payment.user_id == user_id,
+            Payment.license_key.isnot(None),
+            Payment.license_key != "",
+        )
+    )
+    user_license_keys = [row[0] for row in keys_result.fetchall()]
+    if user_license_keys:
+        revoked_result = await db.execute(
+            select(SystemSetting).where(SystemSetting.key == "revoked_license_keys")
+        )
+        revoked_setting = revoked_result.scalar_one_or_none()
+        if revoked_setting:
+            try:
+                keys_list = _json.loads(revoked_setting.value)
+            except Exception:
+                keys_list = []
+            for k in user_license_keys:
+                if k not in keys_list:
+                    keys_list.append(k)
+            revoked_setting.value = _json.dumps(keys_list)
+        else:
+            db.add(SystemSetting(key="revoked_license_keys", value=_json.dumps(user_license_keys)))
+
     # Delete all child records explicitly before deleting the user
     # to avoid FK / NOT NULL constraint errors from ORM nullification
     await db.execute(text("DELETE FROM notification_logs WHERE user_id = :uid"), {"uid": user_id})
