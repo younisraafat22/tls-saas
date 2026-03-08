@@ -1182,7 +1182,7 @@ async def stop_checker(admin=Depends(get_current_admin), db: AsyncSession = Depe
 
 
 @router.get("/checker/status")
-async def checker_status(admin=Depends(get_current_admin)):
+async def checker_status(admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
     from app.services.scheduler import scheduler_service
     # Sync is_running with APScheduler's actual state (handles auto-resume after restart)
     apscheduler_running = (
@@ -1191,8 +1191,33 @@ async def checker_status(admin=Depends(get_current_admin)):
     )
     if apscheduler_running and not scheduler_service.is_running:
         scheduler_service.is_running = True
+
+    running = scheduler_service.is_running or apscheduler_running
+
+    # Also check DB-persisted state as fallback (survives worker restarts)
+    if not running:
+        db_state = (await db.execute(
+            select(SystemSetting).where(SystemSetting.key == "scheduler_running")
+        )).scalar_one_or_none()
+        if db_state and db_state.value == "true":
+            # DB says it should be running — auto-restart it
+            try:
+                # Read custom interval if set
+                interval_r = (await db.execute(
+                    select(SystemSetting).where(SystemSetting.key == "check_interval_minutes")
+                )).scalar_one_or_none()
+                if interval_r:
+                    try:
+                        settings.CHECK_INTERVAL_MINUTES = max(5, int(interval_r.value))
+                    except (ValueError, TypeError):
+                        pass
+                scheduler_service.start()
+                running = True
+            except Exception:
+                pass
+
     return {
-        "running": scheduler_service.is_running or apscheduler_running,
+        "running": running,
         "next_run": scheduler_service.next_run_time,
         "last_run": scheduler_service.last_run_time,
         "interval_minutes": settings.CHECK_INTERVAL_MINUTES,

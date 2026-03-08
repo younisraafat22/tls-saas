@@ -181,17 +181,19 @@ export default function AdminMonitoringPage() {
   const loadAll = async () => {
     try {
       const [brData, saData, schedulerData, resultsData, headlessData] = await Promise.all([
-        adminApi.getBranches(),
-        adminApi.getServiceAccounts(),
-        adminApi.getSchedulerStatus(),
-        adminApi.getCheckResults(20),
-        adminApi.getHeadlessMode(),
+        adminApi.getBranches().catch(() => []),
+        adminApi.getServiceAccounts().catch(() => []),
+        adminApi.getSchedulerStatus().catch(() => null),
+        adminApi.getCheckResults(20).catch(() => []),
+        adminApi.getHeadlessMode().catch(() => null),
       ]);
       setBranches(brData);
       setServiceAccounts(saData);
-      setSchedulerStatus(schedulerData);
+      if (schedulerData) {
+        setSchedulerStatus(schedulerData);
+        setSettingsInterval(schedulerData.interval_minutes || 30);
+      }
       setRecentResults(resultsData);
-      setSettingsInterval(schedulerData?.interval_minutes || 30);
       if (headlessData) setHeadless(headlessData.headless);
       // Load logs in parallel (non-blocking)
       fetchMonitorLogs();

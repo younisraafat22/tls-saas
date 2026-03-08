@@ -566,18 +566,27 @@ def get_license_status() -> dict | None:
     # Server-side revocation check (best-effort, non-blocking)
     # Only check for non-trial licenses to reduce server load
     if data["plan"] != "trial" and data.get("key"):
+        # Try both LICENSE_SERVER_URL and BACKEND_URL in case they differ
+        urls_to_try = []
         server_url = (Config.LICENSE_SERVER_URL or "").rstrip("/")
         if server_url:
-            for _attempt in range(2):
+            urls_to_try.append(server_url)
+        backend_url = (Config.BACKEND_URL or "").rstrip("/")
+        if backend_url and backend_url != server_url:
+            urls_to_try.append(backend_url)
+
+        for try_url in urls_to_try:
+            revoked = False
+            for _attempt in range(3):
                 try:
                     payload = json.dumps({"license_key": data["key"]}).encode()
                     req = urllib.request.Request(
-                        f"{server_url}/api/monitoring/license/verify",
+                        f"{try_url}/api/monitoring/license/verify",
                         data=payload,
                         headers={"Content-Type": "application/json"},
                         method="POST",
                     )
-                    with _safe_urlopen(req, timeout=8) as resp:
+                    with _safe_urlopen(req, timeout=15) as resp:
                         result = json.loads(resp.read())
                         if result.get("found") and not result.get("is_active", True):
                             # License has been revoked on server
@@ -587,11 +596,15 @@ def get_license_status() -> dict | None:
                             return None
                         else:
                             logger.debug(f"[LICENSE] Server verify OK: is_active={result.get('is_active')}")
-                    break  # success
+                    break  # success — no need to try other URLs
                 except Exception as exc:
-                    logger.warning(f"[LICENSE] Revocation check attempt {_attempt+1}/2 failed ({server_url}): {exc}")
-                    if _attempt < 1:
-                        time.sleep(1)
+                    logger.warning(f"[LICENSE] Revocation check attempt {_attempt+1}/3 failed ({try_url}): {exc}")
+                    if _attempt < 2:
+                        time.sleep(2)
+            else:
+                # All attempts failed for this URL — try next URL
+                continue
+            break  # If inner loop succeeded (via break), stop trying other URLs
 
     plan = data["plan"]
     plan_info = PLANS.get(plan, PLANS["trial"])

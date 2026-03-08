@@ -216,8 +216,9 @@ class TLSApp:
         # Check for updates in background
         check_for_updates(self._on_update_available)
 
-        # Route based on license status
-        self.check_license_and_route()
+        # Show a loading screen immediately, then route in background
+        self._show_loading_screen()
+        threading.Thread(target=self.check_license_and_route, daemon=True).start()
 
     # ------------------------------------------------------------------
     # helpers
@@ -560,6 +561,36 @@ class TLSApp:
             self.page.update()
         except Exception:
             pass
+
+    def _show_loading_screen(self):
+        """Show a branded loading screen while the app initializes."""
+        self.page.controls.clear()
+        self.page.vertical_alignment = ft.MainAxisAlignment.CENTER
+        self.page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+        self.page.add(
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Image(
+                            src=self._logo_src or "Logos/LOGO_H_W.png",
+                            width=250, height=60,
+                        ) if self._logo_src else ft.Text(
+                            Config.APP_NAME, size=28, weight=ft.FontWeight.BOLD, color="#00D9FF"
+                        ),
+                        ft.Container(height=30),
+                        ft.ProgressRing(width=40, height=40, stroke_width=3, color="#00D9FF"),
+                        ft.Container(height=15),
+                        ft.Text("Loading...", size=14, color=ft.Colors.GREY_400),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=0,
+                ),
+                expand=True,
+                alignment=ft.alignment.center,
+            )
+        )
+        self.page.update()
 
     def check_license_and_route(self):
         """Decide which page to show based on offline license."""
@@ -905,31 +936,67 @@ class TLSApp:
                 self.page.update()
                 return
 
-            success, message = activate_license(entered_key)
-            if success:
-                # Double-check plan in case key was parsed as premium
-                lic = get_license_status()
-                if lic and lic.get('plan', '').startswith('premium'):
-                    # Deactivate it and tell the user
-                    from license_service import deactivate_license
-                    deactivate_license()
-                    status_msg.value = (
-                        "Premium plans are managed via the web dashboard.\n"
-                        "Please visit the website to use your Premium subscription."
-                    )
-                    status_msg.color = ft.Colors.ORANGE_400
-                    self.page.update()
-                    return
-                # Save the selected service type to DB
-                self._save_service_type_to_db()
-                self.show_monitoring_page()
-            else:
-                status_msg.value = message
-                status_msg.color = ft.Colors.RED_400
-                self.page.update()
+            # Show loading state immediately so the user knows activation is in progress
+            status_msg.value = "Activating license... please wait"
+            status_msg.color = "#00D9FF"
+            activate_btn.disabled = True
+            try:
+                activate_btn.update()
+            except Exception:
+                pass
+            self.page.update()
+
+            def _activate_in_background():
+                try:
+                    success, message = activate_license(entered_key)
+                    if success:
+                        # Double-check plan in case key was parsed as premium
+                        lic = get_license_status()
+                        if lic and lic.get('plan', '').startswith('premium'):
+                            from license_service import deactivate_license
+                            deactivate_license()
+                            status_msg.value = (
+                                "Premium plans are managed via the web dashboard.\n"
+                                "Please visit the website to use your Premium subscription."
+                            )
+                            status_msg.color = ft.Colors.ORANGE_400
+                            activate_btn.disabled = False
+                            self.page.update()
+                            return
+                        # Save the selected service type to DB
+                        self._save_service_type_to_db()
+                        # Navigate to monitoring page on main thread
+                        self.show_monitoring_page()
+                    else:
+                        status_msg.value = message
+                        status_msg.color = ft.Colors.RED_400
+                        activate_btn.disabled = False
+                        self.page.update()
+                except Exception as exc:
+                    status_msg.value = f"Activation error: {str(exc)[:80]}"
+                    status_msg.color = ft.Colors.RED_400
+                    activate_btn.disabled = False
+                    try:
+                        self.page.update()
+                    except Exception:
+                        pass
+
+            threading.Thread(target=_activate_in_background, daemon=True).start()
 
         def open_website(e):
             webbrowser.open(Config.WEBSITE_URL)
+
+        activate_btn = ft.FilledButton(
+            "Activate License",
+            width=500,
+            height=50,
+            on_click=do_activate,
+            style=ft.ButtonStyle(
+                bgcolor="#00D9FF",
+                color="#0A0E27",
+                shape=ft.RoundedRectangleBorder(radius=12),
+            ),
+        )
 
         # Add website icon button at top
         top_bar = ft.Container(
@@ -1025,17 +1092,7 @@ class TLSApp:
                     key_field,
                     ft.Container(height=20),
 
-                    ft.FilledButton(
-                        "Activate License",
-                        width=500,
-                        height=50,
-                        on_click=do_activate,
-                        style=ft.ButtonStyle(
-                            bgcolor="#00D9FF",
-                            color="#0A0E27",
-                            shape=ft.RoundedRectangleBorder(radius=12),
-                        ),
-                    ),
+                    activate_btn,
                     ft.Container(height=10),
                     # Free trial button
                     ft.OutlinedButton(
@@ -1820,6 +1877,11 @@ class TLSApp:
                     bgcolor="#00D9FF",
                     color="#0A0E27",
                 )
+            # Force control-level update to ensure text change renders
+            try:
+                toggle_btn.update()
+            except Exception:
+                pass
             self.page.update()
 
         toggle_btn = ft.FilledButton(

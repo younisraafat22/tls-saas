@@ -34,3 +34,5 @@ desktop.ini
 
 *.tunnel
 .env.tunnel
+.vercel
+.env*.local

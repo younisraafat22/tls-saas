@@ -146,17 +146,16 @@ class TLSCheckerService:
         """Fire-and-forget: report check result to backend so the web dashboard can show it."""
         def _do_report():
             try:
-                from license_service import get_license_status
+                from license_service import _read_license_file, _safe_urlopen
                 import json as _json
-                import urllib.request
-                import urllib.error
 
-                lic = get_license_status()
-                if not lic or not lic.get("key"):
+                # Read key directly from file (avoid get_license_status network call)
+                lic_data = _read_license_file()
+                if not lic_data or not lic_data.get("key"):
                     return  # No license key — skip
 
                 payload = _json.dumps({
-                    "license_key": lic["key"],
+                    "license_key": lic_data["key"],
                     "branch_name": branch_name,
                     "service_type": service_type,
                     "slots_available": slots_available,
@@ -168,7 +167,7 @@ class TLSCheckerService:
                 req = urllib.request.Request(url, data=payload,
                                             headers={"Content-Type": "application/json"},
                                             method="POST")
-                with urllib.request.urlopen(req, timeout=10) as resp:
+                with _safe_urlopen(req, timeout=15) as resp:
                     pass  # 200 OK is enough
             except Exception as e:
                 print(f"[Checker] Backend report failed (non-fatal): {e}")

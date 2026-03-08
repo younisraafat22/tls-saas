@@ -321,9 +321,12 @@ export default function DashboardPage() {
           </div>
           {/* Monitoring-active footer — always visible when subscription is active */}
           {hasActiveSubscription && (
-            <div className="px-4 py-3 border-t border-white/5 bg-accent-green/5 flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-accent-green animate-pulse" />
-              <span className="text-xs text-accent-green font-medium">Monitoring active — you will be notified as soon as a slot opens</span>
+            <div className="px-4 py-3 border-t border-white/5 bg-accent-green/5">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-accent-green animate-pulse" />
+                <span className="text-xs text-accent-green font-medium">Monitoring active — you will be notified as soon as a slot opens</span>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1.5 ml-4">💡 Tip: Appointment notification emails may land in your Spam / Junk folder — please check there and mark them as &quot;Not Spam&quot;.</p>
             </div>
           )}
         </div>
@@ -375,6 +378,7 @@ export default function DashboardPage() {
           <h3 className="font-semibold text-lg mb-2 text-accent-green">Desktop App Connected</h3>
           <p className="text-gray-400 text-sm mb-2">Your license key is ready. Install and activate it in the desktop app to start monitoring.</p>
           <p className="text-gray-500 text-xs">Check results from the desktop app will appear here automatically.</p>
+          <p className="text-gray-500 text-xs mt-3">💡 Tip: Appointment notification emails may land in your Spam / Junk folder — please check there and mark them as &quot;Not Spam&quot;.</p>
         </div>
       )}
 

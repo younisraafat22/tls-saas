@@ -516,6 +516,7 @@ async def report_desktop_check_by_license(
             user_id=payment.user_id,
             branch_id=branch.id,
             is_active=True,
+            created_at=datetime.now(timezone.utc) - timedelta(seconds=5),
         ))
 
     # Save screenshot if provided
