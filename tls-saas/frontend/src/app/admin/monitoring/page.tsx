@@ -70,6 +70,7 @@ export default function AdminMonitoringPage() {
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const [settingsInterval, setSettingsInterval] = useState(30);
   const [savingInterval, setSavingInterval] = useState(false);
+  const [countdown, setCountdown] = useState<string | null>(null);
 
   // Logs state
   const [logTab, setLogTab] = useState<LogTab>("monitor");
@@ -105,6 +106,30 @@ export default function AdminMonitoringPage() {
   useEffect(() => {
     loadAll();
   }, []);
+
+  // Poll scheduler status every 15s so heartbeat/last_run/next_run appear without a manual refresh
+  useEffect(() => {
+    const id = setInterval(() => {
+      adminApi.getSchedulerStatus().then(setSchedulerStatus).catch(() => {});
+    }, 15000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Live countdown to next worker cycle
+  useEffect(() => {
+    const tick = () => {
+      const nextRun = schedulerStatus?.next_run;
+      if (!nextRun || !schedulerStatus?.running) { setCountdown(null); return; }
+      const diff = Math.floor((new Date(nextRun).getTime() - Date.now()) / 1000);
+      if (diff <= 0) { setCountdown("any moment now"); return; }
+      const m = Math.floor(diff / 60);
+      const s = diff % 60;
+      setCountdown(m > 0 ? `${m}m ${s}s` : `${s}s`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [schedulerStatus]);
 
   // Live WS: results + monitor logs
   useEffect(() => {
@@ -380,6 +405,19 @@ export default function AdminMonitoringPage() {
                 {schedulerStatus?.running ? "Running" : "Stopped"}
                 {schedulerStatus?.interval_minutes && ` · Every ${schedulerStatus.interval_minutes}min`}
               </div>
+              {schedulerStatus?.running && (
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500">
+                  {schedulerStatus?.last_run && (
+                    <span>Last run: <span className="text-gray-300">{new Date(schedulerStatus.last_run).toLocaleTimeString("en-GB", { hour12: false })}</span></span>
+                  )}
+                  {countdown && (
+                    <span>Next in: <span className="text-primary-400 font-mono">{countdown}</span></span>
+                  )}
+                  {!schedulerStatus?.last_run && !countdown && schedulerStatus?.worker_mode && (
+                    <span className="text-gray-600 italic">Waiting for worker to connect...</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <button
@@ -825,8 +863,16 @@ export default function AdminMonitoringPage() {
                 <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading monitoring logs...
               </div>
             ) : monitorLogs.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-gray-600">
-                No monitoring logs yet — start the scheduler to see activity here
+              <div className="flex flex-col items-center justify-center h-full gap-2 text-gray-500">
+                {schedulerStatus?.running ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 animate-spin opacity-50" />
+                    <span>Monitoring is active — waiting for the next check cycle...</span>
+                    <span className="text-xs text-gray-600">Logs will appear here once the worker runs its first check</span>
+                  </>
+                ) : (
+                  <span className="text-gray-600">No monitoring logs yet — start monitoring to see activity here</span>
+                )}
               </div>
             ) : (
               monitorLogs.map((entry, i) => (
