@@ -312,6 +312,8 @@ export const adminApi = {
   },
   createLicense: (data: { hardware_id: string; plan_key: string; customer_name?: string; customer_email?: string; notes?: string; branch_id?: number | null }) =>
     api.post("/api/admin/licenses/create", data),
+  importLicense: (data: { license_key: string; customer_name?: string; customer_email?: string; notes?: string }) =>
+    api.post("/api/admin/licenses/import", data),
   revokeLicense: (paymentId: number) =>
     api.post(`/api/admin/licenses/${paymentId}/revoke`),
   regenerateLicense: (paymentId: number) =>
