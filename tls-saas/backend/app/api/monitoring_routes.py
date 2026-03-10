@@ -590,3 +590,171 @@ async def report_desktop_check_by_license(
             logger.warning(f"Failed to send desktop alert email: {e}")
 
     return {"status": "ok", "check_result_id": cr.id, "slots_available": body.slots_available}
+
+
+# ── Laptop Worker API (WORKER_MODE architecture) ───────────────────────────────
+# The laptop runs worker.py which polls these endpoints to get check jobs,
+# runs Selenium locally, and posts results back.  All endpoints require the
+# shared WORKER_SECRET header so random callers cannot abuse them.
+
+from fastapi import Header
+
+def _verify_worker(x_worker_secret: str = Header(default="")):
+    if x_worker_secret != settings.WORKER_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid worker secret")
+
+
+class WorkerResultBody(BaseModel):
+    branch_id: int
+    slots_available: bool
+    slot_details: str | None = None
+    error: str = ""
+    duration_seconds: float = 0
+    source: str = "worker"
+    logs: list = []  # Step-by-step logs from the checker to forward to the admin panel
+
+
+@router.get("/worker/jobs", dependencies=[Depends(_verify_worker)])
+async def worker_get_jobs(db: AsyncSession = Depends(get_db)):
+    """
+    Return the list of active branches + their active subscribers so the
+    laptop worker knows what to check next.
+    Only called when WORKER_MODE=true is configured on Fly.io.
+    """
+    from app.models import Branch, UserBranchMonitor, User, Subscription, UserCredential
+    # Respect the admin start/stop toggle
+    state_r = await db.execute(select(SystemSetting).where(SystemSetting.key == "scheduler_running"))
+    state = state_r.scalar_one_or_none()
+    if not state or state.value != "true":
+        return {"jobs": [], "paused": True}
+
+    result = await db.execute(select(Branch).where(Branch.is_active == True))
+    branches = result.scalars().all()
+
+    if branches:
+        from app.services.scheduler import _emit_log
+        await _emit_log("info", f"=== Worker starting check cycle ({len(branches)} branch(es)) ===")
+
+    jobs = []
+    now = datetime.now(timezone.utc)
+    for branch in branches:
+        # Collect active subscribers with valid subscriptions
+        monitors = await db.execute(
+            select(UserBranchMonitor, User)
+            .join(User, UserBranchMonitor.user_id == User.id)
+            .where(
+                UserBranchMonitor.branch_id == branch.id,
+                UserBranchMonitor.is_active == True,
+                User.is_active == True,
+            )
+        )
+        users = []
+        for _m, user in monitors.all():
+            sub_r = await db.execute(
+                select(Subscription)
+                .where(Subscription.user_id == user.id, Subscription.status == SubscriptionStatus.ACTIVE)
+                .order_by(Subscription.expires_at.desc())
+                .limit(1)
+            )
+            sub = sub_r.scalar_one_or_none()
+            if sub and sub.expires_at:
+                exp = sub.expires_at
+                if exp.tzinfo is None:
+                    exp = exp.replace(tzinfo=timezone.utc)
+                if exp > now:
+                    # Fetch encrypted credentials
+                    svc = branch.service_type
+                    cred_r = await db.execute(
+                        select(UserCredential).where(
+                            UserCredential.user_id == user.id,
+                            UserCredential.service_type == svc,
+                            UserCredential.is_active == True,
+                        )
+                    )
+                    cred = cred_r.scalar_one_or_none()
+                    # Only include users who have credentials — no point sending jobs
+                    # the worker can't use (avoids instant "All attempts failed" errors)
+                    if cred and cred.email_encrypted and cred.password_encrypted:
+                        users.append({
+                            "user_id": user.id,
+                            "email_encrypted": cred.email_encrypted,
+                            "password_encrypted": cred.password_encrypted,
+                        })
+        if users:
+            jobs.append({
+                "branch_id": branch.id,
+                "branch_name": branch.name,
+                "branch_url": branch.url,
+                "service_type": branch.service_type.value,
+                "users": users,
+            })
+    # Include the configured interval so the worker uses the DB value, not just its env var
+    interval_r = await db.execute(select(SystemSetting).where(SystemSetting.key == "check_interval_minutes"))
+    interval_setting = interval_r.scalar_one_or_none()
+    interval_minutes = int(interval_setting.value) if interval_setting and interval_setting.value.isdigit() else 30
+    return {"jobs": jobs, "interval_minutes": interval_minutes}
+
+
+class WorkerHeartbeatBody(BaseModel):
+    last_run_at: str  # ISO timestamp
+    next_run_at: str  # ISO timestamp
+    interval_minutes: int = 30
+
+
+@router.post("/worker/heartbeat", dependencies=[Depends(_verify_worker)])
+async def worker_heartbeat(body: WorkerHeartbeatBody, db: AsyncSession = Depends(get_db)):
+    """Called by the laptop worker at the start of each cycle to report timing info."""
+    for key, val in [
+        ("worker_last_run", body.last_run_at),
+        ("worker_next_run", body.next_run_at),
+        ("worker_interval_minutes", str(body.interval_minutes)),
+    ]:
+        row = (await db.execute(select(SystemSetting).where(SystemSetting.key == key))).scalar_one_or_none()
+        if row:
+            row.value = val
+        else:
+            db.add(SystemSetting(key=key, value=val))
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/worker/result", dependencies=[Depends(_verify_worker)])
+async def worker_post_result(
+    body: WorkerResultBody,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Receive a check result from the laptop worker and persist it exactly
+    like the scheduler would, including user notifications.
+    """
+    from app.models import Branch, UserBranchMonitor, User, CheckResult as CR
+    from app.services.scheduler import _get_active_subscribers, scheduler_service
+
+    branch_r = await db.execute(select(Branch).where(Branch.id == body.branch_id))
+    branch = branch_r.scalar_one_or_none()
+    if not branch:
+        raise HTTPException(status_code=404, detail="Branch not found")
+
+    active_users = await _get_active_subscribers(db, body.branch_id)
+    if not active_users:
+        return {"status": "ok", "notified": 0}
+
+    from app.services.scheduler import _emit_log
+    # Forward step-by-step logs from the laptop checker to the admin panel
+    for log_entry in body.logs:
+        level = log_entry.get("level", "info") if isinstance(log_entry, dict) else "info"
+        message = log_entry.get("message", str(log_entry)) if isinstance(log_entry, dict) else str(log_entry)
+        await _emit_log(level, message, branch.name)
+
+    check_result = {
+        "slots_available": body.slots_available,
+        "slot_details": body.slot_details,
+        "error": body.error,
+        "duration": body.duration_seconds,
+        "screenshot": None,
+        "logs": body.logs,
+    }
+    # Re-use the scheduler's persist+notify logic so emails/WebSocket work uniformly
+    await scheduler_service._persist_and_notify(db, branch, check_result, active_users)
+
+    return {"status": "ok", "notified": len(active_users)}

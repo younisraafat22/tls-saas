@@ -37,7 +37,9 @@ except ImportError:
 
 from cryptography.fernet import Fernet
 from app.config import settings
-from app.services.visa_checker_sb import visa_checker_sb
+
+# Lazy import — visa_checker_sb pulls in selenium which isn't available in WORKER_MODE (Fly.io)
+visa_checker_sb = None
 
 logger = logging.getLogger("checker")
 
@@ -131,6 +133,10 @@ class TLSChecker:
         try:
             # Visa: use SeleniumBase UC (synchronous) in a thread pool on all platforms
             if service_type == "visa":
+                global visa_checker_sb
+                if visa_checker_sb is None:
+                    from app.services.visa_checker_sb import visa_checker_sb as _vcb
+                    visa_checker_sb = _vcb
                 return await asyncio.get_event_loop().run_in_executor(
                     _sb_executor,
                     visa_checker_sb.check,

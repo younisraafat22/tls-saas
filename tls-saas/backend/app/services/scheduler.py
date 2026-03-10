@@ -118,6 +118,10 @@ def _is_login_failure(error: str) -> bool:
     ))
 
 
+def _is_captcha_failure(error: str) -> bool:
+    return "captcha_bypass_failed" in (error or "").lower()
+
+
 async def _notify_admin_login_failure(branch_name: str, user_email: str, error: str):
     try:
         email_service.send(
@@ -406,6 +410,12 @@ class SchedulerService:
 
                 cred.last_used_at = datetime.now(timezone.utc)
 
+                if _is_captcha_failure(res.get("error", "")):
+                    cred.last_error = res["error"]
+                    logger.warning(f"[{branch.name}] Captcha blocked for {user.email} — trying next credential")
+                    await _emit_log("warn", f"Captcha blocked for {user.email} — trying next credential", branch.name)
+                    continue
+
                 if _is_login_failure(res.get("error", "")):
                     cred.last_error = res["error"]
                     consecutive_failures += 1
@@ -431,6 +441,16 @@ class SchedulerService:
 
             if check_result is None:
                 await _emit_log("warn", "All credential attempts failed/skipped", branch.name)
+                # If all failed due to captcha, schedule a retry in 60s
+                if self._scheduler:
+                    self._scheduler.add_job(
+                        self._check_legalization_branch,
+                        trigger=DateTrigger(run_date=datetime.now(timezone.utc) + timedelta(minutes=1)),
+                        id=f"captcha_retry_leg_{branch_id}",
+                        args=[branch_id],
+                        replace_existing=True,
+                    )
+                    await _emit_log("info", "Scheduled captcha retry in 60s", branch.name)
                 return
 
             await self._persist_and_notify(db, branch, check_result, active_users)
@@ -475,6 +495,21 @@ class SchedulerService:
                     await _emit_log(le.get("level", "info"), le.get("message", ""), branch.name)
 
                 cred.last_used_at = datetime.now(timezone.utc)
+
+                if _is_captcha_failure(res.get("error", "")):
+                    cred.last_error = res["error"]
+                    await db.commit()
+                    logger.warning(f"[{branch.name}] Captcha blocked for {user.email} — scheduling retry in 60s")
+                    await _emit_log("warn", f"Captcha blocked for {user.email} — retrying in 60s", branch.name)
+                    if self._scheduler:
+                        self._scheduler.add_job(
+                            self._check_visa_branch,
+                            trigger=DateTrigger(run_date=datetime.now(timezone.utc) + timedelta(minutes=1)),
+                            id=f"captcha_retry_visa_{branch_id}",
+                            args=[branch_id],
+                            replace_existing=True,
+                        )
+                    continue
 
                 if _is_login_failure(res.get("error", "")):
                     cred.last_error = res["error"]

@@ -11,7 +11,7 @@ import os
 class Settings(BaseSettings):
     # ── App ──────────────────────────────────────────────
     APP_NAME: str = "TLS Appointment Checker"
-    APP_VERSION: str = "2.0.0"
+    APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
     SECRET_KEY: str = "CHANGE-THIS-TO-A-RANDOM-64-CHAR-STRING-IN-PRODUCTION"
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
@@ -64,6 +64,11 @@ class Settings(BaseSettings):
 
     # ── License Generation ───────────────────────────────
     LICENSE_HMAC_SECRET: str = "TLS-CHECKER-2026-HMAC-SECRET-KEY-DONT-SHARE"
+
+    # ── Worker (laptop → Fly.io) ─────────────────────────
+    # Shared secret between the laptop worker and the Fly.io API.
+    # Set via environment variable on both sides.
+    WORKER_SECRET: str = "worker-secret-change-this-in-production"
 
     # ── Desktop App Release ──────────────────────────────
     DESKTOP_APP_VERSION: str = "1.0.0"

@@ -161,7 +161,12 @@ class VisaCheckerSB:
 
             # Verify login
             if not self._verify_login(driver, tls_email, log):
-                result["error"] = "Login failed — invalid credentials or CAPTCHA"
+                if self._has_cloudflare(driver):
+                    result["error"] = "captcha_bypass_failed"
+                    log("Login blocked by Cloudflare captcha — will retry later", "warn")
+                else:
+                    result["error"] = "Login failed — invalid credentials"
+                    log("Login failed — invalid credentials detected", "error")
                 try:
                     result["screenshot"] = driver.get_screenshot_as_png()
                 except Exception:

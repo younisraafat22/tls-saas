@@ -371,6 +371,9 @@ async def approve_payment(
         monitor = existing.scalar_one_or_none()
         if monitor:
             monitor.is_active = True
+            # Reset created_at so the check_results filter (checked_at >= created_at)
+            # doesn't show results from the previous subscription period.
+            monitor.created_at = datetime.now(timezone.utc) - timedelta(seconds=5)
         else:
             db.add(UserBranchMonitor(
                 user_id=payment.user_id,
@@ -718,6 +721,86 @@ async def create_license_directly(
         "customer_email": customer_email,
         "email_sent": email_sent,
         "message": f"License created successfully.{' Email sent to ' + customer_email + '.' if email_sent else ''}",
+    }
+
+
+@router.post("/licenses/import")
+async def import_existing_license(
+    body: dict,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Import an externally-generated license key into the management system.
+    Use this for any key that exists on a device but has no Payment record
+    (e.g. keys issued before the database, or via the desktop license_manager).
+    The key's HMAC signature is validated before importing.
+    """
+    import hashlib, hmac as _hmac
+    license_key = (body.get("license_key") or "").strip().upper()
+    customer_name = (body.get("customer_name") or "").strip()
+    customer_email = (body.get("customer_email") or "").strip()
+    notes = (body.get("notes") or "").strip()
+
+    if not license_key:
+        raise HTTPException(400, "license_key is required")
+
+    # Check it isn't already registered
+    existing = (await db.execute(
+        select(Payment).where(Payment.license_key == license_key).limit(1)
+    )).scalar_one_or_none()
+    if existing:
+        raise HTTPException(400, f"License key is already registered (payment #{existing.id})")
+
+    # Parse and validate HMAC signature
+    parts = license_key.split("-")
+    if len(parts) == 4:
+        plan_raw, hw, rand, sig = parts
+    elif len(parts) == 5:
+        plan_raw = f"{parts[0]}_{parts[1]}"
+        hw, rand, sig = parts[2], parts[3], parts[4]
+    else:
+        raise HTTPException(400, "Invalid license key format (expected PLAN-HW-RAND-SIG)")
+
+    plan = plan_raw.lower()
+    payload = f"{plan}:{hw}:{rand}"
+    expected = _hmac.new(
+        settings.LICENSE_HMAC_SECRET.encode(), payload.encode(), hashlib.sha256
+    ).hexdigest()[:16].upper()
+    if not _hmac.compare_digest(sig, expected):
+        raise HTTPException(400, "License key has an invalid signature — cannot import")
+
+    now = datetime.now(timezone.utc)
+    payment = Payment(
+        user_id=admin.id,
+        amount=0,
+        currency="EGP",
+        method=PaymentMethod.OTHER,
+        reference="admin-import",
+        status=PaymentStatus.APPROVED,
+        admin_notes=(f"Imported by admin. {notes}".strip()),
+        processed_at=now,
+        hardware_id=hw,  # store the 8-char prefix; full ID is not known
+        plan_key=plan,
+        submitter_name=customer_name or "Imported",
+        submitter_email=customer_email or "",
+        license_key=license_key,
+    )
+    db.add(payment)
+    db.add(ActivityLog(
+        actor_id=admin.id,
+        action="license_imported",
+        details={"license_key": license_key, "plan": plan},
+    ))
+    await db.commit()
+    await db.refresh(payment)
+
+    return {
+        "success": True,
+        "license_key": license_key,
+        "payment_id": payment.id,
+        "plan_key": plan,
+        "message": "License imported successfully. It is now visible and manageable in the admin panel.",
     }
 
 
@@ -1104,7 +1187,7 @@ async def update_setting(
 
 @router.post("/settings/bulk", response_model=MessageResponse)
 async def update_settings_bulk(
-    body: dict,
+    body: dict[str, str],
     admin=Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1146,6 +1229,15 @@ async def activity_log(
 
 @router.post("/checker/start", response_model=MessageResponse)
 async def start_checker(admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
+    import os as _os
+    if _os.environ.get("WORKER_MODE", "false").lower() == "true":
+        setting = (await db.execute(select(SystemSetting).where(SystemSetting.key == "scheduler_running"))).scalar_one_or_none()
+        if setting:
+            setting.value = "true"
+        else:
+            db.add(SystemSetting(key="scheduler_running", value="true"))
+        await db.commit()
+        return MessageResponse(message="Monitoring enabled — laptop worker will pick up jobs on its next cycle.")
     from app.services.scheduler import scheduler_service
     # Read custom interval from system settings (if admin changed it)
     interval_setting = (await db.execute(
@@ -1169,6 +1261,15 @@ async def start_checker(admin=Depends(get_current_admin), db: AsyncSession = Dep
 
 @router.post("/checker/stop", response_model=MessageResponse)
 async def stop_checker(admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
+    import os as _os
+    if _os.environ.get("WORKER_MODE", "false").lower() == "true":
+        setting = (await db.execute(select(SystemSetting).where(SystemSetting.key == "scheduler_running"))).scalar_one_or_none()
+        if setting:
+            setting.value = "false"
+        else:
+            db.add(SystemSetting(key="scheduler_running", value="false"))
+        await db.commit()
+        return MessageResponse(message="Monitoring paused — laptop worker will stop processing jobs on its next cycle.")
     from app.services.scheduler import scheduler_service
     scheduler_service.stop()
     # Persist state so backend does NOT auto-resume after restart
@@ -1183,6 +1284,29 @@ async def stop_checker(admin=Depends(get_current_admin), db: AsyncSession = Depe
 
 @router.get("/checker/status")
 async def checker_status(admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
+    import os as _os
+    worker_mode = _os.environ.get("WORKER_MODE", "false").lower() == "true"
+    if worker_mode:
+        rows = {r.key: r.value for r in (await db.execute(
+            select(SystemSetting).where(SystemSetting.key.in_([
+                "scheduler_running", "worker_last_run", "worker_next_run",
+                "worker_interval_minutes", "check_interval_minutes",
+            ]))
+        )).scalars().all()}
+        worker_running = rows.get("scheduler_running") == "true"
+        # Prefer the user-saved check_interval_minutes; fall back to last worker heartbeat value
+        interval = int(rows["check_interval_minutes"]) if rows.get("check_interval_minutes", "").isdigit() else \
+                   int(rows["worker_interval_minutes"]) if rows.get("worker_interval_minutes", "").isdigit() else \
+                   settings.CHECK_INTERVAL_MINUTES
+        return {
+            "running": worker_running,
+            "worker_mode": True,
+            "next_run": rows.get("worker_next_run"),
+            "last_run": rows.get("worker_last_run"),
+            "interval_minutes": interval,
+            "connected_users_ws": ws_manager.connected_users_count,
+            "connected_admins_ws": ws_manager.connected_admins_count,
+        }
     from app.services.scheduler import scheduler_service
     # Sync is_running with APScheduler's actual state (handles auto-resume after restart)
     apscheduler_running = (
@@ -1234,6 +1358,9 @@ async def run_check_now(
     admin=Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    import os as _os
+    if _os.environ.get("WORKER_MODE", "false").lower() == "true":
+        raise HTTPException(400, "WORKER_MODE=true — manual checks must be run from the laptop worker, not this server.")
     result = await db.execute(select(Branch).where(Branch.id == branch_id))
     branch = result.scalar_one_or_none()
     if not branch:
@@ -1354,24 +1481,26 @@ async def checker_logs(limit: int = 100, admin=Depends(get_current_admin)):
 
 @router.get("/system-logs")
 async def system_logs(lines: int = 200, admin=Depends(get_current_admin)):
-    """Return recent backend process logs from journalctl."""
+    """Return recent backend process logs (journalctl on Linux, in-memory buffer elsewhere)."""
     import subprocess
+    n = min(lines, 500)
     try:
         result = subprocess.run(
             ["journalctl", "-u", "tls-backend", "--no-pager",
-             "-n", str(min(lines, 500)), "--output=short-iso"],
+             "-n", str(n), "--output=short-iso"],
             capture_output=True, text=True, timeout=10
         )
         raw = result.stdout.strip() or result.stderr.strip()
         log_lines = raw.split("\n") if raw else []
-        return {"lines": log_lines, "total": len(log_lines), "source": "journalctl"}
-    except FileNotFoundError:
-        # journalctl not available — return process logs from stderr capture
-        return {"lines": ["[journalctl not available on this system]"], "total": 1, "source": "unavailable"}
-    except subprocess.TimeoutExpired:
-        return {"lines": ["[journalctl timed out]"], "total": 1, "source": "timeout"}
-    except Exception as e:
-        return {"lines": [f"[error: {e}]"], "total": 1, "source": "error"}
+        if log_lines:
+            return {"lines": log_lines, "total": len(log_lines), "source": "journalctl"}
+        # journalctl returned empty — fall through to memory buffer
+    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+        pass
+    # Fallback: in-memory Python log buffer (always available)
+    from app.main import get_system_log_lines
+    log_lines = get_system_log_lines(n)
+    return {"lines": log_lines, "total": len(log_lines), "source": "memory"}
 
 
 # ── Admin WebSocket ──────────────────────────────────────────────────

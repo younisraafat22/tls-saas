@@ -43,7 +43,7 @@ class EmailService:
         to_email: str,
         branch_name: str,
         service_type: str,
-        slot_details: dict | None = None,
+        slot_details: dict | str | None = None,
         user_name: str = "",
         unsubscribe_url: str = "",
     ) -> bool:
@@ -56,6 +56,13 @@ class EmailService:
         )
         details_html = ""
         if slot_details:
+            # slot_details may arrive as a JSON string (from worker) or a dict (from scheduler)
+            if isinstance(slot_details, str):
+                import json as _json
+                try:
+                    slot_details = _json.loads(slot_details)
+                except Exception:
+                    slot_details = {"message": slot_details}
             slots = slot_details.get("slots", [])
             message = slot_details.get("message", "")
             if slots:

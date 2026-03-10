@@ -587,7 +587,7 @@ class TLSApp:
                     spacing=0,
                 ),
                 expand=True,
-                alignment=ft.alignment.center,
+                alignment=ft.Alignment(0, 0),
             )
         )
         self.page.update()
@@ -663,8 +663,8 @@ class TLSApp:
                 padding=padding,
                 border_radius=24,
                 gradient=ft.LinearGradient(
-                    begin=ft.alignment.Alignment(-1, -1),
-                    end=ft.alignment.Alignment(1, 1),
+                    begin=ft.Alignment(-1, -1),
+                    end=ft.Alignment(1, 1),
                     colors=["#1A1F3A", "#0F1525"],
                 ),
                 border=ft.Border.all(1, ft.Colors.with_opacity(0.3, "#00D9FF")),
@@ -1376,14 +1376,9 @@ class TLSApp:
                 self.page.show_dialog(ft.SnackBar(content=ft.Text(msg, size=14, color=ft.Colors.WHITE), bgcolor=color, duration=5000))
 
         def start_monitoring(e):
+            """Called on the Flet main thread — validates inputs, then offloads to a bg thread."""
             try:
                 print("[UI] start_monitoring entered")
-                # Check license first
-                allowed, reason = can_check()
-                print(f"[UI] can_check: allowed={allowed}, reason={reason}")
-                if not allowed:
-                    _show_snack(f"⚠️ {reason}")
-                    return
 
                 db = SessionLocal()
                 settings = db.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
@@ -1393,8 +1388,7 @@ class TLSApp:
                     _show_snack("❌ Please configure your TLS email and password first, then Save.")
                     return
 
-
-                # Check for unsaved configuration changes
+                # Check for unsaved configuration changes (fast — no network)
                 unsaved_changes = []
                 try:
                     if config_service_dropdown.value and config_service_dropdown.value != (settings.service_type or 'legalization'):
@@ -1406,7 +1400,7 @@ class TLSApp:
                     if config_email_field.value is not None and config_email_field.value.strip() != (settings.tls_email or ''):
                         unsaved_changes.append("TLS Email")
                 except Exception:
-                    pass  # Dropdowns not yet created — skip check
+                    pass
 
                 if unsaved_changes:
                     db.close()
@@ -1415,22 +1409,54 @@ class TLSApp:
 
                 settings.is_monitoring = True
                 db.commit()
-                print("[UI] About to try cloud start")
-
-                # Try cloud monitoring first (server handles everything)
-                if self._try_cloud_start(settings):
-                    print("[UI] Cloud start succeeded")
-                    db.close()
-                    return
-
                 db.close()
-                print("[UI] Starting local monitoring")
-                self.checker.start_monitoring()
-                print("[UI] Local monitoring started")
+
+                # Disable the button immediately so the user can't double-click
+                _toggle_label_ctrl.value = "Starting…"
+                _toggle_icon_ctrl.name = ft.Icons.HOURGLASS_EMPTY
+                try:
+                    toggle_btn.update()
+                except Exception:
+                    pass
+
             except Exception as exc:
-                print(f"[UI] EXCEPTION in start_monitoring: {exc}")
-                import traceback; traceback.print_exc()
+                print(f"[UI] EXCEPTION in start_monitoring (pre-thread): {exc}")
                 _show_snack(f"❌ Error: {exc}")
+                return
+
+            def _bg_start():
+                """Run license check + cloud/local start on a background thread."""
+                try:
+                    # License check (may hit network — must NOT be on main thread)
+                    allowed, reason = can_check()
+                    print(f"[UI] can_check: allowed={allowed}, reason={reason}")
+                    if not allowed:
+                        self._ui_queue.put(lambda: _show_snack(f"⚠️ {reason}"))
+                        self._ui_queue.put(update_toggle_button)
+                        return
+
+                    print("[UI] About to try cloud start")
+                    db2 = SessionLocal()
+                    s2 = db2.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
+                    db2.close()
+
+                    # Try cloud monitoring first (network call — safe on bg thread)
+                    if self._try_cloud_start(s2):
+                        print("[UI] Cloud start succeeded")
+                        self._ui_queue.put(update_toggle_button)
+                        return
+
+                    print("[UI] Starting local monitoring")
+                    self.checker.start_monitoring()
+                    print("[UI] Local monitoring started")
+                    self._ui_queue.put(update_toggle_button)
+                except Exception as exc:
+                    print(f"[UI] EXCEPTION in _bg_start: {exc}")
+                    import traceback; traceback.print_exc()
+                    self._ui_queue.put(lambda: _show_snack(f"❌ Error: {exc}"))
+                    self._ui_queue.put(update_toggle_button)
+
+            threading.Thread(target=_bg_start, daemon=True).start()
 
         def stop_monitoring(e):
             db = SessionLocal()
@@ -1857,6 +1883,19 @@ class TLSApp:
                 start_monitoring(e)
             update_toggle_button()
 
+        # Use explicit child controls so text/icon update reliably in Flet 0.80+
+        _toggle_icon_ctrl = ft.Icon(
+            ft.Icons.PLAY_ARROW if not is_monitoring else ft.Icons.STOP,
+            color="#0A0E27" if not is_monitoring else "#FF6B6B",
+            size=18,
+        )
+        _toggle_label_ctrl = ft.Text(
+            "Start Monitoring" if not is_monitoring else "Stop Monitoring",
+            color="#0A0E27" if not is_monitoring else "#FF6B6B",
+            weight=ft.FontWeight.W_600,
+            size=14,
+        )
+
         def update_toggle_button():
             db = SessionLocal()
             settings = db.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
@@ -1864,20 +1903,21 @@ class TLSApp:
             db.close()
 
             if is_active:
-                toggle_btn.text = "Stop Monitoring"
-                toggle_btn.icon = ft.Icons.STOP
+                _toggle_label_ctrl.value = "Stop Monitoring"
+                _toggle_label_ctrl.color = "#FF6B6B"
+                _toggle_icon_ctrl.name = ft.Icons.STOP
+                _toggle_icon_ctrl.color = "#FF6B6B"
                 toggle_btn.style = ft.ButtonStyle(
                     bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.RED),
-                    color="#FF6B6B",
                 )
             else:
-                toggle_btn.text = "Start Monitoring"
-                toggle_btn.icon = ft.Icons.PLAY_ARROW
+                _toggle_label_ctrl.value = "Start Monitoring"
+                _toggle_label_ctrl.color = "#0A0E27"
+                _toggle_icon_ctrl.name = ft.Icons.PLAY_ARROW
+                _toggle_icon_ctrl.color = "#0A0E27"
                 toggle_btn.style = ft.ButtonStyle(
                     bgcolor="#00D9FF",
-                    color="#0A0E27",
                 )
-            # Force control-level update to ensure text change renders
             try:
                 toggle_btn.update()
             except Exception:
@@ -1885,13 +1925,15 @@ class TLSApp:
             self.page.update()
 
         toggle_btn = ft.FilledButton(
-            "Start Monitoring" if not is_monitoring else "Stop Monitoring",
-            icon=ft.Icons.PLAY_ARROW if not is_monitoring else ft.Icons.STOP,
+            content=ft.Row(
+                [_toggle_icon_ctrl, _toggle_label_ctrl],
+                spacing=8, tight=True,
+                alignment=ft.MainAxisAlignment.CENTER,
+            ),
             on_click=toggle_monitoring,
             height=44, width=500,
             style=ft.ButtonStyle(
                 bgcolor="#00D9FF" if not is_monitoring else ft.Colors.with_opacity(0.3, ft.Colors.RED),
-                color="#0A0E27" if not is_monitoring else "#FF6B6B",
             ),
         )
 

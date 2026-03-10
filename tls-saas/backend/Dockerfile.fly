@@ -1,0 +1,18 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Minimal system deps (no browser needed on Fly.io — worker handles Selenium locally)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Use slim requirements (no Selenium / Patchright)
+COPY requirements-fly.txt .
+RUN pip install --no-cache-dir -r requirements-fly.txt
+
+COPY . .
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

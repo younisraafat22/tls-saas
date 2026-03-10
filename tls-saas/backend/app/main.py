@@ -20,6 +20,23 @@ from app.models import (
 from app.auth import hash_password, decode_token, get_current_user
 from app.websocket import ws_manager
 
+from collections import deque as _deque
+
+# In-memory system log buffer — captures all Python log output.
+# Used as fallback for the admin system-logs panel when journalctl is unavailable (e.g. Fly.io).
+_system_log_buffer: _deque = _deque(maxlen=500)
+
+class _MemoryLogHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            _system_log_buffer.append(self.format(record))
+        except Exception:
+            pass
+
+def get_system_log_lines(n: int = 200) -> list:
+    lines = list(_system_log_buffer)
+    return lines[-n:] if len(lines) > n else lines
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -27,6 +44,14 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("main")
+
+# Attach memory handler to root logger so all app logs are captured
+_mem_handler = _MemoryLogHandler()
+_mem_handler.setFormatter(logging.Formatter(
+    "%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+))
+logging.getLogger().addHandler(_mem_handler)
 
 
 async def seed_data():
@@ -435,38 +460,46 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Legalization branch cleanup migration skipped: {e}")
 
-    # Resume scheduler if it was running before restart (persisted in system settings)
-    from app.services.scheduler import scheduler_service
-    async with async_session() as db:
-        # Read custom interval if set by admin
-        interval_r = await db.execute(
-            select(SystemSetting).where(SystemSetting.key == "check_interval_minutes")
-        )
-        interval_setting = interval_r.scalar_one_or_none()
-        if interval_setting:
-            try:
-                settings.CHECK_INTERVAL_MINUTES = max(5, int(interval_setting.value))
-                logger.info(f"Custom check interval: {settings.CHECK_INTERVAL_MINUTES} min")
-            except (ValueError, TypeError):
-                pass
+    # In WORKER_MODE (Fly.io cloud deployment) the scheduler is disabled.
+    # Monitoring is handled by the laptop worker polling /api/worker/jobs.
+    import os as _os
+    _worker_mode = _os.environ.get("WORKER_MODE", "false").lower() == "true"
 
-        resume_r = await db.execute(
-            select(SystemSetting).where(SystemSetting.key == "scheduler_running")
-        )
-        resume_setting = resume_r.scalar_one_or_none()
-        if resume_setting and resume_setting.value == "true":
-            scheduler_service.start()
-            logger.info(f"Server ready. Monitoring scheduler auto-resumed (interval: {settings.CHECK_INTERVAL_MINUTES} min).")
-        else:
-            logger.info("Server ready. Start monitoring manually from Admin → Monitoring.")
+    if _worker_mode:
+        logger.info("WORKER_MODE=true — scheduler disabled. Laptop worker handles monitoring.")
+    else:
+        # Resume scheduler if it was running before restart (persisted in system settings)
+        from app.services.scheduler import scheduler_service
+        async with async_session() as db:
+            interval_r = await db.execute(
+                select(SystemSetting).where(SystemSetting.key == "check_interval_minutes")
+            )
+            interval_setting = interval_r.scalar_one_or_none()
+            if interval_setting:
+                try:
+                    settings.CHECK_INTERVAL_MINUTES = max(5, int(interval_setting.value))
+                    logger.info(f"Custom check interval: {settings.CHECK_INTERVAL_MINUTES} min")
+                except (ValueError, TypeError):
+                    pass
+
+            resume_r = await db.execute(
+                select(SystemSetting).where(SystemSetting.key == "scheduler_running")
+            )
+            resume_setting = resume_r.scalar_one_or_none()
+            if resume_setting and resume_setting.value == "true":
+                scheduler_service.start()
+                logger.info(f"Server ready. Monitoring scheduler auto-resumed (interval: {settings.CHECK_INTERVAL_MINUTES} min).")
+            else:
+                logger.info("Server ready. Start monitoring manually from Admin → Monitoring.")
 
     yield
 
     # Shutdown
-    from app.services.scheduler import scheduler_service
-    scheduler_service.stop()
-    from app.services.checker import tls_checker
-    await tls_checker.close()
+    if not _worker_mode:
+        from app.services.scheduler import scheduler_service
+        scheduler_service.stop()
+        from app.services.checker import tls_checker
+        await tls_checker.close()
     logger.info("Shutdown complete")
 
 

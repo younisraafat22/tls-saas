@@ -4,10 +4,13 @@ app = 'backend-cold-sound-6496'
 primary_region = 'fra'
 
 [build]
+  dockerfile = "Dockerfile.fly"
 
 [env]
   PORT = "8000"
-  BROWSER_HEADLESS = "true"
+  # WORKER_MODE=true disables the APScheduler / Selenium on Fly.io.
+  # Monitoring is handled by the laptop worker (worker.py) instead.
+  WORKER_MODE = "true"
 
 [mounts]
   source = "tls_data"
@@ -29,6 +32,6 @@ primary_region = 'fra'
     timeout = "10s"
 
 [[vm]]
-  memory = '1gb'
+  memory = '512mb'
   cpu_kind = 'shared'
   cpus = 1

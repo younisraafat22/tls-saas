@@ -1,0 +1,18 @@
+[Unit]
+Description=TLS Monitoring Worker
+After=network.target tls-backend.service
+
+[Service]
+Type=simple
+User=younis
+WorkingDirectory=/home/younis/tls-saas/tls-saas/backend
+ExecStart=/home/younis/tls-saas/tls-saas/backend/venv/bin/python worker.py
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+# Load worker env
+EnvironmentFile=/home/younis/tls-saas/tls-saas/backend/.env.worker
+
+[Install]
+WantedBy=multi-user.target

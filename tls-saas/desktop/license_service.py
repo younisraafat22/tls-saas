@@ -534,6 +534,47 @@ def activate_trial() -> tuple[bool, str]:
     return True, f"Trial activated! Expires in {trial_info['duration_days']} day(s)."
 
 
+# ── Revocation check cache (in-memory, per session) ──────────────────────────
+# Avoids blocking the UI on every get_license_status() call.
+# Format: {"time": float | None, "not_revoked": bool}
+_revoke_cache: dict = {"time": None, "not_revoked": True}
+_REVOKE_CACHE_TTL = 3600  # 1 hour
+
+# Stable URL to discover the current backend URL (survives tunnel restarts)
+_VERCEL_URL = "https://tls-saas.vercel.app"
+_BACKEND_URL_CACHE: dict = {"time": None, "url": None}
+_BACKEND_URL_TTL = 3600  # 1 hour
+
+
+def _fetch_current_backend_url() -> str | None:
+    """
+    Fetch the current backend URL from the stable Vercel deployment.
+    The Vercel app always knows which tunnel is active via NEXT_PUBLIC_API_URL.
+    Returns the URL string, or None on failure.  Results are cached for 1 hour.
+    """
+    now = time.time()
+    if (_BACKEND_URL_CACHE["time"] is not None
+            and now - _BACKEND_URL_CACHE["time"] < _BACKEND_URL_TTL
+            and _BACKEND_URL_CACHE["url"]):
+        return _BACKEND_URL_CACHE["url"]
+    try:
+        req = urllib.request.Request(
+            f"{_VERCEL_URL}/api/backend-url",
+            headers={"Accept": "application/json"},
+            method="GET",
+        )
+        with _safe_urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+            url = (data.get("url") or "").rstrip("/")
+            if url:
+                _BACKEND_URL_CACHE["time"] = now
+                _BACKEND_URL_CACHE["url"] = url
+                return url
+    except Exception as exc:
+        logger.debug(f"[LICENSE] Failed to fetch backend URL from Vercel: {exc}")
+    return None
+
+
 def get_license_status() -> dict | None:
     """
     Get current license status.
@@ -563,48 +604,70 @@ def get_license_status() -> dict | None:
             "message": "License expired",
         }
 
-    # Server-side revocation check (best-effort, non-blocking)
-    # Only check for non-trial licenses to reduce server load
+    # Server-side revocation check (best-effort, cached per session)
+    # Only check for non-trial licenses to reduce server load.
     if data["plan"] != "trial" and data.get("key"):
-        # Try both LICENSE_SERVER_URL and BACKEND_URL in case they differ
-        urls_to_try = []
-        server_url = (Config.LICENSE_SERVER_URL or "").rstrip("/")
-        if server_url:
-            urls_to_try.append(server_url)
-        backend_url = (Config.BACKEND_URL or "").rstrip("/")
-        if backend_url and backend_url != server_url:
-            urls_to_try.append(backend_url)
+        now_ts = time.time()
+        cache_valid = (
+            _revoke_cache["time"] is not None
+            and now_ts - _revoke_cache["time"] < _REVOKE_CACHE_TTL
+        )
+        if cache_valid and not _revoke_cache["not_revoked"]:
+            # Cached as revoked — enforce it
+            logger.info("[LICENSE] Revoked (cached) — removing local license")
+            if os.path.exists(LICENSE_FILE):
+                os.remove(LICENSE_FILE)
+            return None
 
-        for try_url in urls_to_try:
+        if not cache_valid:
+            # Build list of URLs to try: Vercel-discovered URL first, then hardcoded fallbacks
+            urls_to_try = []
+            discovered = _fetch_current_backend_url()
+            if discovered:
+                urls_to_try.append(discovered)
+            server_url = (Config.LICENSE_SERVER_URL or "").rstrip("/")
+            if server_url and server_url not in urls_to_try:
+                urls_to_try.append(server_url)
+            backend_url = (Config.BACKEND_URL or "").rstrip("/")
+            if backend_url and backend_url not in urls_to_try:
+                urls_to_try.append(backend_url)
+
             revoked = False
-            for _attempt in range(3):
-                try:
-                    payload = json.dumps({"license_key": data["key"]}).encode()
-                    req = urllib.request.Request(
-                        f"{try_url}/api/monitoring/license/verify",
-                        data=payload,
-                        headers={"Content-Type": "application/json"},
-                        method="POST",
-                    )
-                    with _safe_urlopen(req, timeout=15) as resp:
-                        result = json.loads(resp.read())
-                        if result.get("found") and not result.get("is_active", True):
-                            # License has been revoked on server
-                            logger.info("[LICENSE] Revoked by server — removing local license")
-                            if os.path.exists(LICENSE_FILE):
-                                os.remove(LICENSE_FILE)
-                            return None
-                        else:
-                            logger.debug(f"[LICENSE] Server verify OK: is_active={result.get('is_active')}")
-                    break  # success — no need to try other URLs
-                except Exception as exc:
-                    logger.warning(f"[LICENSE] Revocation check attempt {_attempt+1}/3 failed ({try_url}): {exc}")
-                    if _attempt < 2:
-                        time.sleep(2)
-            else:
-                # All attempts failed for this URL — try next URL
-                continue
-            break  # If inner loop succeeded (via break), stop trying other URLs
+            check_done = False
+            for try_url in urls_to_try:
+                for _attempt in range(2):
+                    try:
+                        payload = json.dumps({"license_key": data["key"]}).encode()
+                        req = urllib.request.Request(
+                            f"{try_url}/api/monitoring/license/verify",
+                            data=payload,
+                            headers={"Content-Type": "application/json"},
+                            method="POST",
+                        )
+                        with _safe_urlopen(req, timeout=5) as resp:
+                            result = json.loads(resp.read())
+                            if result.get("found") and not result.get("is_active", True):
+                                revoked = True
+                            else:
+                                logger.debug(f"[LICENSE] Server verify OK: is_active={result.get('is_active')}")
+                        check_done = True
+                        break  # success — stop retrying this URL
+                    except Exception as exc:
+                        logger.warning(f"[LICENSE] Revocation check attempt {_attempt+1}/2 failed ({try_url}): {exc}")
+                        if _attempt < 1:
+                            time.sleep(1)
+                if check_done:
+                    break  # stop trying other URLs
+
+            if check_done:
+                _revoke_cache["time"] = now_ts
+                _revoke_cache["not_revoked"] = not revoked
+
+            if revoked:
+                logger.info("[LICENSE] Revoked by server — removing local license")
+                if os.path.exists(LICENSE_FILE):
+                    os.remove(LICENSE_FILE)
+                return None
 
     plan = data["plan"]
     plan_info = PLANS.get(plan, PLANS["trial"])
