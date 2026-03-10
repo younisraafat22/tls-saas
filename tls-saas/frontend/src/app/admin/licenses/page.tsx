@@ -334,6 +334,105 @@ function ConfirmDialog({
   );
 }
 
+interface ImportModalProps {
+  onClose: () => void;
+  onImported: () => void;
+}
+
+function ImportLicenseModal({ onClose, onImported }: ImportModalProps) {
+  const [form, setForm] = useState({ license_key: "", customer_name: "", customer_email: "", notes: "" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.license_key.trim()) { setError("License key is required"); return; }
+    setError("");
+    setLoading(true);
+    try {
+      await adminApi.importLicense(form);
+      onImported();
+      onClose();
+    } catch (err: any) {
+      setError(err?.detail || err?.message || "Failed to import license");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+        className="glass-card w-full max-w-lg p-6 space-y-5"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <Shield className="w-5 h-5 text-amber-400" />
+            Import Existing License
+          </h2>
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-300 flex gap-2">
+            <Info className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>Register a license key that was generated outside this system. The HMAC signature is verified before importing. Once imported you can revoke or manage it normally.</span>
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-400 mb-1.5">
+              License Key <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="text"
+              value={form.license_key}
+              onChange={(e) => setForm({ ...form, license_key: e.target.value })}
+              placeholder="e.g. ALL_IN_ONE-26D19C80-4AD385C8-11105D53C4558AFF"
+              className="input-field font-mono text-sm"
+              autoFocus
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1.5">Customer Name</label>
+              <input type="text" value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} placeholder="Optional" className="input-field" />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1.5">Customer Email</label>
+              <input type="email" value={form.customer_email} onChange={(e) => setForm({ ...form, customer_email: e.target.value })} placeholder="Optional" className="input-field" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-400 mb-1.5">Notes</label>
+            <input type="text" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="e.g. Issued before migration" className="input-field" />
+          </div>
+
+          {error && (
+            <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{error}</div>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 btn-secondary py-2.5">Cancel</button>
+            <button type="submit" disabled={loading} className="flex-1 btn-primary py-2.5 flex items-center justify-center gap-2 disabled:opacity-50">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+              Import
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 export default function AdminLicensesPage() {
   const [licenses, setLicenses] = useState<LicenseRecord[]>([]);
   const [total, setTotal] = useState(0);
@@ -347,6 +446,7 @@ export default function AdminLicensesPage() {
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const [copied, setCopied] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [confirm, setConfirm] = useState<{ id: number; action: "revoke" | "delete" | "regenerate" } | null>(null);
 
   useEffect(() => {
@@ -471,6 +571,15 @@ export default function AdminLicensesPage() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {showImport && (
+          <ImportLicenseModal
+            onClose={() => setShowImport(false)}
+            onImported={() => { showToast("success", "License imported and is now manageable"); loadLicenses(); }}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -490,6 +599,9 @@ export default function AdminLicensesPage() {
         <div className="flex items-center gap-2">
           <button onClick={loadLicenses} className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors" title="Refresh">
             <RefreshCw className="w-4 h-4" />
+          </button>
+          <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl text-sm font-medium hover:bg-amber-500/20 transition-colors">
+            <Shield className="w-4 h-4" /> Import Key
           </button>
           <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2 px-4 py-2">
             <Plus className="w-4 h-4" /> Generate License
