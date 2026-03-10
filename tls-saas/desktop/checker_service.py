@@ -66,12 +66,40 @@ try:
 except ImportError:
     UNDETECTED_CHROME_AVAILABLE = False
 
+# selenium-stealth — patches Navigator/WebGL/Permissions APIs inspected by reCAPTCHA
+try:
+    from selenium_stealth import stealth as _selenium_stealth
+    STEALTH_AVAILABLE = True
+except ImportError:
+    STEALTH_AVAILABLE = False
+
 # Window transparency helper for "invisible" mode
 try:
     from window_hider import ChromeWindowHider, get_chrome_hwnds, find_new_chrome_hwnd
     WINDOW_HIDER_AVAILABLE = True
 except ImportError:
     WINDOW_HIDER_AVAILABLE = False
+
+# Realistic viewport sizes — one is chosen randomly per session so the
+# browser reports a non-uniform device dimension to fingerprinters.
+_REALISTIC_VIEWPORTS = [
+    (1366, 768),
+    (1440, 900),
+    (1600, 900),
+    (1920, 1080),
+    (1280, 800),
+    (1536, 864),
+]
+
+
+def _get_chrome_profile_dir() -> str:
+    """Return a persistent Chrome profile dir inside AppData.
+    Re-using the same profile across sessions means Google sees accumulated
+    browsing history and cookies, making the browser look like a real user."""
+    from config import BASE_DIR
+    profile_dir = os.path.join(str(BASE_DIR), "chrome_profile")
+    os.makedirs(profile_dir, exist_ok=True)
+    return profile_dir
 
 
 def _get_chrome_major_version() -> int | None:
@@ -384,6 +412,36 @@ class TLSCheckerService:
         except Exception:
             pass
 
+    def _apply_stealth(self):
+        """Patch browser fingerprint APIs inspected by reCAPTCHA / Cloudflare.
+
+        Uses selenium-stealth when available, otherwise falls back to inline JS
+        patches.  Called once right after the ChromeDriver is created.
+        """
+        if self.driver is None:
+            return
+        try:
+            if STEALTH_AVAILABLE:
+                _selenium_stealth(
+                    self.driver,
+                    languages=["en-US", "en"],
+                    vendor="Google Inc.",
+                    platform="Win32",
+                    webgl_vendor="Intel Inc.",
+                    renderer="Intel Iris OpenGL Engine",
+                    fix_hairline=True,
+                )
+            else:
+                # Minimal JS fallback: hide the webdriver flag and add fake plugins
+                self.driver.execute_script(
+                    "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+                    "Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});"
+                    "Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});"
+                    "window.chrome = {runtime: {}};"
+                )
+        except Exception as e:
+            print(f"[Checker] Stealth apply failed (non-fatal): {e}")
+
     def _setup_driver(self):
         """Setup Selenium driver"""
         try:
@@ -448,16 +506,23 @@ class TLSCheckerService:
                     # is made nearly-transparent via Win32 layered-window API
                     # (see window_hider.py) so Chrome stays at normal screen
                     # coordinates and passes all anti-bot visibility checks.
+                    # Pick a random realistic viewport so device metrics vary
+                    # across sessions — uniform dimensions are an easy bot signal.
+                    _vw, _vh = random.choice(_REALISTIC_VIEWPORTS)
+
                     driver_kwargs = {
                         "uc": True,
                         "headless": False,
                         "headless2": False,
                         "driver_version": driver_ver,
-                        # Disable Chrome's occlusion tracker so it never
-                        # throttles the renderer when the window is behind
-                        # the Flet app window (EXE mode).  Without this flag
-                        # the React SPA stops re-rendering month selectors.
-                        "chromium_arg": "--disable-features=CalculateNativeWinOcclusion",
+                        # user_data_dir: persistent profile so Google sees
+                        # accumulated history/cookies (looks like a real user).
+                        "user_data_dir": _get_chrome_profile_dir(),
+                        # Comma-separated chromium args accepted by SeleniumBase.
+                        "chromium_arg": (
+                            "--disable-features=CalculateNativeWinOcclusion"
+                            f",--window-size={_vw},{_vh}"
+                        ),
                     }
                     
                     # If running as frozen app, explicitly set binary location
@@ -473,6 +538,8 @@ class TLSCheckerService:
                                 break
 
                     self.driver = Driver(**driver_kwargs)
+                    # Apply fingerprint stealth patches immediately after launch
+                    self._apply_stealth()
 
                     # Maximize the window — the OS preserves maximized state
                     # even across SeleniumBase UC reconnects.  For background
@@ -512,12 +579,16 @@ class TLSCheckerService:
                 options.add_argument('--disable-dev-shm-usage')
                 options.add_argument('--no-sandbox')
                 options.add_argument('--disable-features=CalculateNativeWinOcclusion')
+                # Persistent profile — accumulates cookies/history across sessions
+                options.add_argument(f'--user-data-dir={_get_chrome_profile_dir()}')
                 options.add_experimental_option("prefs", download_prefs)
+                # Randomised viewport so device dimensions vary each session
+                _vw_uc, _vh_uc = random.choice(_REALISTIC_VIEWPORTS)
                 # Only use real headless if window hider is unavailable;
                 # otherwise Chrome starts visible and is made transparent.
                 if Config.BROWSER_HEADLESS and not WINDOW_HIDER_AVAILABLE:
                     options.add_argument('--headless=new')
-                    options.add_argument('--window-size=1920,1080')
+                    options.add_argument(f'--window-size={_vw_uc},{_vh_uc}')
                 options.add_argument('--start-maximized')
                 
                 # Clean up stale undetected_chromedriver files to prevent
@@ -551,6 +622,7 @@ class TLSCheckerService:
                 except Exception:
                     pass
                 self.driver = uc.Chrome(options=options, version_main=chrome_ver_uc)
+                self._apply_stealth()
                 self.driver.maximize_window()
                 if WINDOW_HIDER_AVAILABLE and self._chrome_hider and Config.BROWSER_HEADLESS:
                     new_hwnd = find_new_chrome_hwnd(_pre_chrome_hwnds, timeout=8)
@@ -569,16 +641,20 @@ class TLSCheckerService:
             options.add_argument('--log-level=3')
             options.add_argument('--disable-logging')
             options.add_argument('--disable-features=CalculateNativeWinOcclusion')
+            # Persistent profile — accumulates cookies/history across sessions
+            options.add_argument(f'--user-data-dir={_get_chrome_profile_dir()}')
             options.add_experimental_option("prefs", download_prefs)
+            # Randomised viewport so device dimensions vary each session
+            _vw_fb, _vh_fb = random.choice(_REALISTIC_VIEWPORTS)
             # Only use real headless if window hider is unavailable;
             # otherwise Chrome starts visible and is made transparent.
             if Config.BROWSER_HEADLESS and not WINDOW_HIDER_AVAILABLE:
                 options.add_argument('--headless=new')
-                options.add_argument('--window-size=1920,1080')
+                options.add_argument(f'--window-size={_vw_fb},{_vh_fb}')
             options.add_argument('--start-maximized')
             
             self.driver = webdriver.Chrome(options=options)
-            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            self._apply_stealth()
             self.driver.maximize_window()
             if WINDOW_HIDER_AVAILABLE and self._chrome_hider and Config.BROWSER_HEADLESS:
                 new_hwnd = find_new_chrome_hwnd(_pre_chrome_hwnds, timeout=8)
