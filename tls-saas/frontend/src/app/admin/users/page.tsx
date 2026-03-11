@@ -65,12 +65,12 @@ function UserDetailModal({
         {/* User info grid */}
         <div className="grid grid-cols-2 gap-2 text-sm">
           {[
-            ["Phone", user.phone || "â€”"],
+            ["Phone", user.phone || "—"],
             ["Status", user.is_active ? "Active" : "Disabled"],
             ["Subscription", user.subscription_status?.replace(/_/g, " ") || "None"],
-            ["Plan", user.plan_name || "â€”"],
+            ["Plan", user.plan_name || "—"],
             ["Joined", new Date(user.created_at).toLocaleDateString()],
-            ["Last Login", user.last_login ? new Date(user.last_login).toLocaleDateString() : "â€”"],
+            ["Last Login", user.last_login ? new Date(user.last_login).toLocaleDateString() : "—"],
           ].map(([label, val]) => (
             <div key={label} className="bg-white/5 rounded-lg p-3">
               <div className="text-gray-400 text-xs mb-1">{label}</div>
