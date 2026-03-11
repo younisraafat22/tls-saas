@@ -164,12 +164,6 @@ export default function AdminUsersPage() {
       showToast("error", err?.detail || "Failed to send reset email");
     }
   };
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const toggleAdmin = async (userId: number, isAdmin: boolean) => {
     try {
