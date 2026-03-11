@@ -83,7 +83,7 @@ Type: filesandordirs; Name: "{userappdata}\TLSAppointmentChecker"
 
 [Run]
 ; Install Cloudflare WARP silently before launching the app
-Filename: "msiexec.exe"; Parameters: "/i ""{tmp}\Cloudflare_WARP.msi"" /quiet /norestart"; StatusMsg: "Installing Cloudflare WARP (CAPTCHA bypass)..."; Check: not IsWarpInstalled; Flags: waituntilterminated
+Filename: "msiexec.exe"; Parameters: "/i ""{tmp}\Cloudflare_WARP.msi"" /quiet /norestart"; StatusMsg: "Installing Cloudflare WARP..."; Check: not IsWarpInstalled; Flags: waituntilterminated
 
 ; Launch app after installation
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

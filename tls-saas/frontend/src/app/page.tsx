@@ -573,7 +573,7 @@ function DownloadApp() {
     download_url: string;
     size_mb: string;
     requirements: string;
-  }>({ version: "1.0.0", download_url: "", size_mb: "~132", requirements: "Windows 10/11" });
+  }>({ version: "1.0.0", download_url: "", size_mb: "~260", requirements: "Windows 10/11" });
 
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.108:8000";
