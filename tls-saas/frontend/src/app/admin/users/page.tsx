@@ -7,17 +7,15 @@ import {
   Users, Search, Shield, ShieldOff,
   Ban, CheckCircle2, Trash2, Eye, X,
   CreditCard, KeyRound, RefreshCw,
-  ChevronLeft, ChevronRight, Send,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 
 function UserDetailModal({
   user,
   onClose,
-  onPasswordReset,
 }: {
   user: any;
   onClose: () => void;
-  onPasswordReset: (userId: number) => void;
 }) {
   const [payments, setPayments] = useState<any[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(true);
@@ -78,14 +76,6 @@ function UserDetailModal({
             </div>
           ))}
         </div>
-
-        {/* Password reset button */}
-        <button
-          onClick={() => { onPasswordReset(user.id); onClose(); }}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary-500/10 border border-primary-500/30 text-primary-400 hover:bg-primary-500/20 transition-colors text-sm font-medium"
-        >
-          <Send className="w-4 h-4" /> Send Password Reset Email
-        </button>
 
         {/* Payment history */}
         <div>
@@ -155,15 +145,6 @@ export default function AdminUsersPage() {
   }, [page]);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
-
-  const handlePasswordReset = async (userId: number) => {
-    try {
-      await adminApi.sendPasswordReset(userId);
-      showToast("success", "Password reset email sent!");
-    } catch (err: any) {
-      showToast("error", err?.message || err?.detail || "Failed to send reset email");
-    }
-  };
 
   const toggleAdmin = async (userId: number, isAdmin: boolean) => {
     try {
@@ -257,7 +238,6 @@ export default function AdminUsersPage() {
           <UserDetailModal
             user={selectedUser}
             onClose={() => setSelectedUser(null)}
-            onPasswordReset={handlePasswordReset}
           />
         )}
       </AnimatePresence>
