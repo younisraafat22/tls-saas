@@ -76,10 +76,77 @@ class TLSChecker:
     Designed to be called per-branch by the scheduler.
     """
 
+    # Path to warp-cli — works on both Windows (worker laptop) and Linux (Fly.io)
+    WARP_CLI_WINDOWS = r"C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe"
+    WARP_CLI_LINUX = "/usr/bin/warp-cli"
+
     def __init__(self):
         self._browser = None
         self._playwright = None
         self._loop = None  # Dedicated event loop for Playwright thread
+        self._warp_enabled = False  # True when WARP is active for this session
+
+    # ── Cloudflare WARP helpers ─────────────────────────────────────────
+
+    def _warp_cli_path(self) -> str:
+        """Return the platform-appropriate warp-cli path."""
+        if sys.platform == "win32":
+            return self.WARP_CLI_WINDOWS
+        return self.WARP_CLI_LINUX
+
+    def _warp_available(self) -> bool:
+        """Check that warp-cli binary exists."""
+        return os.path.isfile(self._warp_cli_path())
+
+    def _warp_connect(self, log=None) -> bool:
+        """Connect WARP and wait up to 30 s for the tunnel to be up."""
+        cli = self._warp_cli_path()
+        _log = log or (lambda m, *a: None)
+        no_win = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        try:
+            subprocess.run(
+                [cli, "connect"],
+                capture_output=True, timeout=15,
+                creationflags=no_win,
+            )
+        except Exception as exc:
+            _log(f"WARP connect failed: {exc}", "warn")
+            return False
+        # Poll until status shows 'Connected' (not 'Connecting')
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            try:
+                r = subprocess.run(
+                    [cli, "status"],
+                    capture_output=True, text=True, timeout=5,
+                    creationflags=no_win,
+                )
+                status = r.stdout
+                if "Connected" in status and "Connecting" not in status:
+                    self._warp_enabled = True
+                    _log("✅ WARP connected — IP rotated")
+                    return True
+            except Exception:
+                pass
+            time.sleep(1)
+        _log("WARP did not reach Connected state within 30 s", "warn")
+        return False
+
+    def _warp_disconnect(self, log=None) -> None:
+        """Disconnect WARP if active."""
+        if not self._warp_enabled:
+            return
+        cli = self._warp_cli_path()
+        no_win = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        try:
+            subprocess.run(
+                [cli, "disconnect"],
+                capture_output=True, timeout=10,
+                creationflags=no_win,
+            )
+        except Exception:
+            pass
+        self._warp_enabled = False
 
     def _get_dedicated_loop(self):
         """Get or create a ProactorEventLoop for Playwright (Windows-safe)."""
@@ -107,13 +174,14 @@ class TLSChecker:
         logger.info("Patchright browser launched")
 
     async def close(self):
-        """Shut down browser."""
+        """Shut down browser and disconnect WARP if active."""
         if self._browser:
             await self._browser.close()
             self._browser = None
         if self._playwright:
             await self._playwright.stop()
             self._playwright = None
+        self._warp_disconnect()
 
     # ── Public entry point ───────────────────────────────────────────
 
@@ -823,6 +891,19 @@ class TLSChecker:
                     )
                     if "automated queries" in body_text or "unusual traffic" in body_text:
                         log("Google detected automation — rate-limited", "warn")
+                        if self._warp_available() and not self._warp_enabled:
+                            log("Connecting WARP to rotate IP...", "warn")
+                            connected = await asyncio.get_event_loop().run_in_executor(
+                                None, lambda: self._warp_connect(log)
+                            )
+                            if connected:
+                                log("WARP connected — closing browser for fresh session", "warn")
+                                try:
+                                    await self._browser.close()
+                                except Exception:
+                                    pass
+                                self._browser = None
+                                return  # scheduler will retry with fresh IP
                         if attempt < MAX_ATTEMPTS:
                             wait_time = 10 * attempt
                             log(f"Waiting {wait_time}s before retry (cooldown)...", "warn")
@@ -866,6 +947,19 @@ class TLSChecker:
                     err_el = await bframe.query_selector(".rc-audiochallenge-error-message")
                     if err_el and await err_el.is_visible():
                         log("Google blocked audio challenges (rate-limited)", "warn")
+                        if self._warp_available() and not self._warp_enabled:
+                            log("Connecting WARP to rotate IP...", "warn")
+                            connected = await asyncio.get_event_loop().run_in_executor(
+                                None, lambda: self._warp_connect(log)
+                            )
+                            if connected:
+                                log("WARP connected — closing browser for fresh session", "warn")
+                                try:
+                                    await self._browser.close()
+                                except Exception:
+                                    pass
+                                self._browser = None
+                                return  # scheduler will retry with fresh IP
                         if attempt < MAX_ATTEMPTS:
                             await asyncio.sleep(5)
                             continue
