@@ -843,11 +843,11 @@ function Footer() {
               <img src="/icons/icon-192-white.png" alt="TLS Appointment Checker" className="w-8 h-8 rounded-lg" />
               <span className="font-display font-bold">TLS Appointment Checker</span>
             </div>
-            <p className="text-gray-500 text-sm">{t.footer.desc}</p>
+            <p className="text-gray-400 text-sm">{t.footer.desc}</p>
           </div>
 
           <div>
-            <h4 className="font-semibold mb-4">{t.footer.quickLinks}</h4>
+            <h3 className="font-semibold mb-4">{t.footer.quickLinks}</h3>
             <ul className="space-y-2 text-sm text-gray-400">
               <li><a href="#features" className="hover:text-white transition-colors">{t.footer.features}</a></li>
               <li><a href="#pricing" className="hover:text-white transition-colors">{t.footer.pricing}</a></li>
@@ -858,7 +858,7 @@ function Footer() {
           </div>
 
           <div>
-            <h4 className="font-semibold mb-4">{t.footer.legal}</h4>
+            <h3 className="font-semibold mb-4">{t.footer.legal}</h3>
             <ul className="space-y-2 text-sm text-gray-400">
               <li><Link href="/terms" className="hover:text-white transition-colors">{t.footer.terms}</Link></li>
               <li><Link href="/privacy" className="hover:text-white transition-colors">{t.footer.privacy}</Link></li>
@@ -868,7 +868,7 @@ function Footer() {
           </div>
         </div>
 
-        <div className="border-t border-white/5 mt-8 pt-8 text-center text-gray-500 text-xs">
+        <div className="border-t border-white/5 mt-8 pt-8 text-center text-gray-400 text-xs">
           &copy; {new Date().getFullYear()} TLS Appointment Checker. {t.footer.rights}
         </div>
       </div>
