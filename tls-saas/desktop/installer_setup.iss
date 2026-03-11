@@ -57,6 +57,9 @@ Source: "dist\TLSAppointmentChecker\*"; DestDir: "{app}"; Flags: ignoreversion r
 ; Documentation
 Source: "LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion isreadme
 
+; Cloudflare WARP (bundled prerequisite for CAPTCHA bypass)
+Source: "Cloudflare_WARP.msi"; DestDir: "{tmp}"; Flags: deleteafterinstall
+
 [Icons]
 ; Start Menu
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\_internal\Logos\icon_BLACK.ico"; WorkingDir: "{app}"
@@ -79,10 +82,18 @@ Type: files; Name: "{userappdata}\TLSAppointmentChecker\checker_debug.log"
 Type: filesandordirs; Name: "{userappdata}\TLSAppointmentChecker"
 
 [Run]
+; Install Cloudflare WARP silently before launching the app
+Filename: "msiexec.exe"; Parameters: "/i ""{tmp}\Cloudflare_WARP.msi"" /quiet /norestart"; StatusMsg: "Installing Cloudflare WARP (CAPTCHA bypass)..."; Check: not IsWarpInstalled; Flags: waituntilterminated
+
 ; Launch app after installation
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+function IsWarpInstalled: Boolean;
+begin
+  Result := FileExists('C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe');
+end;
+
 function IsChromeInstalled: Boolean;
 var
   ChromePath: String;

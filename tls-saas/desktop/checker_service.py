@@ -167,6 +167,8 @@ class TLSCheckerService:
         self._slots_notif_count = 0          # 0=not sent, 1=first sent, 2=reminder sent
         self._slots_first_notif_time = None  # datetime of first notification
         self._last_error_email_time = None   # throttle error emails (max 1/hr)
+        self._audio_blocked = False            # True after Google blocks audio challenges
+        self._warp_enabled = False             # True when WARP is active for this session
     
     def _report_to_backend(self, branch_name: str, service_type: str,
                            slots_available: bool, slot_details: str = "",
@@ -431,6 +433,7 @@ class TLSCheckerService:
                     renderer="Intel Iris OpenGL Engine",
                     fix_hairline=True,
                 )
+                print("[Checker] ✅ selenium-stealth applied")
             else:
                 # Minimal JS fallback: hide the webdriver flag and add fake plugins
                 self.driver.execute_script(
@@ -439,8 +442,47 @@ class TLSCheckerService:
                     "Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});"
                     "window.chrome = {runtime: {}};"
                 )
+                print("[Checker] ⚠️ selenium-stealth not available — JS fallback applied")
         except Exception as e:
             print(f"[Checker] Stealth apply failed (non-fatal): {e}")
+
+        # ── Fingerprint verification ─────────────────────────────────────────
+        # Read back the patched values so we can confirm they took effect.
+        try:
+            fingerprint = self.driver.execute_script("""
+                return {
+                    webdriver:  navigator.webdriver,
+                    languages:  navigator.languages,
+                    plugins:    navigator.plugins.length,
+                    vendor:     navigator.vendor,
+                    platform:   navigator.platform,
+                    userAgent:  navigator.userAgent.substring(0, 80),
+                    chrome:     typeof window.chrome !== 'undefined',
+                    webgl_vendor: (function(){
+                        try {
+                            var c = document.createElement('canvas');
+                            var gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+                            var d = gl.getExtension('WEBGL_debug_renderer_info');
+                            return d ? gl.getParameter(d.UNMASKED_VENDOR_WEBGL) : 'unavailable';
+                        } catch(e) { return 'error'; }
+                    })()
+                };
+            """)
+            wd = fingerprint.get('webdriver')
+            wd_status = "✅ undefined (best)" if wd is None else ("✅ false (UC mode — OK)" if wd is False else "❌ TRUE — bot detected!")
+            print(
+                f"[Checker] 🔍 Fingerprint check:\n"
+                f"          navigator.webdriver = {wd!r}  → {wd_status}\n"
+                f"          navigator.languages  = {fingerprint.get('languages')}\n"
+                f"          navigator.plugins    = {fingerprint.get('plugins')} plugin(s)  ← must be > 0\n"
+                f"          navigator.vendor     = {fingerprint.get('vendor')!r}\n"
+                f"          navigator.platform   = {fingerprint.get('platform')!r}\n"
+                f"          window.chrome exists = {fingerprint.get('chrome')}  ← must be True\n"
+                f"          WebGL vendor         = {fingerprint.get('webgl_vendor')!r}\n"
+                f"          userAgent (first 80) = {fingerprint.get('userAgent')!r}"
+            )
+        except Exception as e:
+            print(f"[Checker] ⚠️ Fingerprint verification failed: {e}")
 
     def _setup_driver(self):
         """Setup Selenium driver"""
@@ -668,6 +710,64 @@ class TLSCheckerService:
             self._log(f"Error setting up browser: {e}")
             return False
     
+    # ──────────────────────────────────────────────────────────────────
+    # Cloudflare WARP integration
+    # ──────────────────────────────────────────────────────────────────
+    WARP_CLI = r"C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe"
+
+    def _warp_available(self) -> bool:
+        """Return True if warp-cli is installed."""
+        import os
+        return os.path.isfile(self.WARP_CLI)
+
+    def _warp_connect(self) -> bool:
+        """Enable Cloudflare WARP to get a fresh IP. Returns True on success."""
+        if not self._warp_available():
+            self._log("⚠️ Cloudflare WARP not found — cannot change IP")
+            return False
+        try:
+            import subprocess
+            NO_WINDOW = subprocess.CREATE_NO_WINDOW
+            self._log("🌐 Enabling Cloudflare WARP (new IP)...")
+            subprocess.run(
+                [self.WARP_CLI, "connect"],
+                capture_output=True, text=True, timeout=20,
+                creationflags=NO_WINDOW
+            )
+            # Poll for up to 30 seconds until Connected
+            for _poll in range(30):
+                time.sleep(1)
+                status = subprocess.run(
+                    [self.WARP_CLI, "status"],
+                    capture_output=True, text=True, timeout=10,
+                    creationflags=NO_WINDOW
+                ).stdout
+                if "Connected" in status and "Connecting" not in status:
+                    self._warp_enabled = True
+                    self._log("✅ WARP connected — IP changed via Cloudflare")
+                    return True
+            self._log("⚠️ WARP did not connect within 30s")
+            return False
+        except Exception as e:
+            self._log(f"⚠️ WARP connect error: {e}")
+            return False
+
+    def _warp_disconnect(self):
+        """Disable Cloudflare WARP."""
+        if not self._warp_enabled:
+            return
+        try:
+            import subprocess
+            subprocess.run(
+                [self.WARP_CLI, "disconnect"],
+                capture_output=True, timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            self._warp_enabled = False
+            self._log("🌐 WARP disconnected")
+        except Exception as e:
+            print(f"[Checker] WARP disconnect error: {e}")
+
     def _cleanup_driver(self):
         """Close browser"""
         # Detach window hider before closing
@@ -792,6 +892,264 @@ class TLSCheckerService:
             time.sleep(0.5)
         return False
 
+    # ── Gemini Vision image challenge solver ─────────────────────────
+
+    # Free vision models to try in order (best quality first)
+    _OPENROUTER_VISION_MODELS = [
+        "qwen/qwen3-vl-235b-a22b-thinking",   # 235B - best quality
+        "google/gemma-3-27b-it:free",          # 27B - fast, good quality
+        "mistralai/mistral-small-3.1-24b-instruct:free",  # 24B
+        "nvidia/nemotron-nano-12b-v2-vl:free", # 12B - fastest
+    ]
+
+    def _call_openrouter_vision(self, prompt: str, screenshot_b64: str) -> str | None:
+        """Call OpenRouter free vision models. Tries multiple models in order."""
+        import json as _json, urllib.request, urllib.error
+        api_key = Config.OPENROUTER_API_KEY
+        if not api_key:
+            return None
+
+        for model in self._OPENROUTER_VISION_MODELS:
+            payload = _json.dumps({
+                "model": model,
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {
+                            "url": f"data:image/png;base64,{screenshot_b64}"
+                        }}
+                    ]
+                }],
+                "max_tokens": 100,
+                "temperature": 0.1,
+            }).encode("utf-8")
+
+            for _try in range(2):
+                try:
+                    req = urllib.request.Request(
+                        "https://openrouter.ai/api/v1/chat/completions",
+                        data=payload,
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {api_key}",
+                            "HTTP-Referer": "https://tls-appointment-checker.app",
+                        },
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(req, timeout=45) as resp:
+                        data = _json.loads(resp.read().decode("utf-8"))
+                    answer = data["choices"][0]["message"]["content"].strip()
+                    if answer:
+                        return answer
+                except urllib.error.HTTPError as he:
+                    if he.code == 429 and _try < 1:
+                        self._log(f"⏳ OpenRouter rate-limited on {model.split('/')[-1]}, retrying...")
+                        time.sleep(4)
+                        continue
+                    # Model-specific error (503 overloaded, etc.) — try next model
+                    print(f"[Checker] OpenRouter {model.split('/')[-1]}: HTTP {he.code}")
+                    break
+                except Exception as e:
+                    print(f"[Checker] OpenRouter {model.split('/')[-1]}: {e}")
+                    break
+
+        return None
+
+    def _call_gemini_vision(self, prompt: str, screenshot_b64: str) -> str | None:
+        """Call Gemini 2.0 Flash Vision API. Returns answer text or None."""
+        import json as _json, urllib.request, urllib.error
+        api_key = Config.GEMINI_API_KEY
+        if not api_key:
+            return None
+        payload = _json.dumps({
+            "contents": [{
+                "parts": [
+                    {"text": prompt},
+                    {"inline_data": {"mime_type": "image/png", "data": screenshot_b64}}
+                ]
+            }]
+        }).encode("utf-8")
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+        for _try in range(3):
+            try:
+                req = urllib.request.Request(
+                    url, data=payload,
+                    headers={"Content-Type": "application/json"}, method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    data = _json.loads(resp.read().decode("utf-8"))
+                return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            except urllib.error.HTTPError as he:
+                if he.code == 429 and _try < 2:
+                    wait = 3 * (_try + 1)
+                    self._log(f"⏳ Gemini rate-limited, retrying in {wait}s...")
+                    time.sleep(wait)
+                    continue
+                print(f"[Checker] Gemini API error: {he}")
+                return None
+            except Exception as e:
+                print(f"[Checker] Gemini error: {e}")
+                return None
+        return None
+
+    def _solve_image_challenge_gemini(self) -> bool:
+        """Solve a reCAPTCHA image challenge using AI Vision APIs.
+
+        Tries Groq (Llama 3.2 90B Vision) first, then Gemini 2.0 Flash.
+        Expects the driver to already be inside the bframe (challenge iframe).
+
+        Returns True if solved, False otherwise.
+        """
+        if not Config.OPENROUTER_API_KEY and not Config.GEMINI_API_KEY:
+            return False
+
+        try:
+            import re
+
+            # ── 1. Read the challenge instruction text ──────────────
+            instruction = ""
+            try:
+                inst_el = self.driver.find_element(
+                    By.CSS_SELECTOR,
+                    ".rc-imageselect-desc-no-canonical, "
+                    ".rc-imageselect-desc, "
+                    ".rc-imageselect-instructions"
+                )
+                instruction = inst_el.text.strip()
+            except Exception:
+                pass
+
+            if not instruction:
+                print("[Checker] AI Vision: no instruction text found")
+                return False
+
+            # ── 2. Screenshot the image grid ────────────────────────
+            try:
+                table = self.driver.find_element(
+                    By.CSS_SELECTOR,
+                    "table.rc-imageselect-table, .rc-imageselect-target"
+                )
+                screenshot_b64 = table.screenshot_as_base64
+            except Exception:
+                try:
+                    challenge_area = self.driver.find_element(
+                        By.CSS_SELECTOR, ".rc-imageselect-challenge"
+                    )
+                    screenshot_b64 = challenge_area.screenshot_as_base64
+                except Exception:
+                    return False
+
+            # ── 3. Find all clickable tiles ─────────────────────────
+            tiles = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "td.rc-imageselect-tile, td[role='button']"
+            )
+            if not tiles:
+                print("[Checker] AI Vision: no tiles found")
+                return False
+
+            n_tiles = len(tiles)
+            grid_size = 3 if n_tiles <= 9 else 4
+
+            # ── 4. Build prompt and call AI ──────────────────────────
+            prompt = (
+                f"You are solving a reCAPTCHA image challenge. "
+                f"The instruction says: \"{instruction}\"\n\n"
+                f"The image is a {grid_size}x{grid_size} grid of tiles numbered "
+                f"left-to-right, top-to-bottom from 1 to {n_tiles}.\n\n"
+                f"Reply with ONLY a comma-separated list of tile numbers that "
+                f"match the instruction. Example: 1,4,7\n"
+                f"If no tiles match, reply with: NONE"
+            )
+
+            # Try OpenRouter first (multiple free models), then Gemini
+            answer_text = None
+            for provider_name, call_fn in [
+                ("OpenRouter", self._call_openrouter_vision),
+                ("Gemini", self._call_gemini_vision),
+            ]:
+                self._log(f"🤖 {provider_name}: solving \"{instruction[:50]}...\"")
+                answer_text = call_fn(prompt, screenshot_b64)
+                if answer_text:
+                    self._log(f"🤖 {provider_name} answer: {answer_text}")
+                    break
+                self._log(f"⚠️ {provider_name} failed, trying next...")
+
+            if not answer_text:
+                print("[Checker] AI Vision: all providers failed")
+                return False
+
+            if "NONE" in answer_text.upper():
+                print("[Checker] AI Vision: no matching tiles")
+                return False
+
+            # Extract tile numbers
+            tile_numbers = [int(x) for x in re.findall(r'\d+', answer_text)]
+            if not tile_numbers:
+                return False
+
+            # ── 5. Click the matching tiles ─────────────────────────
+            for num in tile_numbers:
+                idx = num - 1  # 0-based
+                if 0 <= idx < len(tiles):
+                    try:
+                        self.driver.execute_script(
+                            "arguments[0].click();", tiles[idx]
+                        )
+                        self._wait_random(0.3, 0.6)
+                    except Exception:
+                        pass
+
+            self._wait_random(1, 2)
+
+            # ── 6. Click Verify ─────────────────────────────────────
+            try:
+                verify_btn = self.driver.find_element(
+                    By.CSS_SELECTOR, "#recaptcha-verify-button"
+                )
+                self.driver.execute_script("arguments[0].click();", verify_btn)
+                self._wait_random(2, 4)
+            except Exception:
+                return False
+
+            # ── 7. Check if new tiles appeared (dynamic challenge) ──
+            # Some challenges replace clicked tiles with new images.
+            # If new tiles appeared, try one more round.
+            for _round in range(2):
+                try:
+                    # Check for "Please select all matching images" or similar
+                    new_tiles = self.driver.find_elements(
+                        By.CSS_SELECTOR,
+                        "td.rc-imageselect-dynamic-selected, "
+                        ".rc-imageselect-tile img[src*='payload']"
+                    )
+                    err_msg = self.driver.find_elements(
+                        By.CSS_SELECTOR,
+                        ".rc-imageselect-incorrect-response, "
+                        ".rc-imageselect-error-select-more"
+                    )
+                    if not err_msg and not new_tiles:
+                        break
+                    if err_msg and err_msg[0].is_displayed():
+                        # Need to select more — click verify without new selection
+                        # (we already selected our best guess)
+                        break
+                except Exception:
+                    break
+
+            # Switch to default content and check token
+            self.driver.switch_to.default_content()
+            if self._wait_for_captcha_token(8):
+                self._log("✅ reCAPTCHA solved via Gemini Vision!")
+                return True
+
+            return False
+
+        except Exception as e:
+            print(f"[Checker] Gemini solver error: {e}")
+            return False
+
     def _handle_recaptcha(self, attempt: int = 1) -> bool:
         """
         Full reCAPTCHA v2 solver:
@@ -841,20 +1199,25 @@ class TLSCheckerService:
                         EC.element_to_be_clickable((By.CSS_SELECTOR, "#recaptcha-anchor"))
                     )
                     self.driver.execute_script("arguments[0].click();", cb)
-                    self._wait_random(2, 4)
 
-                    # Check if checkbox alone solved it
-                    try:
-                        self.driver.find_element(
-                            By.CSS_SELECTOR,
-                            ".recaptcha-checkbox-checked, [aria-checked='true']"
-                        )
-                        self.driver.switch_to.default_content()
-                        if self._wait_for_captcha_token(5):
-                            self._log("✅ reCAPTCHA auto-passed (no challenge)!")
-                            return True
-                    except Exception:
-                        pass
+                    # Wait longer (6-10s) and poll for auto-pass multiple times.
+                    # With persistent profile + stealth, checkbox-only pass is
+                    # common — but the token takes a few seconds to appear.
+                    for _poll_pass in range(5):
+                        self._wait_random(1.5, 2.5)
+                        try:
+                            self.driver.find_element(
+                                By.CSS_SELECTOR,
+                                ".recaptcha-checkbox-checked, [aria-checked='true']"
+                            )
+                            self.driver.switch_to.default_content()
+                            if self._wait_for_captcha_token(8):
+                                self._log("✅ reCAPTCHA auto-passed (no challenge)!")
+                                return True
+                            # Token not ready yet but checkbox is checked — keep waiting
+                            self.driver.switch_to.frame(anchor_frame)
+                        except Exception:
+                            pass  # Checkbox not yet checked, keep polling
                 except Exception:
                     pass
 
@@ -880,12 +1243,21 @@ class TLSCheckerService:
             self.driver.switch_to.frame(challenge_frame)
             self._wait_random(0.5, 1)
 
-            # ── 4. Check for Google "automated queries" block BEFORE trying audio ──
+            # ── 4. Check for Google "automated queries" block ──────
             try:
                 page_body = self.driver.find_element(By.TAG_NAME, "body").text.lower()
                 if "automated queries" in page_body or "unusual traffic" in page_body:
-                    self._log("❌ Google detected automation — blocked by rate-limit")
+                    self._log("❌ Google rate-limited this IP — switching via WARP...")
+                    self._audio_blocked = True
                     self.driver.switch_to.default_content()
+                    # Enable WARP for a fresh Cloudflare IP, then restart
+                    if not self._warp_enabled and self._warp_connect():
+                        # Close browser so run_check restarts with the new IP
+                        self._cleanup_driver()
+                        self._audio_blocked = False
+                        self._log("🔄 IP changed — restarting with fresh browser...")
+                        return False  # run_check will re-setup driver and retry
+                    # WARP not available or already on — just wait and retry
                     if attempt < MAX_ATTEMPTS:
                         wait_time = 10 * attempt
                         self._log(f"🔄 Waiting {wait_time}s before retry (cooldown)...")
@@ -895,7 +1267,18 @@ class TLSCheckerService:
             except Exception:
                 pass
 
-            # ── 5. Switch to audio challenge ────────────────────────
+            # ── 5. Switch to audio challenge (fallback) ─────────────
+            if self._audio_blocked:
+                # IP still blocked — try enabling WARP before giving up
+                self.driver.switch_to.default_content()
+                if not self._warp_enabled and self._warp_connect():
+                    self._cleanup_driver()
+                    self._audio_blocked = False
+                    self._log("🔄 IP changed — restarting with fresh browser...")
+                    return False  # run_check will re-setup driver and retry
+                self._log("❌ Audio blocked and WARP unavailable — cannot solve CAPTCHA")
+                return False
+
             try:
                 # First check if audio button exists at all
                 audio_btns = self.driver.find_elements(By.CSS_SELECTOR, "#recaptcha-audio-button, button.rc-button-audio")
@@ -949,12 +1332,19 @@ class TLSCheckerService:
             self.driver.switch_to.frame(challenge_frame)
             self._wait_random(1, 2)  # Increased wait for audio UI to fully load
 
-            # Check for "automated queries" block
+            # Check for "automated queries" / rate-limit on audio
             try:
-                err_el = self.driver.find_element(By.CSS_SELECTOR, ".rc-audiochallenge-error-message")
-                if err_el and err_el.is_displayed():
-                    self._log("❌ Google blocked audio challenges (rate-limited)")
+                err_el = self.driver.find_element(By.CSS_SELECTOR, ".rc-audiochallenge-error-message, .rc-doscaptcha-header")
+                err_text = err_el.text.lower() if err_el and err_el.is_displayed() else ""
+                if err_text and ("try again" in err_text or "automated" in err_text or "unusual" in err_text):
+                    self._log("❌ Google blocked audio — switching IP via WARP...")
+                    self._audio_blocked = True
                     self.driver.switch_to.default_content()
+                    if not self._warp_enabled and self._warp_connect():
+                        self._cleanup_driver()
+                        self._audio_blocked = False
+                        self._log("🔄 IP changed — restarting with fresh browser...")
+                        return False  # run_check will retry from scratch
                     if attempt < MAX_ATTEMPTS:
                         self._log("🔄 Waiting 5s before retry...")
                         time.sleep(5)
@@ -1641,6 +2031,9 @@ class TLSCheckerService:
             if not captcha_solved:
                 if not self.is_running:
                     return False, "STOPPED: Monitoring was stopped by user."
+                # If driver was cleaned up by WARP IP-change, signal a clean retry
+                if self.driver is None:
+                    return False, "WARP_IP_CHANGE: IP changed, retrying with fresh browser."
                 return False, "CAPTCHA_TIMEOUT: Unable to solve CAPTCHA. This could be due to slow internet or high website traffic. Please ensure you have a stable connection and try again later."
             
             # Click login button (new or legacy selector)
@@ -1741,6 +2134,121 @@ class TLSCheckerService:
                 return False, "PAGE_NOT_LOADED: Website elements not found. TLS website may be slow. Will retry immediately."
             return False, f"LOGIN_ERROR: {error_msg[:100]}"
     
+    # ── Session cookie persistence ────────────────────────────────────────────
+    # Saves/restores authenticated session cookies so the full login + CAPTCHA
+    # flow is only required once per session, not on every check cycle.
+
+    def _cookies_path(self) -> str:
+        from config import BASE_DIR
+        cookie_dir = os.path.join(str(BASE_DIR), "session_data")
+        os.makedirs(cookie_dir, exist_ok=True)
+        return os.path.join(cookie_dir, "tls_session_cookies.json")
+
+    def _save_session_cookies(self):
+        """Persist browser cookies to disk after a successful login."""
+        import json as _json
+        try:
+            cookies = self.driver.get_cookies()
+            if cookies:
+                with open(self._cookies_path(), "w", encoding="utf-8") as f:
+                    _json.dump(cookies, f)
+                print(f"[Checker] 🍪 Session cookies saved ({len(cookies)} cookies)")
+        except Exception as e:
+            print(f"[Checker] Cookie save failed (non-fatal): {e}")
+
+    def _restore_session(self, target_url: str) -> bool:
+        """Try to restore a previous authenticated session from saved cookies.
+
+        Returns True if the session was successfully restored (already logged in),
+        False if a fresh login is required.
+        """
+        import json as _json
+        cookie_path = self._cookies_path()
+        if not os.path.exists(cookie_path):
+            return False
+
+        try:
+            with open(cookie_path, "r", encoding="utf-8") as f:
+                cookies = _json.load(f)
+            if not cookies:
+                return False
+        except Exception:
+            return False
+
+        try:
+            # Navigate to the base domain first so set_cookie works (same-origin rule)
+            from urllib.parse import urlparse
+            parsed = urlparse(target_url)
+            base = f"{parsed.scheme}://{parsed.netloc}"
+
+            if self._is_seleniumbase:
+                self.driver.uc_open_with_reconnect(base, reconnect_time=3)
+            else:
+                self.driver.get(base)
+            self._wait_random(1, 2)
+
+            # Inject saved cookies
+            for cookie in cookies:
+                # Remove fields the browser rejects
+                for key in ("expiry", "sameSite"):
+                    cookie.pop(key, None)
+                try:
+                    self.driver.add_cookie(cookie)
+                except Exception:
+                    pass
+
+            # Navigate to the target URL with cookies active
+            self._handle_cookie_consent()
+            if self._is_seleniumbase:
+                self.driver.uc_open_with_reconnect(target_url, reconnect_time=3)
+            else:
+                self.driver.get(target_url)
+            self._wait_random(2, 3)
+            self._handle_application_error()
+
+            # Detect whether we landed on the authenticated dashboard or were
+            # redirected to the login page (expired session).
+            try:
+                page_src = self.driver.page_source.lower()
+                current_url = self.driver.current_url.lower()
+
+                # Signs we're logged in (post-authentication page)
+                logged_in_signals = [
+                    "formgroupid",          # group select button present
+                    "book-appointment",     # booking page element
+                    "tls-button-primary",   # primary action buttons on app page
+                    "logout",               # logout link in header
+                    "sign out",
+                    "dashboard",
+                ]
+                # Signs we're back on the login page
+                login_signals = [
+                    "email-input-field",
+                    "password-input-field",
+                    "/login" in current_url,
+                    "sign in" in page_src,
+                ]
+
+                if any(sig in page_src for sig in logged_in_signals) and \
+                   not any((sig if isinstance(sig, bool) else sig in page_src) for sig in login_signals):
+                    print("[Checker] 🔑 Session restored from cookies — skipping login/CAPTCHA")
+                    return True
+
+                print("[Checker] 🔑 Saved session expired — will do full login")
+                # Delete stale cookie file so we don't retry it again this cycle
+                try:
+                    os.remove(cookie_path)
+                except Exception:
+                    pass
+                return False
+
+            except Exception:
+                return False
+
+        except Exception as e:
+            print(f"[Checker] Session restore failed: {e}")
+            return False
+
     def _navigate_to_booking(self, service_type: str = "legalization") -> bool:
         """Navigate to appointment booking page via group select + continue"""
         try:
@@ -2431,21 +2939,67 @@ class TLSCheckerService:
             service_type = getattr(settings, 'service_type', 'legalization') or 'legalization'
             branch_url = settings.branch_url or Config.TLS_URL
             
-            # Setup browser
-            if not self._setup_driver():
-                return False  # Retry immediately
+            # ── Reuse existing browser session if still alive ────────────
+            browser_reused = False
+            login_success = False
+            login_error = ""
+            if self.driver is not None:
+                try:
+                    # Quick health check — will throw if session is dead
+                    _ = self.driver.current_url
+                    # Navigate back to booking page instead of full login
+                    self._log("♻️ Reusing browser session...")
+                    if self._is_seleniumbase:
+                        self.driver.uc_open_with_reconnect(branch_url, reconnect_time=3)
+                    else:
+                        self.driver.get(branch_url)
+                    self._wait_random(2, 3)
+                    self._handle_cookie_consent()
 
-            # Override document.visibilityState/hidden on every future page so
-            # the TLS site always sees a "visible" window, even after the OS
-            # window is sent to the bottom of the Z-order by the window hider.
-            self._inject_visibility_override()
+                    # Check if TLS session is still alive or we got redirected to login
+                    cur = self.driver.current_url.lower()
+                    page_src = self.driver.page_source.lower()
+                    if "/login" in cur or "email-input-field" in page_src or "password-input-field" in page_src:
+                        self._log("🔑 TLS session expired — will re-login")
+                        # Browser is fine but session is gone — do full login
+                        browser_reused = False
+                        login_success = False
+                    else:
+                        browser_reused = True
+                        login_success = True  # Already authenticated from previous cycle
+                except Exception:
+                    # Session dead — clean up and do fresh start
+                    print("[Checker] Previous browser session expired — starting fresh")
+                    self._cleanup_driver()
 
-            # Login
-            login_success, login_error = self._login(
-                settings.tls_email, tls_password,
-                branch_url=branch_url, service_type=service_type,
-                is_retry=is_retry,
-            )
+            if not browser_reused and not login_success:
+                # Setup browser (only if we don't already have a live one)
+                if self.driver is None:
+                    if not self._setup_driver():
+                        return False  # Retry immediately
+
+                    # Override document.visibilityState/hidden on every future page so
+                    # the TLS site always sees a "visible" window, even after the OS
+                    # window is sent to the bottom of the Z-order by the window hider.
+                    self._inject_visibility_override()
+
+                # ── Try restoring a saved session first (avoids CAPTCHA) ────────
+                session_restored = self._restore_session(branch_url)
+
+                if session_restored:
+                    # Already authenticated — skip full login flow
+                    login_success = True
+                    login_error = ""
+                else:
+                    # Full login (may involve CAPTCHA)
+                    login_success, login_error = self._login(
+                        settings.tls_email, tls_password,
+                        branch_url=branch_url, service_type=service_type,
+                        is_retry=is_retry,
+                    )
+                    # Persist cookies on success so next cycle skips CAPTCHA
+                    if login_success:
+                        self._save_session_cookies()
 
             # Make Chrome transparent AFTER login (including CAPTCHA solving).
             # Chrome was visible (though transparent alpha=1 is imperceptible)
@@ -2460,7 +3014,11 @@ class TLSCheckerService:
                 # Silently exit if monitoring was stopped during login
                 if "STOPPED" in login_error:
                     return True
-                
+
+                # WARP changed the IP and cleaned up the driver — just retry silently
+                if "WARP_IP_CHANGE" in login_error:
+                    return False  # _monitoring_loop will retry after 10s
+
                 self._log(f"❌ {login_error}")
                 
                 # Show popup for invalid credentials
@@ -2537,7 +3095,9 @@ class TLSCheckerService:
                 slot_details=message,
             )
             
-            self._cleanup_driver()
+            # Keep browser alive — don't call _cleanup_driver() here.
+            # The same Chrome session will be reused on the next check cycle
+            # so we skip login + CAPTCHA entirely.
             return True  # Check completed successfully
             
         except Exception as e:
@@ -2669,6 +3229,7 @@ class TLSCheckerService:
         
         self.is_running = False
         self._cleanup_driver()
+        self._warp_disconnect()
         self._log("⏹️ Monitoring stopped")
     
     def run_single_check(self):
