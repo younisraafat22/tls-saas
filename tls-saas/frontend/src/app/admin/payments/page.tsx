@@ -190,8 +190,6 @@ export default function AdminPaymentsPage() {
     }
   };
 
-  const resendablePayments = filtered.filter((p) => p.status === "approved" && p.license_key);
-
   const togglePaymentSelect = (id: number) => {
     setSelectedPayments((prev) => {
       const next = new Set(prev);
@@ -235,6 +233,8 @@ export default function AdminPaymentsPage() {
     if (dateTo && p.created_at && new Date(p.created_at) > new Date(dateTo + "T23:59:59")) return false;
     return true;
   });
+
+  const resendablePayments = filtered.filter((p) => p.status === "approved" && p.license_key);
 
   return (
     <div className="space-y-6">
