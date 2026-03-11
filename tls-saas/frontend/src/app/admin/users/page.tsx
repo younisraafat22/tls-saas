@@ -161,7 +161,7 @@ export default function AdminUsersPage() {
       await adminApi.sendPasswordReset(userId);
       showToast("success", "Password reset email sent!");
     } catch (err: any) {
-      showToast("error", err?.detail || "Failed to send reset email");
+      showToast("error", err?.message || err?.detail || "Failed to send reset email");
     }
   };
 
@@ -192,7 +192,7 @@ export default function AdminUsersPage() {
       setUsers((prev) => prev.filter((u) => u.id !== userId));
       showToast("success", "User deleted");
     } catch (err: any) {
-      showToast("error", err?.detail || "Failed to delete user");
+      showToast("error", err?.message || "Failed to delete user");
     }
   };
 
