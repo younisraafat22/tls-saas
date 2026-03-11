@@ -146,7 +146,6 @@ async def list_users(
         .options(
             selectinload(User.subscriptions).selectinload(Subscription.plan),
         )
-        .where(User.is_admin == False)
         .order_by(User.created_at.desc())
     )
     if search:
@@ -155,7 +154,7 @@ async def list_users(
         )
 
     # Count total
-    count_query = select(func.count(User.id)).where(User.is_admin == False)
+    count_query = select(func.count(User.id))
     if search:
         count_query = count_query.where(
             User.email.ilike(f"%{search}%") | User.full_name.ilike(f"%{search}%")
