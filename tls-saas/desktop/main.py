@@ -594,20 +594,27 @@ class TLSApp:
 
     def check_license_and_route(self):
         """Decide which page to show based on offline license."""
-        status = get_license_status()
-        if status and status.get('valid'):
-            # Block premium plans from using the desktop app
-            if status.get('plan', '').startswith('premium'):
-                from license_service import deactivate_license
-                deactivate_license()
-                self.show_activation_page(
-                    message="Premium plans are managed via the web dashboard.\n"
-                            "Please visit the website to use your Premium subscription."
-                )
+        try:
+            status = get_license_status()
+            if status and status.get('valid'):
+                # Block premium plans from using the desktop app
+                if status.get('plan', '').startswith('premium'):
+                    from license_service import deactivate_license
+                    deactivate_license()
+                    self.show_activation_page(
+                        message="Premium plans are managed via the web dashboard.\n"
+                                "Please visit the website to use your Premium subscription."
+                    )
+                else:
+                    self.show_monitoring_page()
             else:
-                self.show_monitoring_page()
-        else:
-            self.show_activation_page()
+                self.show_activation_page()
+        except Exception as exc:
+            print(f"[STARTUP] check_license_and_route crashed: {exc}", flush=True)
+            try:
+                self.show_activation_page()
+            except Exception:
+                pass
 
     def _save_service_type_to_db(self):
         """Persist the selected service_type from flow_data into the DB.
