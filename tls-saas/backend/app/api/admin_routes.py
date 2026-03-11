@@ -66,6 +66,55 @@ async def dashboard_stats(
         .where(NotificationLog.sent_at >= today)
     )).scalar() or 0
 
+    total_licenses = (await db.execute(
+        select(func.count(Payment.id))
+        .where(Payment.hardware_id != None)
+    )).scalar() or 0
+    active_licenses = (await db.execute(
+        select(func.count(Payment.id))
+        .where(Payment.hardware_id != None, Payment.status == PaymentStatus.APPROVED)
+    )).scalar() or 0
+    pending_licenses = (await db.execute(
+        select(func.count(Payment.id))
+        .where(Payment.hardware_id != None, Payment.status == PaymentStatus.PENDING)
+    )).scalar() or 0
+
+    # Recent pending payments (all types, for dashboard quick view)
+    recent_pending_result = await db.execute(
+        select(Payment, User)
+        .join(User, Payment.user_id == User.id)
+        .where(Payment.status == PaymentStatus.PENDING)
+        .order_by(Payment.created_at.desc())
+        .limit(5)
+    )
+    recent_pending = [
+        {
+            "id": p.id,
+            "user_email": p.submitter_email or u.email,
+            "method": str(p.method.value if hasattr(p.method, 'value') else p.method).replace('_', ' '),
+            "reference": p.reference or "",
+            "amount": p.amount,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        }
+        for p, u in recent_pending_result.all()
+    ]
+
+    # Recent activity log
+    activity_result = await db.execute(
+        select(ActivityLog, User)
+        .join(User, ActivityLog.actor_id == User.id, isouter=True)
+        .order_by(ActivityLog.id.desc())
+        .limit(8)
+    )
+    recent_activity = [
+        {
+            "action": a.action,
+            "user_email": u.email if u else "system",
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        }
+        for a, u in activity_result.all()
+    ]
+
     return DashboardStats(
         total_users=total_users,
         active_subscriptions=active_subs,
@@ -74,6 +123,11 @@ async def dashboard_stats(
         checks_today=checks_today,
         slots_found_today=slots_found,
         notifications_sent_today=notifs_today,
+        total_licenses=total_licenses,
+        active_licenses=active_licenses,
+        pending_licenses=pending_licenses,
+        recent_pending_payments=recent_pending,
+        recent_activity=recent_activity,
     )
 
 
@@ -669,6 +723,7 @@ async def create_license_directly(
     """
     Create a license key directly without needing a desktop payment submission.
     Admin provides hardware_id, plan_key, and optional customer info.
+    Optionally assign the license to a specific user by providing user_id.
     """
     hardware_id = (body.get("hardware_id") or "").strip()
     plan_key = (body.get("plan_key") or "").strip()
@@ -676,6 +731,7 @@ async def create_license_directly(
     customer_email = (body.get("customer_email") or "").strip()
     notes = (body.get("notes") or "").strip()
     branch_id: int | None = body.get("branch_id") or None
+    assigned_user_id: int | None = body.get("user_id") or None
 
     if not hardware_id:
         raise HTTPException(400, "hardware_id is required")
@@ -688,17 +744,33 @@ async def create_license_directly(
         if not branch_result.scalar_one_or_none():
             raise HTTPException(400, "Branch not found")
 
+    # Validate assigned user if provided
+    assigned_user = None
+    if assigned_user_id:
+        user_result = await db.execute(select(User).where(User.id == assigned_user_id))
+        assigned_user = user_result.scalar_one_or_none()
+        if not assigned_user:
+            raise HTTPException(400, "User not found")
+
     license_key = _generate_license_key(plan_key, hardware_id)
     now = datetime.now(timezone.utc)
 
+    # Use assigned user if provided, otherwise use admin's user
+    license_user_id = assigned_user_id if assigned_user else admin.id
+    # If assigning to a user, update customer info from that user if not provided
+    if assigned_user and not customer_email:
+        customer_email = assigned_user.email
+    if assigned_user and not customer_name:
+        customer_name = assigned_user.full_name or assigned_user.email
+
     payment = Payment(
-        user_id=admin.id,
+        user_id=license_user_id,
         amount=0,
         currency="EGP",
         method=PaymentMethod.OTHER,
         reference="admin-direct",
         status=PaymentStatus.APPROVED,
-        admin_notes=(f"Manually created by admin. {notes}".strip()),
+        admin_notes=(f"Manually created by admin.{' Assigned to user ' + assigned_user.email + '.' if assigned_user else ''} {notes}".strip()),
         processed_at=now,
         hardware_id=hardware_id,
         plan_key=plan_key,
@@ -715,6 +787,7 @@ async def create_license_directly(
             "plan_key": plan_key,
             "hardware_id": hardware_id,
             "customer_email": customer_email,
+            "assigned_to_user_id": assigned_user_id,
         },
     ))
     await db.commit()
@@ -1494,6 +1567,125 @@ async def test_appointment_email(
     if ok:
         return MessageResponse(message=f"Test appointment alert sent to {test_email} ✅")
     raise HTTPException(500, "Failed to send — check SMTP settings")
+
+
+# ── Resend License Email ─────────────────────────────────────────────
+
+@router.post("/payments/{payment_id}/resend-email", response_model=MessageResponse)
+async def resend_license_email(
+    payment_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Resend the license key email for an approved desktop payment."""
+    result = await db.execute(select(Payment).where(Payment.id == payment_id))
+    payment = result.scalar_one_or_none()
+    if not payment:
+        raise HTTPException(404, "Payment not found")
+    if not payment.license_key:
+        raise HTTPException(400, "No license key on this payment — generate one first")
+    to_email = payment.submitter_email or ""
+    # Fall back to the web user's email if no submitter email
+    if not to_email:
+        user_result = await db.execute(select(User).where(User.id == payment.user_id))
+        u = user_result.scalar_one_or_none()
+        if u:
+            to_email = u.email
+    if not to_email:
+        raise HTTPException(400, "No email address on this record")
+    from app.services.email_service import email_service
+    ok = email_service.send_license_key(
+        to_email=to_email,
+        customer_name=payment.submitter_name or to_email,
+        license_key=payment.license_key,
+        plan_name=payment.plan_key or "subscription",
+    )
+    if ok:
+        return MessageResponse(message=f"License key re-sent to {to_email} ✅")
+    raise HTTPException(500, "Email delivery failed — check SMTP settings")
+
+
+# ── User Payment History ─────────────────────────────────────────────
+
+@router.get("/users/{user_id}/payments")
+async def user_payment_history(
+    user_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return all payments and subscriptions for a specific user."""
+    user_result = await db.execute(select(User).where(User.id == user_id))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    payments_result = await db.execute(
+        select(Payment)
+        .where(Payment.user_id == user_id)
+        .order_by(Payment.created_at.desc())
+    )
+    payments = payments_result.scalars().all()
+
+    return {
+        "user_id": user_id,
+        "email": user.email,
+        "payments": [
+            {
+                "id": p.id,
+                "amount": p.amount,
+                "currency": p.currency,
+                "method": p.method,
+                "reference": p.reference or "",
+                "status": p.status,
+                "plan_key": p.plan_key or "",
+                "license_key": p.license_key or "",
+                "hardware_id": p.hardware_id or "",
+                "admin_notes": p.admin_notes or "",
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+                "processed_at": p.processed_at.isoformat() if p.processed_at else None,
+            }
+            for p in payments
+        ],
+    }
+
+
+# ── Admin Password Reset for User ───────────────────────────────────
+
+@router.post("/users/{user_id}/send-password-reset", response_model=MessageResponse)
+async def admin_send_password_reset(
+    user_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send a password reset email to a user on behalf of the admin."""
+    from app.auth import create_password_reset_token
+    from app.services.email_service import email_service
+    from app.config import settings as cfg
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    token = create_password_reset_token(user.id)
+    frontend_url = (cfg.FRONTEND_URL or "").rstrip("/")
+    reset_url = f"{frontend_url}/reset-password?token={token}"
+
+    ok = email_service.send_password_reset(
+        to_email=user.email,
+        user_name=user.full_name or user.email,
+        reset_url=reset_url,
+    )
+    if ok:
+        db.add(ActivityLog(
+            actor_id=admin.id,
+            action="admin_password_reset_sent",
+            details={"target_user_id": user_id, "email": user.email},
+        ))
+        await db.commit()
+        return MessageResponse(message=f"Password reset email sent to {user.email} ✅")
+    raise HTTPException(500, "Email delivery failed — check SMTP settings")
+
 
 @router.get("/checker/logs")
 async def checker_logs(limit: int = 100, admin=Depends(get_current_admin)):

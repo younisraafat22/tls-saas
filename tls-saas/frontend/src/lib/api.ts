@@ -310,7 +310,7 @@ export const adminApi = {
     if (search) params.set("search", search);
     return api.get(`/api/admin/licenses?${params.toString()}`);
   },
-  createLicense: (data: { hardware_id: string; plan_key: string; customer_name?: string; customer_email?: string; notes?: string; branch_id?: number | null }) =>
+  createLicense: (data: { hardware_id: string; plan_key: string; customer_name?: string; customer_email?: string; notes?: string; branch_id?: number | null; user_id?: number | null }) =>
     api.post("/api/admin/licenses/create", data),
   importLicense: (data: { license_key: string; customer_name?: string; customer_email?: string; notes?: string }) =>
     api.post("/api/admin/licenses/import", data),

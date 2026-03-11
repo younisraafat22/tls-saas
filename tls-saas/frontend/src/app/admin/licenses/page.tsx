@@ -90,8 +90,10 @@ function CreateLicenseModal({ onClose, onCreated }: CreateModalProps) {
     customer_email: "",
     notes: "",
     branch_id: null as number | null,
+    user_id: null as number | null,
   });
   const [branches, setBranches] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ key: string; email: string } | null>(null);
@@ -99,6 +101,7 @@ function CreateLicenseModal({ onClose, onCreated }: CreateModalProps) {
 
   useEffect(() => {
     subscriptionApi.getBranches().then((data: any) => setBranches(Array.isArray(data) ? data : [])).catch(() => {});
+    adminApi.getUsers().then((data: any) => setUsers(Array.isArray(data) ? data : [])).catch(() => {});
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -209,6 +212,30 @@ function CreateLicenseModal({ onClose, onCreated }: CreateModalProps) {
                 </select>
               </div>
             )}
+
+            <div>
+              <label className="block text-sm text-gray-400 mb-1.5">Assign to User (Optional)</label>
+              <select
+                value={form.user_id ?? ""}
+                onChange={(e) => {
+                  const userId = e.target.value ? Number(e.target.value) : null;
+                  const selectedUser = userId ? users.find((u: any) => u.id === userId) : null;
+                  setForm({
+                    ...form,
+                    user_id: userId,
+                    customer_name: selectedUser?.full_name || "",
+                    customer_email: selectedUser?.email || "",
+                  });
+                }}
+                className="input-field"
+              >
+                <option value="">— No specific user —</option>
+                {users.map((u: any) => (
+                  <option key={u.id} value={u.id}>{u.email} {u.full_name ? `(${u.full_name})` : ""}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">Selecting a user will auto-fill their name and email.</p>
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
