@@ -101,7 +101,7 @@ function CreateLicenseModal({ onClose, onCreated }: CreateModalProps) {
 
   useEffect(() => {
     subscriptionApi.getBranches().then((data: any) => setBranches(Array.isArray(data) ? data : [])).catch(() => {});
-    adminApi.getUsers().then((data: any) => setUsers(Array.isArray(data) ? data : [])).catch(() => {});
+    adminApi.getUsers().then((data: any) => setUsers(Array.isArray(data?.items) ? data.items : [])).catch(() => {});
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
