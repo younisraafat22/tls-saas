@@ -1010,7 +1010,8 @@ class TLSApp:
 
         threading.Thread(target=_fetch, daemon=True).start()
 
-
+    def show_activation_page(self, message=None):
+        """Build and display the license activation page."""
         self.page.controls.clear()
         self.page.scroll = None
 
