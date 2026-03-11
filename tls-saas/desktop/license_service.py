@@ -185,6 +185,17 @@ PLANS = {
         "currency": "EGP",
         "max_emails": 2,
     },
+    # Internal test plan — 2-hour expiry for verifying expiry logic without waiting 30 days
+    "test_2h": {
+        "name": "Test (2 Hours)",
+        "checks_per_day": 24,
+        "min_interval": 30,
+        "duration_days": 0,
+        "duration_hours": 2,
+        "price": 0,
+        "currency": "EGP",
+        "max_emails": 2,
+    },
 }
 
 
@@ -448,7 +459,10 @@ def activate_license(key: str) -> tuple[bool, str]:
     plan = parsed["plan"]
     plan_info = PLANS[plan]
     now = datetime.now(timezone.utc)
-    expires = now + timedelta(days=plan_info["duration_days"])
+    if plan_info.get("duration_hours"):
+        expires = now + timedelta(hours=plan_info["duration_hours"])
+    else:
+        expires = now + timedelta(days=plan_info["duration_days"])
 
     license_data = {
         "key": key.upper(),

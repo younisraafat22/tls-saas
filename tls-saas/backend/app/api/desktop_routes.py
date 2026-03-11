@@ -66,6 +66,43 @@ async def download_info():
     }
 
 
+@router.post("/license/recover")
+async def recover_license(
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return the license key(s) for a given email address.
+    Used by the desktop app when a user accidentally deletes their .license file.
+    """
+    from sqlalchemy import select
+    email = (body.get("email") or "").strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="A valid email address is required")
+
+    stmt = (
+        select(Payment)
+        .where(
+            Payment.submitter_email.ilike(email),
+            Payment.status == PaymentStatus.APPROVED,
+            Payment.license_key.isnot(None),
+            Payment.license_key != "",
+        )
+        .order_by(Payment.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    payments = result.scalars().all()
+
+    if not payments:
+        raise HTTPException(
+            status_code=404,
+            detail="No approved license found for this email address. Please contact support if you believe this is an error.",
+        )
+
+    licenses = [{"license_key": p.license_key, "plan": p.plan_key or ""} for p in payments]
+    return {"licenses": licenses, "count": len(licenses)}
+
+
 @router.post("/payments/submit")
 async def desktop_payment_submit(
     body: DesktopPaymentSubmit,

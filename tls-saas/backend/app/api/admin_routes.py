@@ -501,6 +501,29 @@ def _generate_license_key(plan: str, hardware_id: str) -> str:
     return f"{plan.upper()}-{hw_short}-{rand}-{sig}"
 
 
+@router.post("/generate-test-license")
+async def generate_test_license(
+    body: dict,
+    admin=Depends(get_current_admin),
+):
+    """
+    Generate a 2-hour test license for a specific hardware_id.
+    Admin-only. Use this to verify that license expiry logic works
+    without waiting the full plan duration.
+    """
+    hardware_id = (body.get("hardware_id") or "").strip()
+    if not hardware_id:
+        raise HTTPException(status_code=400, detail="hardware_id is required")
+
+    license_key = _generate_license_key("test_2h", hardware_id)
+    return {
+        "license_key": license_key,
+        "plan": "test_2h",
+        "duration": "2 hours",
+        "note": "Activate this key in the desktop app. The license will expire 2 hours after activation.",
+    }
+
+
 @router.get("/desktop-payments")
 async def list_desktop_payments(
     page: int = 1,

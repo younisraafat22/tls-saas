@@ -896,7 +896,114 @@ class TLSApp:
             status_msg.color = ft.Colors.RED_400
             self.page.update()
 
-    def show_activation_page(self, message: str = None):
+    def _show_recover_license_dialog(self, key_field, status_msg):
+        """Show a dialog to recover a lost license key by email."""
+        recover_status = ft.Text("", size=12, color=ft.Colors.RED_400, text_align=ft.TextAlign.CENTER)
+        email_field = ft.TextField(
+            label="Email address used at purchase",
+            width=400,
+            border_radius=8,
+            keyboard_type=ft.KeyboardType.EMAIL,
+            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
+            border_color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
+            autofocus=True,
+        )
+
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Recover License Key", weight=ft.FontWeight.BOLD),
+            content=ft.Column(
+                [
+                    ft.Text("Enter the email you used when purchasing:", size=13, color=ft.Colors.GREY_400),
+                    ft.Container(height=10),
+                    email_field,
+                    ft.Container(height=8),
+                    recover_status,
+                ],
+                tight=True,
+                width=420,
+            ),
+            actions=[
+                ft.TextButton(
+                    "Cancel",
+                    on_click=lambda e: self._close_dialog(dialog),
+                    style=ft.ButtonStyle(color=ft.Colors.GREY_400),
+                ),
+                ft.FilledButton(
+                    "Recover",
+                    on_click=lambda e: self._do_recover_license(email_field, recover_status, dialog, key_field, status_msg),
+                    style=ft.ButtonStyle(bgcolor="#00D9FF", color="#0A0E27"),
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.page.overlay.append(dialog)
+        dialog.open = True
+        self.page.update()
+
+    def _close_dialog(self, dialog):
+        dialog.open = False
+        self.page.update()
+
+    def _do_recover_license(self, email_field, recover_status, dialog, key_field, status_msg):
+        email = (email_field.value or "").strip()
+        if not email or "@" not in email:
+            recover_status.value = "Please enter a valid email address"
+            recover_status.color = ft.Colors.RED_400
+            self.page.update()
+            return
+
+        recover_status.value = "Looking up your license..."
+        recover_status.color = "#00D9FF"
+        self.page.update()
+
+        def _fetch():
+            try:
+                server_url = (Config.LICENSE_SERVER_URL or Config.BACKEND_URL or "").rstrip("/")
+                payload = json.dumps({"email": email}).encode()
+                req = urllib.request.Request(
+                    f"{server_url}/api/app/license/recover",
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                import ssl
+                ctx = ssl.create_default_context()
+                try:
+                    import certifi
+                    ctx = ssl.create_default_context(cafile=certifi.where())
+                except Exception:
+                    pass
+                with urllib.request.urlopen(req, timeout=12, context=ctx) as resp:
+                    data = json.loads(resp.read())
+
+                licenses = data.get("licenses", [])
+                if licenses:
+                    key_field.value = licenses[0]["license_key"]
+                    dialog.open = False
+                    status_msg.value = "License key recovered! Click 'Activate License' to continue."
+                    status_msg.color = ft.Colors.GREEN_400
+                    self.page.update()
+                else:
+                    recover_status.value = "No license found for this email."
+                    recover_status.color = ft.Colors.RED_400
+                    self.page.update()
+            except urllib.error.HTTPError as exc:
+                try:
+                    detail = json.loads(exc.read()).get("detail", str(exc))
+                except Exception:
+                    detail = str(exc)
+                recover_status.value = detail[:120]
+                recover_status.color = ft.Colors.RED_400
+                self.page.update()
+            except Exception as exc:
+                recover_status.value = f"Connection error: {str(exc)[:80]}"
+                recover_status.color = ft.Colors.RED_400
+                self.page.update()
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+
         self.page.controls.clear()
         self.page.scroll = None
 
@@ -1109,7 +1216,14 @@ class TLSApp:
                             shape=ft.RoundedRectangleBorder(radius=12),
                         ),
                     ),
-                    ft.Container(height=15),
+                    ft.Container(height=8),
+                    # Recover license button
+                    ft.TextButton(
+                        "Lost your license key? Recover it →",
+                        on_click=lambda e: self._show_recover_license_dialog(key_field, status_msg),
+                        style=ft.ButtonStyle(color=ft.Colors.GREY_500),
+                    ),
+                    ft.Container(height=8),
                     status_msg,
                     ft.Container(height=10),
                     ft.TextButton(
