@@ -322,4 +322,10 @@ export const adminApi = {
     api.post("/api/admin/generate-test-license", { hardware_id }),
   recoverLicense: (email: string) =>
     api.post("/api/app/license/recover", { email }),
+  resendLicenseEmail: (paymentId: number) =>
+    api.post(`/api/admin/payments/${paymentId}/resend-email`),
+  getUserPayments: (userId: number) =>
+    api.get(`/api/admin/users/${userId}/payments`),
+  sendPasswordReset: (userId: number) =>
+    api.post(`/api/admin/users/${userId}/send-password-reset`),
 };
