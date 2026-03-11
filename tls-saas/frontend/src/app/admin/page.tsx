@@ -7,7 +7,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import {
   Users, CreditCard, Activity, TrendingUp,
   CheckCircle2, Clock, AlertCircle, Wifi, WifiOff,
-  ArrowUpRight, DollarSign,
+  ArrowUpRight, DollarSign, KeyRound, RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -56,13 +56,20 @@ export default function AdminDashboard() {
           <h1 className="text-2xl font-display font-bold">Admin Dashboard</h1>
           <p className="text-gray-400 text-sm mt-1">System overview and quick actions</p>
         </div>
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={loadStats}
+            className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
           {connected ? (
-            <span className="flex items-center gap-1.5 text-accent-green">
+            <span className="flex items-center gap-1.5 text-sm text-accent-green">
               <Wifi className="w-4 h-4" /> Connected
             </span>
           ) : (
-            <span className="flex items-center gap-1.5 text-gray-500">
+            <span className="flex items-center gap-1.5 text-sm text-gray-500">
               <WifiOff className="w-4 h-4" /> Disconnected
             </span>
           )}
@@ -74,7 +81,7 @@ export default function AdminDashboard() {
         initial="hidden"
         animate="visible"
         variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
-        className="grid grid-cols-2 lg:grid-cols-4 gap-4"
+        className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4"
       >
         <StatCard
           icon={<Users className="w-5 h-5" />}
@@ -100,6 +107,27 @@ export default function AdminDashboard() {
           iconColor="text-green-400"
           label="Revenue (EGP)"
           value={stats?.total_revenue || 0}
+        />
+        <StatCard
+          icon={<KeyRound className="w-5 h-5" />}
+          iconColor="text-blue-400"
+          label="Total Licenses"
+          value={stats?.total_licenses ?? "—"}
+          href="/admin/licenses"
+        />
+        <StatCard
+          icon={<CheckCircle2 className="w-5 h-5" />}
+          iconColor="text-accent-green"
+          label="Active Licenses"
+          value={stats?.active_licenses ?? "—"}
+          href="/admin/licenses"
+        />
+        <StatCard
+          icon={<Clock className="w-5 h-5" />}
+          iconColor="text-amber-400"
+          label="Pending Licenses"
+          value={stats?.pending_licenses ?? "—"}
+          href="/admin/licenses"
         />
       </motion.div>
 
