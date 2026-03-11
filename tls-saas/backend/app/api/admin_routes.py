@@ -1467,6 +1467,28 @@ async def run_check_now(
     return MessageResponse(message=f"Check triggered for '{branch.name}'")
 
 
+@router.post("/checker/run-all-now", response_model=MessageResponse)
+async def run_all_checks_now(
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger a full check cycle immediately (all active branches)."""
+    import os as _os
+    if _os.environ.get("WORKER_MODE", "false").lower() == "true":
+        # Signal the laptop worker to start a new cycle ASAP (picked up within 30s)
+        row = (await db.execute(select(SystemSetting).where(SystemSetting.key == "worker_force_run"))).scalar_one_or_none()
+        if row:
+            row.value = "true"
+        else:
+            db.add(SystemSetting(key="worker_force_run", value="true"))
+        await db.commit()
+        return MessageResponse(message="Force-run signal sent — worker will start a new cycle within 30 seconds")
+    from app.services.scheduler import scheduler_service
+    import asyncio
+    asyncio.create_task(scheduler_service._run_all_checks())
+    return MessageResponse(message="Full check cycle started immediately")
+
+
 # ── Headless Mode Toggle ─────────────────────────────────────────────
 
 @router.get("/checker/headless")

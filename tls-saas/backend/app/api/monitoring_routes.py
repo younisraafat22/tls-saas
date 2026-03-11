@@ -718,6 +718,17 @@ async def worker_heartbeat(body: WorkerHeartbeatBody, db: AsyncSession = Depends
     return {"ok": True}
 
 
+@router.get("/worker/signal", dependencies=[Depends(_verify_worker)])
+async def worker_signal(db: AsyncSession = Depends(get_db)):
+    """Check for a force-run signal from the admin panel. Clears the flag after reading."""
+    row = (await db.execute(select(SystemSetting).where(SystemSetting.key == "worker_force_run"))).scalar_one_or_none()
+    force_run = bool(row and row.value == "true")
+    if force_run and row:
+        row.value = "false"
+        await db.commit()
+    return {"force_run": force_run}
+
+
 @router.post("/worker/result", dependencies=[Depends(_verify_worker)])
 async def worker_post_result(
     body: WorkerResultBody,

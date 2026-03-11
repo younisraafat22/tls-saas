@@ -98,6 +98,7 @@ export default function AdminMonitoringPage() {
   const [schedulerLoading, setSchedulerLoading] = useState(false);
   const [headless, setHeadless] = useState(true);
   const [headlessLoading, setHeadlessLoading] = useState(false);
+  const [runAllNowLoading, setRunAllNowLoading] = useState(false);
   const [testNotifLoading, setTestNotifLoading] = useState(false);
   const [testApptEmailLoading, setTestApptEmailLoading] = useState(false);
   const [deletingAllResults, setDeletingAllResults] = useState(false);
@@ -305,6 +306,18 @@ export default function AdminMonitoringPage() {
     }
   };
 
+  const runAllNow = async () => {
+    setRunAllNowLoading(true);
+    try {
+      const res: any = await adminApi.runAllNow();
+      showToastMsg("success", res?.message || "Check cycle triggered!");
+    } catch (err: any) {
+      showToastMsg("error", err?.message || "Failed to trigger check cycle");
+    } finally {
+      setRunAllNowLoading(false);
+    }
+  };
+
   const addServiceAccount = async () => {
     if (!newAccount.branch_id || !newAccount.email || !newAccount.password) {
       showToastMsg("error", "Fill in all fields");
@@ -420,24 +433,39 @@ export default function AdminMonitoringPage() {
               )}
             </div>
           </div>
-          <button
-            onClick={toggleScheduler}
-            disabled={schedulerLoading}
-            className={`px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-all ${
-              schedulerStatus?.running
-                ? "bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20"
-                : "bg-accent-green/10 text-accent-green hover:bg-accent-green/20 border border-accent-green/20"
-            }`}
-          >
-            {schedulerLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : schedulerStatus?.running ? (
-              <Pause className="w-4 h-4" />
-            ) : (
-              <Play className="w-4 h-4" />
-            )}
-            {schedulerStatus?.running ? "Stop" : "Start"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={runAllNow}
+              disabled={runAllNowLoading || !schedulerStatus?.running}
+              title={!schedulerStatus?.running ? "Start the scheduler first" : "Run a full check cycle right now"}
+              className="px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-all bg-primary-500/10 text-primary-400 hover:bg-primary-500/20 border border-primary-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {runAllNowLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Zap className="w-4 h-4" />
+              )}
+              Run Now
+            </button>
+            <button
+              onClick={toggleScheduler}
+              disabled={schedulerLoading}
+              className={`px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-all ${
+                schedulerStatus?.running
+                  ? "bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20"
+                  : "bg-accent-green/10 text-accent-green hover:bg-accent-green/20 border border-accent-green/20"
+              }`}
+            >
+              {schedulerLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : schedulerStatus?.running ? (
+                <Pause className="w-4 h-4" />
+              ) : (
+                <Play className="w-4 h-4" />
+              )}
+              {schedulerStatus?.running ? "Stop" : "Start"}
+            </button>
+          </div>
         </div>
 
         {/* Headless toggle + Test notifications */}

@@ -71,6 +71,8 @@ async def run_check(job: dict) -> dict:
     if service_type == "legalization":
         # Shared check: try up to 4 random users, share result with all
         candidates = random.sample(users, min(4, len(users)))
+        decrypt_failures = 0
+        attempt_failures = 0
         for u in candidates:
             if not u.get("email_encrypted"):
                 continue
@@ -79,6 +81,7 @@ async def run_check(job: dict) -> dict:
                 pw    = decrypt_credential(u["password_encrypted"])
             except Exception as exc:
                 logger.warning(f"Decrypt failed for user {u['user_id']}: {exc}")
+                decrypt_failures += 1
                 continue
 
             res = await tls_checker.check_branch(
@@ -91,12 +94,19 @@ async def run_check(job: dict) -> dict:
             err = res.get("error", "")
             if _is_captcha_failure(err):
                 logger.warning(f"[{branch_name}] Captcha blocked for user {u['user_id']} — trying next")
+                attempt_failures += 1
                 continue
             if _is_login_failure(err):
                 logger.warning(f"[{branch_name}] Login failed for user {u['user_id']}: {err}")
+                attempt_failures += 1
                 continue
             return res
-        return {"slots_available": False, "slot_details": None, "error": "All attempts failed", "duration": 0}
+        if decrypt_failures > 0 and attempt_failures == 0:
+            error_msg = (f"Credential decryption failed for {decrypt_failures} user(s) — "
+                         "ensure ENCRYPTION_KEY in .env.worker matches the server key")
+        else:
+            error_msg = "All attempts failed"
+        return {"slots_available": False, "slot_details": None, "error": error_msg, "duration": 0}
 
     else:
         # Visa: individual check per user — return first result (worker posts each individually)
@@ -203,6 +213,17 @@ async def check_cycle():
     logger.info("=== Worker check cycle complete ===")
 
 
+async def _poll_force_run_signal() -> bool:
+    """Ask the backend if the admin has requested a force-run. Returns True and clears the flag."""
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(f"{FLY_BACKEND_URL}/api/monitoring/worker/signal", headers=HEADERS)
+            r.raise_for_status()
+            return r.json().get("force_run", False)
+    except Exception:
+        return False
+
+
 async def main():
     logger.info(f"Worker started — polling {FLY_BACKEND_URL} every {CHECK_INTERVAL // 60} min")
     while True:
@@ -210,8 +231,14 @@ async def main():
             await check_cycle()
         except Exception as exc:
             logger.error(f"Unexpected error in check cycle: {exc}", exc_info=True)
-        logger.info(f"Sleeping {CHECK_INTERVAL // 60} min until next cycle...")
-        await asyncio.sleep(CHECK_INTERVAL)
+        logger.info(f"Sleeping {CHECK_INTERVAL // 60} min until next cycle (force-run checked every 30s)...")
+        slept = 0
+        while slept < CHECK_INTERVAL:
+            await asyncio.sleep(30)
+            slept += 30
+            if await _poll_force_run_signal():
+                logger.info("Force-run signal received from admin panel — starting immediate cycle")
+                break
 
 
 if __name__ == "__main__":
