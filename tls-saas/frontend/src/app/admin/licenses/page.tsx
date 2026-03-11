@@ -7,7 +7,7 @@ import {
   KeyRound, Monitor, Copy, CheckCircle2, Clock, Loader2,
   XCircle, Search, RefreshCw, Plus, X, AlertTriangle,
   RotateCcw, Trash2, Shield, ChevronLeft, ChevronRight,
-  Info,
+  Info, Mail,
 } from "lucide-react";
 
 interface LicenseRecord {
@@ -433,6 +433,209 @@ function ImportLicenseModal({ onClose, onImported }: ImportModalProps) {
   );
 }
 
+function TestLicenseModal({ onClose }: { onClose: () => void }) {
+  const [hardwareId, setHardwareId] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<{ license_key: string; note: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!hardwareId.trim()) { setError("Hardware ID is required"); return; }
+    setError("");
+    setLoading(true);
+    try {
+      const res = await adminApi.generateTestLicense(hardwareId.trim());
+      setResult(res);
+    } catch (err: any) {
+      setError(err?.detail || err?.message || "Failed to generate test license");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopy = () => {
+    if (!result) return;
+    navigator.clipboard.writeText(result.license_key).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+        className="glass-card w-full max-w-md p-6 space-y-5"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <Clock className="w-5 h-5 text-amber-400" />
+            Generate Test License (2h)
+          </h2>
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {result ? (
+          <div className="space-y-4">
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-center">
+              <div className="text-xs text-amber-400 font-medium mb-2">TEST LICENSE — expires in 2 hours</div>
+              <code className="font-mono text-sm text-amber-300 break-all">{result.license_key}</code>
+            </div>
+            {result.note && <div className="text-xs text-center text-gray-500">{result.note}</div>}
+            <div className="flex gap-3">
+              <button
+                onClick={handleCopy}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl text-sm font-medium hover:bg-amber-500/20 transition-colors"
+              >
+                {copied ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                {copied ? "Copied!" : "Copy Key"}
+              </button>
+              <button onClick={onClose} className="flex-1 btn-secondary py-2.5">Done</button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-300 flex gap-2">
+              <Info className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>Generates a temporary license valid for 2 hours. Use this to let a user test the app before purchasing.</span>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1.5">
+                Hardware ID <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={hardwareId}
+                onChange={(e) => setHardwareId(e.target.value)}
+                placeholder="Paste the user's hardware ID"
+                className="input-field font-mono text-sm"
+                autoFocus
+              />
+            </div>
+            {error && (
+              <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{error}</div>
+            )}
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={onClose} className="flex-1 btn-secondary py-2.5">Cancel</button>
+              <button type="submit" disabled={loading} className="flex-1 btn-primary py-2.5 flex items-center justify-center gap-2 disabled:opacity-50">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
+                Generate
+              </button>
+            </div>
+          </form>
+        )}
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function RecoverModal({ onClose }: { onClose: () => void }) {
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [results, setResults] = useState<{ license_key: string; plan: string }[] | null>(null);
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) { setError("Email is required"); return; }
+    setError("");
+    setLoading(true);
+    try {
+      const res = await adminApi.recoverLicense(email.trim());
+      setResults(res.licenses || []);
+    } catch (err: any) {
+      setError(err?.detail || err?.message || "Lookup failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopy = (key: string, idx: number) => {
+    navigator.clipboard.writeText(key).then(() => {
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 2000);
+    });
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+        className="glass-card w-full max-w-lg p-6 space-y-5"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <Mail className="w-5 h-5 text-blue-400" />
+            Recover License by Email
+          </h2>
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSearch} className="flex gap-2">
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Customer email address"
+            className="input-field flex-1"
+            autoFocus
+          />
+          <button type="submit" disabled={loading} className="btn-primary px-4 flex items-center gap-2 disabled:opacity-50">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+          </button>
+        </form>
+
+        {error && (
+          <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{error}</div>
+        )}
+
+        {results !== null && (
+          results.length === 0 ? (
+            <div className="text-center py-6 text-gray-400 text-sm">No active licenses found for this email.</div>
+          ) : (
+            <div className="space-y-2">
+              <div className="text-xs text-gray-400">{results.length} license{results.length > 1 ? "s" : ""} found</div>
+              {results.map((lic, idx) => (
+                <div key={idx} className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                  <div className="text-xs text-gray-400 mb-1">{lic.plan.replace(/_/g, " ")}</div>
+                  <div className="flex items-center gap-2">
+                    <code className="font-mono text-sm text-amber-300 flex-1 break-all">{lic.license_key}</code>
+                    <button
+                      onClick={() => handleCopy(lic.license_key, idx)}
+                      className="shrink-0 p-1.5 text-amber-400 hover:text-amber-300 hover:bg-amber-500/20 rounded-lg transition-colors"
+                    >
+                      {copiedIdx === idx ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+
+        <div className="flex justify-end pt-1">
+          <button onClick={onClose} className="btn-secondary px-6 py-2">Close</button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 export default function AdminLicensesPage() {
   const [licenses, setLicenses] = useState<LicenseRecord[]>([]);
   const [total, setTotal] = useState(0);
@@ -447,6 +650,8 @@ export default function AdminLicensesPage() {
   const [copied, setCopied] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showTest, setShowTest] = useState(false);
+  const [showRecover, setShowRecover] = useState(false);
   const [confirm, setConfirm] = useState<{ id: number; action: "revoke" | "delete" | "regenerate" } | null>(null);
 
   useEffect(() => {
@@ -580,6 +785,14 @@ export default function AdminLicensesPage() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {showTest && <TestLicenseModal onClose={() => setShowTest(false)} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showRecover && <RecoverModal onClose={() => setShowRecover(false)} />}
+      </AnimatePresence>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -600,7 +813,13 @@ export default function AdminLicensesPage() {
           <button onClick={loadLicenses} className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors" title="Refresh">
             <RefreshCw className="w-4 h-4" />
           </button>
-          <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl text-sm font-medium hover:bg-amber-500/20 transition-colors">
+          <button onClick={() => setShowRecover(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 border border-blue-500/30 text-blue-400 rounded-xl text-sm font-medium hover:bg-blue-500/20 transition-colors">
+            <Mail className="w-4 h-4" /> Recover by Email
+          </button>
+          <button onClick={() => setShowTest(true)} className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl text-sm font-medium hover:bg-amber-500/20 transition-colors">
+            <Clock className="w-4 h-4" /> Test (2h)
+          </button>
+          <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 text-gray-300 rounded-xl text-sm font-medium hover:bg-white/10 transition-colors">
             <Shield className="w-4 h-4" /> Import Key
           </button>
           <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2 px-4 py-2">
