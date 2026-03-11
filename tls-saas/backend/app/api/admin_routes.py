@@ -1662,6 +1662,10 @@ async def admin_send_password_reset(
     from app.services.email_service import email_service
     from app.config import settings as cfg
 
+    # Check SMTP is configured
+    if not cfg.SMTP_USERNAME or not cfg.SMTP_PASSWORD:
+        raise HTTPException(500, "SMTP email is not configured. Contact server administrator to set SMTP_USERNAME and SMTP_PASSWORD environment variables.")
+
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -1684,7 +1688,7 @@ async def admin_send_password_reset(
         ))
         await db.commit()
         return MessageResponse(message=f"Password reset email sent to {user.email} ✅")
-    raise HTTPException(500, "Email delivery failed — check SMTP settings")
+    raise HTTPException(500, "Failed to send password reset email. Check server logs for details.")
 
 
 @router.get("/checker/logs")
