@@ -8,6 +8,7 @@ import {
   Users, CreditCard, Activity, TrendingUp,
   CheckCircle2, Clock, AlertCircle, Wifi, WifiOff,
   ArrowUpRight, DollarSign, KeyRound, RefreshCw,
+  Loader2, Eye,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -19,6 +20,7 @@ const fadeUp = {
 export default function AdminDashboard() {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [approving, setApproving] = useState<number | null>(null);
   const { connected, lastMessage } = useWebSocket(true);
 
   useEffect(() => {
@@ -37,6 +39,22 @@ export default function AdminDashboard() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleQuickApprove = async (paymentId: number, hasHardwareId: boolean) => {
+    setApproving(paymentId);
+    try {
+      if (hasHardwareId) {
+        await adminApi.generateLicense(paymentId);
+      } else {
+        await adminApi.approvePayment(paymentId);
+      }
+      loadStats();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setApproving(null);
     }
   };
 
@@ -144,14 +162,31 @@ export default function AdminDashboard() {
           {stats?.recent_pending_payments?.length > 0 ? (
             <div className="divide-y divide-white/5">
               {stats.recent_pending_payments.slice(0, 5).map((p: any) => (
-                <div key={p.id} className="p-4 flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium">{p.user_email}</div>
+                <div key={p.id} className="p-4 flex items-center justify-between gap-3 hover:bg-white/[0.02] transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium truncate">{p.user_email}</div>
                     <div className="text-xs text-gray-500">
-                      {p.method.replace("_", " ")} &middot; Ref: {p.reference}
+                      {p.method?.replace("_", " ")} &middot; Ref: {p.reference}
                     </div>
                   </div>
-                  <div className="text-sm font-semibold text-amber-400">{p.amount} EGP</div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm font-semibold text-amber-400">{p.amount} EGP</span>
+                    <button
+                      onClick={() => handleQuickApprove(p.id, !!p.hardware_id)}
+                      disabled={approving === p.id}
+                      className="flex items-center gap-1 px-2 py-1 text-xs bg-accent-green/10 text-accent-green rounded-lg hover:bg-accent-green/20 transition-colors disabled:opacity-50"
+                    >
+                      {approving === p.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                      Approve
+                    </button>
+                    <Link
+                      href="/admin/payments"
+                      className="p-1.5 text-gray-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors"
+                      title="View in payments"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
                 </div>
               ))}
             </div>

@@ -7,7 +7,7 @@ import {
   KeyRound, Monitor, Copy, CheckCircle2, Clock, Loader2,
   XCircle, Search, RefreshCw, Plus, X, AlertTriangle,
   RotateCcw, Trash2, Shield, ChevronLeft, ChevronRight,
-  Info, Mail,
+  Info, Mail, Send,
 } from "lucide-react";
 
 interface LicenseRecord {
@@ -644,6 +644,7 @@ export default function AdminLicensesPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [showDirectOnly, setShowDirectOnly] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [processing, setProcessing] = useState<number | null>(null);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
@@ -653,6 +654,7 @@ export default function AdminLicensesPage() {
   const [showTest, setShowTest] = useState(false);
   const [showRecover, setShowRecover] = useState(false);
   const [confirm, setConfirm] = useState<{ id: number; action: "revoke" | "delete" | "regenerate" } | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 400);
@@ -736,8 +738,53 @@ export default function AdminLicensesPage() {
     else handleRegenerate(confirm.id);
   };
 
+  const handleResend = async (id: number) => {
+    try {
+      const res = await adminApi.resendLicenseEmail(id);
+      showToast("success", res.message || "License email resent!");
+    } catch (err: any) {
+      showToast("error", err?.detail || "Failed to resend");
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === licenses.length) setSelected(new Set());
+    else setSelected(new Set(licenses.map((l) => l.id)));
+  };
+
+  const handleBulkRevoke = async () => {
+    if (!window.confirm(`Revoke ${selected.size} selected license(s)?`)) return;
+    const ids = Array.from(selected);
+    setSelected(new Set());
+    for (const id of ids) {
+      try { await adminApi.revokeLicense(id); } catch {}
+    }
+    showToast("success", `Revoked ${ids.length} licenses`);
+    loadLicenses();
+  };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Permanently delete ${selected.size} selected record(s)?`)) return;
+    const ids = Array.from(selected);
+    setSelected(new Set());
+    for (const id of ids) {
+      try { await adminApi.deletePayment(id); } catch {}
+    }
+    showToast("success", `Deleted ${ids.length} records`);
+    loadLicenses();
+  };
+
   const activeCount = licenses.filter((l) => l.status === "approved" && l.license_key).length;
   const pendingCount = licenses.filter((l) => l.status === "pending").length;
+  const displayedLicenses = showDirectOnly ? licenses.filter((l) => l.direct_issue) : licenses;
 
   const filterTabs = [
     { key: "all", label: "All" },
@@ -837,6 +884,40 @@ export default function AdminLicensesPage() {
         </div>
       </div>
 
+      {/* Bulk action bar */}
+      <AnimatePresence>
+        {selected.size > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            className="flex items-center justify-between p-3 bg-primary-500/10 border border-primary-500/30 rounded-xl"
+          >
+            <span className="text-sm text-primary-400 font-medium">{selected.size} selected</span>
+            <div className="flex gap-2">
+              <button
+                onClick={handleBulkRevoke}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-xl text-xs font-medium hover:bg-amber-500/20 transition-colors"
+              >
+                <XCircle className="w-3.5 h-3.5" /> Revoke Selected
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 text-red-400 border border-red-500/30 rounded-xl text-xs font-medium hover:bg-red-500/20 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Delete Selected
+              </button>
+              <button
+                onClick={() => setSelected(new Set())}
+                className="p-1.5 text-gray-400 hover:text-white rounded-lg transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Filters + Search */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
@@ -865,6 +946,16 @@ export default function AdminLicensesPage() {
               )}
             </button>
           ))}
+          <button
+            onClick={() => setShowDirectOnly((v) => !v)}
+            className={`px-3 py-2 rounded-xl text-sm border transition-all flex items-center gap-1.5 ${
+              showDirectOnly
+                ? "bg-primary-500/10 border-primary-500/50 text-primary-400"
+                : "border-white/10 text-gray-400 hover:border-white/20"
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5" /> Direct Issue
+          </button>
         </div>
       </div>
 
@@ -887,14 +978,31 @@ export default function AdminLicensesPage() {
           </div>
         ) : (
           <div className="divide-y divide-white/5">
-            {licenses.map((lic) => {
+            {/* Select-all header */}
+            <div className="px-5 py-2 border-b border-white/5 flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={selected.size === displayedLicenses.length && displayedLicenses.length > 0}
+                onChange={toggleSelectAll}
+                className="w-3.5 h-3.5 accent-primary-400 cursor-pointer"
+              />
+              <span className="text-xs text-gray-500">Select all on this page</span>
+            </div>
+            {displayedLicenses.map((lic) => {
               const st = statusConfig[lic.status] || statusConfig.pending;
               const isProcessing = processing === lic.id;
+              const isSelected = selected.has(lic.id);
 
               return (
-                <motion.div key={lic.id} layout className="p-5">
+                <motion.div key={lic.id} layout className={`p-5 transition-colors ${isSelected ? "bg-primary-500/5" : ""}`}>
                   <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(lic.id)}
+                        className="mt-1 w-3.5 h-3.5 accent-primary-400 cursor-pointer shrink-0"
+                      />
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${lic.direct_issue ? "bg-primary-500/15" : "bg-blue-500/15"}`}>
                         {lic.direct_issue ? <Shield className="w-5 h-5 text-primary-400" /> : <Monitor className="w-5 h-5 text-blue-400" />}
                       </div>
@@ -989,6 +1097,15 @@ export default function AdminLicensesPage() {
                                 {copied === lic.id ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                                 Copy
                               </button>
+                              {lic.submitter_email && (
+                                <button
+                                  onClick={() => handleResend(lic.id)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/30 rounded-xl text-xs font-medium hover:bg-blue-500/20 transition-colors"
+                                  title="Resend license email"
+                                >
+                                  <Send className="w-3.5 h-3.5" /> Email
+                                </button>
+                              )}
                               <button
                                 onClick={() => setConfirm({ id: lic.id, action: "regenerate" })}
                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/30 rounded-xl text-xs font-medium hover:bg-blue-500/20 transition-colors"
