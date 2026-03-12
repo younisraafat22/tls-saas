@@ -159,6 +159,7 @@ class CheckResultPublic(BaseModel):
     slot_details: Optional[Any] = None  # str (desktop) or dict (server)
     duration_seconds: float
     error: str
+    screenshot_b64: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -296,6 +297,12 @@ class DashboardStats(BaseModel):
     checks_today: int
     slots_found_today: int
     notifications_sent_today: int
+    # Desktop license stats
+    total_licenses: int = 0
+    active_licenses: int = 0
+    pending_licenses: int = 0
+    recent_pending_payments: list = []
+    recent_activity: list = []
 
 
 class SystemSettingUpdate(BaseModel):

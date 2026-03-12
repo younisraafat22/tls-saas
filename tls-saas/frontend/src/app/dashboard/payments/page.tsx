@@ -320,9 +320,9 @@ export default function PaymentsPage() {
           {selectedPlan && !isAllInOne && filteredBranches.length > 0 && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 space-y-3">
               <h3 className="font-semibold flex items-center gap-2 text-sm">
-                <AlertCircle className="w-4 h-4 text-primary-400" /> Select Your Branch
+                <AlertCircle className="w-4 h-4 text-primary-400" /> {t.payment.selectBranchTitle}
               </h3>
-              <p className="text-xs text-gray-400">Choose the TLS branch you want to monitor for appointments.</p>
+              <p className="text-xs text-gray-400">{t.payment.selectBranchDesc}</p>
               <div className="grid sm:grid-cols-2 gap-3">
                 {filteredBranches.map((branch: any) => {
                   const isSelected = selectedBranch === branch.id;
@@ -337,10 +337,10 @@ export default function PaymentsPage() {
                       }`}
                     >
                       <div className="font-medium text-sm">{branch.displayName}</div>
-                      <div className="text-xs text-gray-500 capitalize mt-0.5">{branch.service_type}</div>
+                      <div className="text-xs text-gray-500 capitalize mt-0.5">{(t.payment.serviceTypes as Record<string,string>)[branch.service_type] ?? branch.service_type}</div>
                       {isSelected && (
                         <div className="mt-2 text-primary-400 text-xs flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" /> Selected
+                          <CheckCircle2 className="w-3 h-3" /> {t.payment.selectedLabel}
                         </div>
                       )}
                     </button>
@@ -400,14 +400,11 @@ export default function PaymentsPage() {
               {(!isPremium || isAllInOne) && (
               <div className="space-y-3 p-4 rounded-xl bg-primary-500/5 border border-primary-500/20">
                 <div className="flex items-center gap-2 text-primary-400 text-sm font-semibold">
-                  <Hash className="w-4 h-4" /> Device ID (for Desktop App License)
+                  <Hash className="w-4 h-4" /> {t.payment.deviceIdTitle}
                 </div>
-                <p className="text-xs text-gray-400">
-                  Paste your Device ID so we can generate a license key for your computer.
-                  You can find it on the <strong>main screen when you first open the desktop app</strong>.
-                </p>
+                <p className="text-xs text-gray-400" dangerouslySetInnerHTML={{ __html: t.payment.deviceIdDesc }} />
                 <div>
-                  <label className="text-xs text-gray-500 mb-1.5 block">Device ID</label>
+                  <label className="text-xs text-gray-500 mb-1.5 block">{t.payment.deviceIdLabel}</label>
                   <input
                     type="text"
                     value={hardwareId}

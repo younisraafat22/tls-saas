@@ -631,6 +631,11 @@ class SchedulerService:
             logger.info(f"[{branch.name}] *** SLOTS  Notifying {len(active_users)} users ***")
             for user in active_users:
                 await _notify_user_email(db, self._scheduler, user, user_results[user.id], branch, check_result["slot_details"])
+        elif check_result.get("error"):
+            err = check_result["error"]
+            if _is_login_failure(err) or _is_no_application_error(err):
+                for user in active_users:
+                    await _notify_user_check_error(user, branch.name, err)
 
         await db.commit()
         msg = "SLOTS AVAILABLE!" if check_result["slots_available"] else (
