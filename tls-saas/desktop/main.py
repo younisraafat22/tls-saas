@@ -1423,8 +1423,6 @@ class TLSApp:
                     _show_snack(f"⚠️ Unsaved changes in: {', '.join(unsaved_changes)} — click Save first.")
                     return
 
-                settings.is_monitoring = True
-                db.commit()
                 db.close()
 
                 # Disable the button immediately so the user can't double-click
@@ -1455,21 +1453,31 @@ class TLSApp:
                     print("[UI] About to try cloud start")
                     db2 = SessionLocal()
                     s2 = db2.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
-                    db2.close()
 
                     # Try cloud monitoring first (network call — safe on bg thread)
                     if self._try_cloud_start(s2):
-                        print("[UI] Cloud start succeeded")
+                        print("[UI] Cloud start succeeded — marking as_monitoring in DB")
+                        s2.is_monitoring = True
+                        db2.commit()
+                        db2.close()
                         self._ui_queue.put(update_toggle_button)
                         return
 
                     print("[UI] Starting local monitoring")
                     self.checker.start_monitoring()
-                    print("[UI] Local monitoring started")
+                    print("[UI] Local monitoring started — marking is_monitoring in DB")
+                    s2.is_monitoring = True
+                    db2.commit()
+                    db2.close()
                     self._ui_queue.put(update_toggle_button)
                 except Exception as exc:
                     print(f"[UI] EXCEPTION in _bg_start: {exc}")
                     import traceback; traceback.print_exc()
+                    db3 = SessionLocal()
+                    s3 = db3.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
+                    s3.is_monitoring = False
+                    db3.commit()
+                    db3.close()
                     self._ui_queue.put(lambda: _show_snack(f"❌ Error: {exc}"))
                     self._ui_queue.put(update_toggle_button)
 
