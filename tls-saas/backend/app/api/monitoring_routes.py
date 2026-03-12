@@ -287,19 +287,6 @@ async def monitoring_status(
     maint_setting = maint_result.scalar_one_or_none()
     maintenance_mode = maint_setting and maint_setting.value == "true"
 
-    # Worker next run time
-    next_run_result = await db.execute(
-        select(SystemSetting).where(SystemSetting.key == "worker_next_run")
-    )
-    next_run_setting = next_run_result.scalar_one_or_none()
-    worker_next_run = next_run_setting.value if next_run_setting else None
-
-    # Total checks for this user
-    total_checks_result = await db.execute(
-        select(func.count(CheckResult.id)).where(CheckResult.user_id == user.id)
-    )
-    total_checks = total_checks_result.scalar() or 0
-
     return {
         "subscription_active": is_active,
         "plan_type": sub.plan.plan_type.value if sub and sub.plan else None,
@@ -309,8 +296,6 @@ async def monitoring_status(
         "expires_at": sub.expires_at.isoformat() if sub and sub.expires_at else None,
         "monitored_branches": branches,
         "total_branches_monitored": len(branches),
-        "worker_next_run": worker_next_run,
-        "total_checks": total_checks,
     }
 
 
@@ -318,12 +303,11 @@ async def monitoring_status(
 async def check_results(
     branch_id: int | None = None,
     limit: int = 20,
-    offset: int = 0,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get recent check results belonging to this user."""
-    base_query = (
+    query = (
         select(CheckResult, Branch)
         .join(Branch, CheckResult.branch_id == Branch.id)
         # Only return results for branches this user actually has an active monitor entry for.
@@ -345,29 +329,13 @@ async def check_results(
     )
 
     if branch_id:
-        base_query = base_query.where(CheckResult.branch_id == branch_id)
+        query = query.where(CheckResult.branch_id == branch_id)
 
-    # Total count for pagination
-    count_result = await db.execute(
-        select(func.count()).select_from(base_query.subquery())
-    )
-    total = count_result.scalar() or 0
-
-    page_limit = min(limit, 100)
-    query = base_query.order_by(CheckResult.checked_at.desc()).limit(page_limit).offset(offset)
+    query = query.order_by(CheckResult.checked_at.desc()).limit(min(limit, 100))
     result = await db.execute(query)
 
-    import base64 as _b64, os as _os
-    rows = []
-    for cr, b in result.all():
-        screenshot_b64 = None
-        if cr.slots_available and cr.screenshot_path:
-            try:
-                with open(cr.screenshot_path, "rb") as f:
-                    screenshot_b64 = _b64.b64encode(f.read()).decode()
-            except Exception:
-                pass
-        rows.append(CheckResultPublic(
+    return [
+        CheckResultPublic(
             id=cr.id,
             branch_name=b.name,
             branch_service_type=b.service_type,
@@ -376,10 +344,9 @@ async def check_results(
             slot_details=cr.slot_details,
             duration_seconds=cr.duration_seconds,
             error=cr.error or "",
-            screenshot_b64=screenshot_b64,
-        ))
-
-    return {"total": total, "results": rows}
+        )
+        for cr, b in result.all()
+    ]
 
 
 @router.get("/notifications")
@@ -637,12 +604,6 @@ def _verify_worker(x_worker_secret: str = Header(default="")):
         raise HTTPException(status_code=403, detail="Invalid worker secret")
 
 
-class WorkerLogBody(BaseModel):
-    level: str = "info"
-    message: str = ""
-    branch: str = ""
-
-
 class WorkerResultBody(BaseModel):
     branch_id: int
     slots_available: bool
@@ -651,7 +612,6 @@ class WorkerResultBody(BaseModel):
     duration_seconds: float = 0
     source: str = "worker"
     logs: list = []  # Step-by-step logs from the checker to forward to the admin panel
-    skip_log_replay: bool = False  # True when logs were already streamed in real-time
 
 
 @router.get("/worker/jobs", dependencies=[Depends(_verify_worker)])
@@ -661,8 +621,7 @@ async def worker_get_jobs(db: AsyncSession = Depends(get_db)):
     laptop worker knows what to check next.
     Only called when WORKER_MODE=true is configured on Fly.io.
     """
-    from app.models import Branch, UserBranchMonitor, User, Subscription, UserCredential, Plan
-    from app.models import PlanType as _PlanType
+    from app.models import Branch, UserBranchMonitor, User, Subscription, UserCredential
     # Respect the admin start/stop toggle
     state_r = await db.execute(select(SystemSetting).where(SystemSetting.key == "scheduler_running"))
     state = state_r.scalar_one_or_none()
@@ -693,12 +652,7 @@ async def worker_get_jobs(db: AsyncSession = Depends(get_db)):
         for _m, user in monitors.all():
             sub_r = await db.execute(
                 select(Subscription)
-                .join(Plan, Subscription.plan_id == Plan.id)
-                .where(
-                    Subscription.user_id == user.id,
-                    Subscription.status == SubscriptionStatus.ACTIVE,
-                    Plan.plan_type == _PlanType.PREMIUM,  # cloud worker only handles premium
-                )
+                .where(Subscription.user_id == user.id, Subscription.status == SubscriptionStatus.ACTIVE)
                 .order_by(Subscription.expires_at.desc())
                 .limit(1)
             )
@@ -723,7 +677,6 @@ async def worker_get_jobs(db: AsyncSession = Depends(get_db)):
                     if cred and cred.email_encrypted and cred.password_encrypted:
                         users.append({
                             "user_id": user.id,
-                            "user_email": user.email,
                             "email_encrypted": cred.email_encrypted,
                             "password_encrypted": cred.password_encrypted,
                         })
@@ -765,14 +718,6 @@ async def worker_heartbeat(body: WorkerHeartbeatBody, db: AsyncSession = Depends
     return {"ok": True}
 
 
-@router.post("/worker/log", dependencies=[Depends(_verify_worker)])
-async def worker_stream_log(body: WorkerLogBody):
-    """Receives a single log entry from the laptop worker and broadcasts it immediately via WebSocket."""
-    from app.services.scheduler import _emit_log
-    await _emit_log(body.level, body.message, body.branch)
-    return {"ok": True}
-
-
 @router.get("/worker/signal", dependencies=[Depends(_verify_worker)])
 async def worker_signal(db: AsyncSession = Depends(get_db)):
     """Check for a force-run signal from the admin panel. Clears the flag after reading."""
@@ -806,12 +751,11 @@ async def worker_post_result(
         return {"status": "ok", "notified": 0}
 
     from app.services.scheduler import _emit_log
-    # Forward step-by-step logs from the laptop checker (only if not already streamed in real-time)
-    if not body.skip_log_replay:
-        for log_entry in body.logs:
-            level = log_entry.get("level", "info") if isinstance(log_entry, dict) else "info"
-            message = log_entry.get("message", str(log_entry)) if isinstance(log_entry, dict) else str(log_entry)
-            await _emit_log(level, message, branch.name)
+    # Forward step-by-step logs from the laptop checker to the admin panel
+    for log_entry in body.logs:
+        level = log_entry.get("level", "info") if isinstance(log_entry, dict) else "info"
+        message = log_entry.get("message", str(log_entry)) if isinstance(log_entry, dict) else str(log_entry)
+        await _emit_log(level, message, branch.name)
 
     check_result = {
         "slots_available": body.slots_available,

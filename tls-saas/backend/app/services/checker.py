@@ -94,40 +94,18 @@ class TLSChecker:
             return self.WARP_CLI_WINDOWS
         return self.WARP_CLI_LINUX
 
-    def _warp_cmd(self, *args) -> list:
-        """Build a warp-cli command list, adding --accept-tos on Linux (required for non-TTY use)."""
-        cli = self._warp_cli_path()
-        if sys.platform != "win32":
-            return [cli, "--accept-tos"] + list(args)
-        return [cli] + list(args)
-
     def _warp_available(self) -> bool:
-        """Check that warp-cli binary exists AND is registered (not in 'Registration Missing' state)."""
-        cli = self._warp_cli_path()
-        if not os.path.isfile(cli):
-            return False
-        no_win = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-        try:
-            r = subprocess.run(
-                self._warp_cmd("status"),
-                capture_output=True, text=True, timeout=5,
-                creationflags=no_win,
-            )
-            output = r.stdout + r.stderr
-            # Skip WARP if registration is missing or it's in an error state
-            if "Registration Missing" in output or "Unable" in output or "Terms of Service" in output:
-                return False
-        except Exception:
-            return False
-        return True
+        """Check that warp-cli binary exists."""
+        return os.path.isfile(self._warp_cli_path())
 
     def _warp_connect(self, log=None) -> bool:
         """Connect WARP and wait up to 30 s for the tunnel to be up."""
+        cli = self._warp_cli_path()
         _log = log or (lambda m, *a: None)
         no_win = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         try:
             subprocess.run(
-                self._warp_cmd("connect"),
+                [cli, "connect"],
                 capture_output=True, timeout=15,
                 creationflags=no_win,
             )
@@ -139,7 +117,7 @@ class TLSChecker:
         while time.time() < deadline:
             try:
                 r = subprocess.run(
-                    self._warp_cmd("status"),
+                    [cli, "status"],
                     capture_output=True, text=True, timeout=5,
                     creationflags=no_win,
                 )
@@ -158,10 +136,11 @@ class TLSChecker:
         """Disconnect WARP if active."""
         if not self._warp_enabled:
             return
+        cli = self._warp_cli_path()
         no_win = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         try:
             subprocess.run(
-                self._warp_cmd("disconnect"),
+                [cli, "disconnect"],
                 capture_output=True, timeout=10,
                 creationflags=no_win,
             )
@@ -384,12 +363,7 @@ class TLSChecker:
                 return result
 
             # ── Step 8: Handle reCAPTCHA (if present) ─────────────
-            # Returns False if browser was closed for WARP IP rotate — must abort session
-            captcha_ok = await self._check_recaptcha(page, log)
-            if captcha_ok is False:
-                result["error"] = "Session reset for IP rotation — will retry"
-                result["duration"] = round(time.time() - start, 2)
-                return result
+            await self._check_recaptcha(page, log)
 
             # ── Step 9: Click submit login ────────────────────────
             submit_ok = await self._submit_login(page, log)
@@ -581,28 +555,13 @@ class TLSChecker:
         except Exception:
             pass
 
-        # SVG icon fallback — click the person icon, then find Login in the dropdown
+        # SVG icon fallback
         try:
             icon = await page.query_selector("svg[aria-label='User icon']")
             if icon:
                 parent = await icon.evaluate_handle("el => el.parentElement")
                 await parent.as_element().click()
-                log("Clicked SVG user icon — waiting for dropdown...")
-                await asyncio.sleep(1.5)
-                # Find the Login link inside the opened dropdown
-                for xpath_text in ["LOGIN", "Login", "Log in"]:
-                    try:
-                        login_link = await page.query_selector(
-                            f"xpath=//*[normalize-space(text())='{xpath_text}']"
-                        )
-                        if login_link and await login_link.is_visible():
-                            await login_link.click()
-                            log("Clicked Login link in dropdown")
-                            return True
-                    except Exception:
-                        continue
-                # Dropdown may have navigated directly — treat as success
-                log("Clicked login icon button (direct navigation)")
+                log("Clicked login icon button")
                 return True
         except Exception:
             pass
@@ -944,7 +903,7 @@ class TLSChecker:
                                 except Exception:
                                     pass
                                 self._browser = None
-                                return False  # signal caller: browser closed, session aborted
+                                return  # scheduler will retry with fresh IP
                         if attempt < MAX_ATTEMPTS:
                             wait_time = 10 * attempt
                             log(f"Waiting {wait_time}s before retry (cooldown)...", "warn")
@@ -1000,7 +959,7 @@ class TLSChecker:
                                 except Exception:
                                     pass
                                 self._browser = None
-                                return False  # signal caller: browser closed, session aborted
+                                return  # scheduler will retry with fresh IP
                         if attempt < MAX_ATTEMPTS:
                             await asyncio.sleep(5)
                             continue

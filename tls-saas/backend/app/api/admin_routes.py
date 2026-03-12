@@ -1293,33 +1293,6 @@ async def update_settings_bulk(
             setting.value = str(value)
         else:
             db.add(SystemSetting(key=key, value=str(value)))
-
-    # If the check interval changed, recalculate worker_next_run so the UI shows the
-    # correct countdown immediately (without waiting for the worker's next heartbeat).
-    if "check_interval_minutes" in body:
-        try:
-            new_interval_sec = int(body["check_interval_minutes"]) * 60
-            last_run_r = await db.execute(
-                select(SystemSetting).where(SystemSetting.key == "worker_last_run")
-            )
-            last_run_row = last_run_r.scalar_one_or_none()
-            if last_run_row and last_run_row.value:
-                from datetime import datetime, timezone, timedelta
-                last_run_dt = datetime.fromisoformat(last_run_row.value)
-                if last_run_dt.tzinfo is None:
-                    last_run_dt = last_run_dt.replace(tzinfo=timezone.utc)
-                new_next_run = (last_run_dt + timedelta(seconds=new_interval_sec)).isoformat()
-                next_run_r = await db.execute(
-                    select(SystemSetting).where(SystemSetting.key == "worker_next_run")
-                )
-                next_run_row = next_run_r.scalar_one_or_none()
-                if next_run_row:
-                    next_run_row.value = new_next_run
-                else:
-                    db.add(SystemSetting(key="worker_next_run", value=new_next_run))
-        except Exception:
-            pass  # Non-fatal — worker will correct it on next heartbeat
-
     await db.commit()
     return MessageResponse(message=f"{len(body)} settings updated")
 

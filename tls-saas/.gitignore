@@ -36,12 +36,3 @@ desktop.ini
 .env.tunnel
 .vercel
 .env*.local
-
-# Large installer files
-*.msi
-*.exe
-desktop/installer_output/
-desktop/build/
-desktop/dist/
-desktop/__pycache__/
-desktop/chrome_profile/

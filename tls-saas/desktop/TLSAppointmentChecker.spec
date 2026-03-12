@@ -130,7 +130,6 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon='Logos\\icon_BLACK.ico',
-    manifest='app.manifest',
 )
 
 coll = COLLECT(

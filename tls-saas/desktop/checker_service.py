@@ -1978,12 +1978,7 @@ class TLSCheckerService:
             except Exception as e:
                 # Dismiss any alert that might be blocking (e.g. reCAPTCHA network error)
                 self._dismiss_alert()
-                err_str = str(e)
-                # "invalid session id" = Chrome process died (e.g. WARP rotation killed it)
-                # Treat as a silent IP-rotation event — cleanup and retry without alarming the user
-                if "invalid session id" in err_str.lower() or "no such window" in err_str.lower():
-                    return False, "WARP_IP_CHANGE"
-                return False, f"PAGE_NOT_LOADED: Could not find login button. Website may be loading slowly. ({err_str[:80]})"
+                return False, f"PAGE_NOT_LOADED: Could not find login button. Website may be loading slowly. ({str(e)[:80]})"
             
             self._wait_random(3, 5)
             
@@ -1993,22 +1988,15 @@ class TLSCheckerService:
             # Fill credentials
             self._log("Logging in...")
             try:
-                # Wait up to 20s for the login form to appear after clicking Login button
-                wait_form = WebDriverWait(self.driver, 20)
+                # Try new selectors first, fall back to legacy
                 email_field = None
                 password_field = None
-                try:
-                    email_field = wait_form.until(
-                        lambda d: d.find_element(By.CSS_SELECTOR, "#email-input-field") or
-                                  d.find_element(By.CSS_SELECTOR, "#username")
-                    )
-                except Exception:
-                    for eid in ["#email-input-field", "#username"]:
-                        try:
-                            email_field = self.driver.find_element(By.CSS_SELECTOR, eid)
-                            break
-                        except:
-                            pass
+                for eid in ["#email-input-field", "#username"]:
+                    try:
+                        email_field = self.driver.find_element(By.CSS_SELECTOR, eid)
+                        break
+                    except:
+                        pass
                 for pid in ["#password-input-field", "#password"]:
                     try:
                         password_field = self.driver.find_element(By.CSS_SELECTOR, pid)
@@ -2018,9 +2006,6 @@ class TLSCheckerService:
                 if not email_field or not password_field:
                     raise Exception("fields not found")
             except Exception as e:
-                err_str = str(e)
-                if "invalid session id" in err_str.lower() or "no such window" in err_str.lower():
-                    return False, "WARP_IP_CHANGE"
                 return False, "PAGE_NOT_LOADED: Login form not found. Website may be loading slowly. Will retry immediately."
             
             # Use JavaScript to set values directly — avoids any risk of the
@@ -2145,11 +2130,124 @@ class TLSCheckerService:
             
         except Exception as e:
             error_msg = str(e)
-            if "invalid session id" in error_msg.lower() or "no such window" in error_msg.lower():
-                return False, "WARP_IP_CHANGE"
             if "no such element" in error_msg.lower():
                 return False, "PAGE_NOT_LOADED: Website elements not found. TLS website may be slow. Will retry immediately."
             return False, f"LOGIN_ERROR: {error_msg[:100]}"
+    
+    # ── Session cookie persistence ────────────────────────────────────────────
+    # Saves/restores authenticated session cookies so the full login + CAPTCHA
+    # flow is only required once per session, not on every check cycle.
+
+    def _cookies_path(self) -> str:
+        from config import BASE_DIR
+        cookie_dir = os.path.join(str(BASE_DIR), "session_data")
+        os.makedirs(cookie_dir, exist_ok=True)
+        return os.path.join(cookie_dir, "tls_session_cookies.json")
+
+    def _save_session_cookies(self):
+        """Persist browser cookies to disk after a successful login."""
+        import json as _json
+        try:
+            cookies = self.driver.get_cookies()
+            if cookies:
+                with open(self._cookies_path(), "w", encoding="utf-8") as f:
+                    _json.dump(cookies, f)
+                print(f"[Checker] 🍪 Session cookies saved ({len(cookies)} cookies)")
+        except Exception as e:
+            print(f"[Checker] Cookie save failed (non-fatal): {e}")
+
+    def _restore_session(self, target_url: str) -> bool:
+        """Try to restore a previous authenticated session from saved cookies.
+
+        Returns True if the session was successfully restored (already logged in),
+        False if a fresh login is required.
+        """
+        import json as _json
+        cookie_path = self._cookies_path()
+        if not os.path.exists(cookie_path):
+            return False
+
+        try:
+            with open(cookie_path, "r", encoding="utf-8") as f:
+                cookies = _json.load(f)
+            if not cookies:
+                return False
+        except Exception:
+            return False
+
+        try:
+            # Navigate to the base domain first so set_cookie works (same-origin rule)
+            from urllib.parse import urlparse
+            parsed = urlparse(target_url)
+            base = f"{parsed.scheme}://{parsed.netloc}"
+
+            if self._is_seleniumbase:
+                self.driver.uc_open_with_reconnect(base, reconnect_time=3)
+            else:
+                self.driver.get(base)
+            self._wait_random(1, 2)
+
+            # Inject saved cookies
+            for cookie in cookies:
+                # Remove fields the browser rejects
+                for key in ("expiry", "sameSite"):
+                    cookie.pop(key, None)
+                try:
+                    self.driver.add_cookie(cookie)
+                except Exception:
+                    pass
+
+            # Navigate to the target URL with cookies active
+            self._handle_cookie_consent()
+            if self._is_seleniumbase:
+                self.driver.uc_open_with_reconnect(target_url, reconnect_time=3)
+            else:
+                self.driver.get(target_url)
+            self._wait_random(2, 3)
+            self._handle_application_error()
+
+            # Detect whether we landed on the authenticated dashboard or were
+            # redirected to the login page (expired session).
+            try:
+                page_src = self.driver.page_source.lower()
+                current_url = self.driver.current_url.lower()
+
+                # Signs we're logged in (post-authentication page)
+                logged_in_signals = [
+                    "formgroupid",          # group select button present
+                    "book-appointment",     # booking page element
+                    "tls-button-primary",   # primary action buttons on app page
+                    "logout",               # logout link in header
+                    "sign out",
+                    "dashboard",
+                ]
+                # Signs we're back on the login page
+                login_signals = [
+                    "email-input-field",
+                    "password-input-field",
+                    "/login" in current_url,
+                    "sign in" in page_src,
+                ]
+
+                if any(sig in page_src for sig in logged_in_signals) and \
+                   not any((sig if isinstance(sig, bool) else sig in page_src) for sig in login_signals):
+                    print("[Checker] 🔑 Session restored from cookies — skipping login/CAPTCHA")
+                    return True
+
+                print("[Checker] 🔑 Saved session expired — will do full login")
+                # Delete stale cookie file so we don't retry it again this cycle
+                try:
+                    os.remove(cookie_path)
+                except Exception:
+                    pass
+                return False
+
+            except Exception:
+                return False
+
+        except Exception as e:
+            print(f"[Checker] Session restore failed: {e}")
+            return False
 
     def _navigate_to_booking(self, service_type: str = "legalization") -> bool:
         """Navigate to appointment booking page via group select + continue"""
@@ -2210,8 +2308,6 @@ class TLSCheckerService:
                     (By.CSS_SELECTOR, "button[name='formGroupId'].TlsButton_tls-button__syUS5")
                 ))
             except Exception:
-                if not self.is_running:
-                    return False  # Stopped mid-check — exit silently
                 # Fallback: any button containing "Select" text
                 try:
                     buttons = self.driver.find_elements(By.CSS_SELECTOR, "button")
@@ -2223,14 +2319,10 @@ class TLSCheckerService:
                     pass
 
             if not select_btn:
-                if not self.is_running:
-                    return False  # Stopped mid-check — exit silently
                 # Legacy fallback: old Enter button
                 try:
                     select_btn = self.driver.find_element(By.CSS_SELECTOR, "button.tls-button-primary.button-neo-inside")
                 except Exception:
-                    if not self.is_running:
-                        return False  # Stopped mid-check — exit silently
                     self._log("❌ Select / Enter button not found.")
                     return False
 
@@ -2269,14 +2361,10 @@ class TLSCheckerService:
                         pass
 
                 if not continue_btn:
-                    if not self.is_running:
-                        return False  # Stopped mid-check — exit silently
                     # Legacy fallback
                     try:
                         continue_btn = self.driver.find_element(By.CSS_SELECTOR, "button.button-neo-inside.-primary")
                     except Exception:
-                        if not self.is_running:
-                            return False  # Stopped mid-check — exit silently
                         self._log("❌ Continue / Book appointment button not found.")
                         return False
 
@@ -2895,12 +2983,23 @@ class TLSCheckerService:
                     # window is sent to the bottom of the Z-order by the window hider.
                     self._inject_visibility_override()
 
-                # Full login
-                login_success, login_error = self._login(
-                    settings.tls_email, tls_password,
-                    branch_url=branch_url, service_type=service_type,
-                    is_retry=is_retry,
-                )
+                # ── Try restoring a saved session first (avoids CAPTCHA) ────────
+                session_restored = self._restore_session(branch_url)
+
+                if session_restored:
+                    # Already authenticated — skip full login flow
+                    login_success = True
+                    login_error = ""
+                else:
+                    # Full login (may involve CAPTCHA)
+                    login_success, login_error = self._login(
+                        settings.tls_email, tls_password,
+                        branch_url=branch_url, service_type=service_type,
+                        is_retry=is_retry,
+                    )
+                    # Persist cookies on success so next cycle skips CAPTCHA
+                    if login_success:
+                        self._save_session_cookies()
 
             # Make Chrome transparent AFTER login (including CAPTCHA solving).
             # Chrome was visible (though transparent alpha=1 is imperceptible)

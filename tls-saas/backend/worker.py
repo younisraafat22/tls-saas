@@ -17,7 +17,6 @@ posts results.  It uses the same checker code already in app/services/.
 import asyncio
 import logging
 import os
-import queue as _queue
 import sys
 import time
 from datetime import datetime, timezone, timedelta
@@ -53,66 +52,6 @@ HEADERS = {
     "X-Worker-Secret": WORKER_SECRET,
 }
 
-# ── Real-time log streaming ──────────────────────────────────────────────────
-# Intercepts checker/visa_checker_sb log records during a check cycle and
-# streams them to the backend immediately so the admin panel shows live progress.
-
-_log_stream_queue: _queue.Queue = _queue.Queue()
-_streaming_active = False
-_STREAM_LOGGER_NAMES = {"checker", "visa_checker_sb"}
-
-
-class _WorkerStreamHandler(logging.Handler):
-    """Puts checker log records into the stream queue (thread-safe)."""
-    def emit(self, record):
-        if not _streaming_active or record.name not in _STREAM_LOGGER_NAMES:
-            return
-        level = (
-            "error" if record.levelno >= logging.ERROR
-            else "warn" if record.levelno >= logging.WARNING
-            else "info"
-        )
-        _log_stream_queue.put_nowait({"level": level, "message": record.getMessage()})
-
-
-_stream_handler = _WorkerStreamHandler()
-logging.getLogger().addHandler(_stream_handler)
-
-
-async def _drain_log_stream(branch: str = ""):
-    """Background task: drain the log queue and POST each entry to the backend."""
-    async with httpx.AsyncClient(timeout=5) as client:
-        while True:
-            try:
-                try:
-                    entry = _log_stream_queue.get_nowait()
-                except _queue.Empty:
-                    await asyncio.sleep(0.2)
-                    continue
-                entry["branch"] = branch
-                try:
-                    await client.post(
-                        f"{FLY_BACKEND_URL}/api/monitoring/worker/log",
-                        json=entry,
-                        headers=HEADERS,
-                    )
-                except Exception:
-                    pass
-            except asyncio.CancelledError:
-                # Drain any remaining entries before exiting
-                while not _log_stream_queue.empty():
-                    try:
-                        entry = _log_stream_queue.get_nowait()
-                        entry["branch"] = branch
-                        await client.post(
-                            f"{FLY_BACKEND_URL}/api/monitoring/worker/log",
-                            json=entry,
-                            headers=HEADERS,
-                        )
-                    except Exception:
-                        pass
-                raise
-
 
 async def run_check(job: dict) -> dict:
     """
@@ -127,61 +66,77 @@ async def run_check(job: dict) -> dict:
     # Import checker here so we only need the Selenium deps on the laptop
     from app.services.checker import tls_checker, decrypt_credential
     from app.services.scheduler import _is_login_failure, _is_captcha_failure
+    import random
 
-    # Both legalization and visa: check every subscriber individually.
-    # For legalization, the slot result is the same for all users, but we still
-    # try each in turn so bad/blocked credentials don't block everyone else.
-    results = []
-    last_login_failure_result = None  # preserve so we can return its real error
-    total = len(users)
-    for i, u in enumerate(users, 1):
-        if not u.get("email_encrypted"):
-            continue
-        user_label = u.get("user_email", f"user#{u['user_id']}")
-        try:
-            email = decrypt_credential(u["email_encrypted"])
-            pw    = decrypt_credential(u["password_encrypted"])
-        except Exception as exc:
-            logger.warning(f"[{branch_name}] Decrypt failed for {user_label}: {exc}")
-            continue
+    if service_type == "legalization":
+        # Shared check: try up to 4 random users, share result with all
+        candidates = random.sample(users, min(4, len(users)))
+        decrypt_failures = 0
+        attempt_failures = 0
+        for u in candidates:
+            if not u.get("email_encrypted"):
+                continue
+            try:
+                email = decrypt_credential(u["email_encrypted"])
+                pw    = decrypt_credential(u["password_encrypted"])
+            except Exception as exc:
+                logger.warning(f"Decrypt failed for user {u['user_id']}: {exc}")
+                decrypt_failures += 1
+                continue
 
-        logger.info(f"[{branch_name}] Checking user: {user_label} ({i}/{total})")
-        # Also push directly to stream queue so the admin panel shows it in real-time
-        if _streaming_active:
-            _log_stream_queue.put_nowait({"level": "info", "message": f"Checking user: {user_label} ({i}/{total})"})
-        res = await tls_checker.check_branch(
-            branch_url=branch_url,
-            tls_email=email,
-            tls_password=pw,
-            branch_name=branch_name,
-            service_type=service_type,
-        )
-        err = res.get("error", "")
-        if _is_captcha_failure(err):
-            logger.warning(f"[{branch_name}] Captcha blocked for {user_label} — trying next")
-            continue
-        if _is_login_failure(err):
-            logger.warning(f"[{branch_name}] Login failed for {user_label}: {err}")
-            last_login_failure_result = res  # save so we can notify the user
-            continue
-        results.append(res)
+            res = await tls_checker.check_branch(
+                branch_url=branch_url,
+                tls_email=email,
+                tls_password=pw,
+                branch_name=branch_name,
+                service_type=service_type,
+            )
+            err = res.get("error", "")
+            if _is_captcha_failure(err):
+                logger.warning(f"[{branch_name}] Captcha blocked for user {u['user_id']} — trying next")
+                attempt_failures += 1
+                continue
+            if _is_login_failure(err):
+                logger.warning(f"[{branch_name}] Login failed for user {u['user_id']}: {err}")
+                attempt_failures += 1
+                continue
+            return res
+        if decrypt_failures > 0 and attempt_failures == 0:
+            error_msg = (f"Credential decryption failed for {decrypt_failures} user(s) — "
+                         "ensure ENCRYPTION_KEY in .env.worker matches the server key")
+        else:
+            error_msg = "All attempts failed"
+        return {"slots_available": False, "slot_details": None, "error": error_msg, "duration": 0}
 
-    # Return first clean (no-error) result; fall back to last result.
-    # If everything was a login failure, return that result (with the real error)
-    # so _persist_and_notify can detect it and send an error email to the user.
-    for r in results:
-        if not r.get("error"):
-            return r
-    if results:
-        return results[-1]
-    if last_login_failure_result:
-        return last_login_failure_result
-    return {"slots_available": False, "slot_details": None, "error": "All attempts failed", "duration": 0}
+    else:
+        # Visa: individual check per user — return first result (worker posts each individually)
+        results = []
+        for u in users:
+            if not u.get("email_encrypted"):
+                continue
+            try:
+                email = decrypt_credential(u["email_encrypted"])
+                pw    = decrypt_credential(u["password_encrypted"])
+            except Exception as exc:
+                logger.warning(f"Decrypt failed for user {u['user_id']}: {exc}")
+                continue
+            res = await tls_checker.check_branch(
+                branch_url=branch_url,
+                tls_email=email,
+                tls_password=pw,
+                branch_name=branch_name,
+                service_type=service_type,
+            )
+            results.append(res)
+        # Return first non-error result, or the last result
+        for r in results:
+            if not r.get("error"):
+                return r
+        return results[-1] if results else {"slots_available": False, "slot_details": None, "error": "No users", "duration": 0}
 
 
 async def check_cycle():
     """One full check cycle: fetch jobs → run checks → post results."""
-    global _streaming_active
     now = datetime.now(timezone.utc)
     logger.info("=== Worker check cycle starting ===")
     async with httpx.AsyncClient(timeout=30) as client:
@@ -196,16 +151,7 @@ async def check_cycle():
                 global CHECK_INTERVAL
                 CHECK_INTERVAL = db_interval * 60
         except Exception as exc:
-            # Log with full traceback and response body if available
-            resp_body = ""
-            try:
-                resp_body = resp.text[:500]
-            except Exception:
-                pass
-            logger.error(
-                f"Failed to fetch jobs from Fly.io: {type(exc).__name__}: {exc!r} | body: {resp_body!r}",
-                exc_info=True,
-            )
+            logger.error(f"Failed to fetch jobs from Fly.io: {exc}")
             return
 
     # Post heartbeat so the admin panel shows last/next run times
@@ -224,41 +170,19 @@ async def check_cycle():
     logger.info(f"Got {len(jobs)} job(s) to run")
 
     for job in jobs:
-        branch_id    = job["branch_id"]
-        branch_name  = job["branch_name"]
+        branch_id   = job["branch_id"]
+        branch_name = job["branch_name"]
         service_type = job["service_type"]
-        n_users = len(job["users"])
-        user_emails = ", ".join(u.get("user_email", f"user#{u['user_id']}") for u in job["users"])
-        logger.info(f"Checking [{branch_name}] ({service_type}) — {n_users} subscriber(s): {user_emails}")
-
-        # Clear any stale queue entries, then enable real-time log streaming
-        while not _log_stream_queue.empty():
-            try:
-                _log_stream_queue.get_nowait()
-            except _queue.Empty:
-                break
-        _streaming_active = True
-        stream_task = asyncio.create_task(_drain_log_stream(branch=branch_name))
+        logger.info(f"Checking [{branch_name}] ({service_type}) — {len(job['users'])} user(s)")
 
         try:
             res = await run_check(job)
         except Exception as exc:
             logger.error(f"[{branch_name}] Check crashed: {exc}", exc_info=True)
             res = {"slots_available": False, "slot_details": None, "error": str(exc), "duration": 0}
-        finally:
-            # Stop streaming: let queue flush, then cancel
-            _streaming_active = False
-            await asyncio.sleep(0.5)
-            stream_task.cancel()
-            try:
-                await stream_task
-            except asyncio.CancelledError:
-                pass
 
-        # Build logs: banner + checker step logs (logs already streamed live, skip replay)
-        n_users = len(job["users"])
-        user_emails = ", ".join(u.get("user_email", f"user#{u['user_id']}") for u in job["users"])
-        banner = [{"level": "info", "message": f"Worker checking [{branch_name}] ({service_type}) — {n_users} subscriber(s): {user_emails}"}]
+        # Build logs: banner + checker step logs
+        banner = [{"level": "info", "message": f"Worker checking [{branch_name}] ({service_type}) — {len(job['users'])} user(s)"}]
         step_logs = res.get("logs") or []
         raw_details = res.get("slot_details")
         # API expects slot_details as str | None; the checker may return a dict
@@ -273,7 +197,6 @@ async def check_cycle():
             "duration_seconds": res.get("duration", 0),
             "source": "worker",
             "logs": banner + step_logs,
-            "skip_log_replay": True,  # logs already streamed in real-time
         }
         async with httpx.AsyncClient(timeout=15) as client:
             try:

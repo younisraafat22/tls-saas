@@ -222,8 +222,8 @@ export const credentialApi = {
 
 export const monitoringApi = {
   getStatus: () => api.get("/api/monitoring/status"),
-  getResults: (branchId?: number, limit?: number, offset?: number) =>
-    api.get(`/api/monitoring/results?${branchId ? `branch_id=${branchId}&` : ""}limit=${limit || 10}&offset=${offset || 0}`),
+  getResults: (branchId?: number, limit?: number) =>
+    api.get(`/api/monitoring/results?${branchId ? `branch_id=${branchId}&` : ""}limit=${limit || 20}`),
   getNotifications: (limit?: number) =>
     api.get(`/api/monitoring/notifications?limit=${limit || 30}`),
 };
