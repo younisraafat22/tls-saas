@@ -75,15 +75,22 @@ async def recover_license(
     Return the license key(s) for a given email address.
     Used by the desktop app when a user accidentally deletes their .license file.
     """
-    from sqlalchemy import select
+    from sqlalchemy import select, or_
     email = (body.get("email") or "").strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status_code=400, detail="A valid email address is required")
 
+    # Outer-join to User so we can match payments from both:
+    #  - Desktop/guest submissions (submitter_email is set, user_id may be None)
+    #  - Web-portal submissions (submitter_email is NULL, email lives in User.email)
     stmt = (
         select(Payment)
+        .join(User, Payment.user_id == User.id, isouter=True)
         .where(
-            Payment.submitter_email.ilike(email),
+            or_(
+                Payment.submitter_email.ilike(email),
+                User.email.ilike(email),
+            ),
             Payment.status == PaymentStatus.APPROVED,
             Payment.license_key.isnot(None),
             Payment.license_key != "",

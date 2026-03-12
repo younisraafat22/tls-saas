@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import { monitoringApi, paymentApi } from "@/lib/api";
@@ -11,7 +11,8 @@ import {
   Activity, Bell, Clock, Globe, CheckCircle2,
   XCircle, AlertCircle, ArrowRight, Wifi, WifiOff,
   Sparkles, Calendar, Wrench, Key, Copy, Check,
-  ShieldCheck, Monitor,
+  ShieldCheck, Monitor, Download, ChevronLeft, ChevronRight,
+  Hash, Image as ImageIcon, X as XIcon, Timer,
 } from "lucide-react";
 
 const fadeUp = {
@@ -19,31 +20,59 @@ const fadeUp = {
   visible: { opacity: 1, y: 0 },
 };
 
+function useCountdown(targetIso: string | null | undefined) {
+  const [display, setDisplay] = useState("—");
+  useEffect(() => {
+    if (!targetIso) { setDisplay("—"); return; }
+    const update = () => {
+      const diff = new Date(targetIso.includes("Z") || targetIso.includes("+") ? targetIso : targetIso + "Z").getTime() - Date.now();
+      if (diff <= 0) { setDisplay("Soon"); return; }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setDisplay(h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`);
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [targetIso]);
+  return display;
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const td = t.dash;
+  const dateLocale = locale === "ar" ? "ar-EG" : locale === "de" ? "de-DE" : "en-GB";
   const { connected, lastMessage } = useWebSocket();
   const [status, setStatus] = useState<any>(null);
-  const [results, setResults] = useState<any[]>([]);
+  const [resultsData, setResultsData] = useState<{ total: number; results: any[] }>({ total: 0, results: [] });
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [licenseKey, setLicenseKey] = useState<string | null>(null);
   const [licensePlan, setLicensePlan] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [resultsPage, setResultsPage] = useState(0);
+  const [downloadUrl, setDownloadUrl] = useState<string>("");
+  const [screenshotModal, setScreenshotModal] = useState<string | null>(null);
+  const PAGE_SIZE = 10;
+
+  const countdown = useCountdown(status?.worker_next_run);
 
   useEffect(() => {
-    loadData();
-    // Auto-refresh every 30s to catch desktop app check results
-    const interval = setInterval(loadData, 30000);
+    loadAll();
+    const interval = setInterval(loadAll, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  // Handle real-time WebSocket messages
+  useEffect(() => {
+    loadResults();
+  }, [resultsPage]);
+
   useEffect(() => {
     if (!lastMessage) return;
     if (lastMessage.type === "check_result") {
-      loadData(); // Refresh data
+      loadAll();
       if (lastMessage.slots_available) {
         setToast(`🎉 Slots available at ${lastMessage.branch}!`);
         setTimeout(() => setToast(null), 10000);
@@ -52,9 +81,18 @@ export default function DashboardPage() {
     if (lastMessage.type === "subscription_activated") {
       setToast(lastMessage.message);
       setTimeout(() => setToast(null), 8000);
-      loadData();
+      loadAll();
     }
   }, [lastMessage]);
+
+  useEffect(() => {
+    // Fetch download URL from backend
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+    fetch(`${apiUrl}/api/app/download-info`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.download_url) setDownloadUrl(d.download_url); })
+      .catch(() => {});
+  }, []);
 
   const copyLicenseKey = async () => {
     if (!licenseKey) return;
@@ -63,16 +101,22 @@ export default function DashboardPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const loadData = async () => {
+  const loadResults = async () => {
     try {
-      const [statusData, resultsData, paymentsData] = await Promise.all([
+      const data = await monitoringApi.getResults(undefined, PAGE_SIZE, resultsPage * PAGE_SIZE);
+      setResultsData(data);
+    } catch (err) {
+      console.error("Failed to load results:", err);
+    }
+  };
+
+  const loadAll = async () => {
+    try {
+      const [statusData, paymentsData] = await Promise.all([
         monitoringApi.getStatus(),
-        monitoringApi.getResults(undefined, 10),
-        paymentApi.getMyPayments().catch(() => null), // null = failed, [] = empty
+        paymentApi.getMyPayments().catch(() => null),
       ]);
       setStatus(statusData);
-      setResults(resultsData);
-      // Only update license key if the API actually responded (not errored)
       if (paymentsData !== null) {
         const approvedPayment = Array.isArray(paymentsData)
           ? paymentsData.find((p: any) => p.license_key && p.status === "approved")
@@ -87,6 +131,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
+    loadResults();
   };
 
   if (loading) {
@@ -101,12 +146,32 @@ export default function DashboardPage() {
   const monitoredBranches = status?.monitored_branches || [];
   const pendingPayment = status?.payment_pending;
   const maintenanceMode = status?.maintenance_mode;
-  const planType = status?.plan_type || "";
   const planTypes: string[] = status?.plan_types || [];
   const isPremium = planTypes.some((p: string) => p.toUpperCase() === "PREMIUM");
+  const totalChecks: number = status?.total_checks ?? 0;
+  const totalPages = Math.ceil(resultsData.total / PAGE_SIZE);
 
   return (
     <div className="space-y-6">
+      {/* Screenshot modal */}
+      {screenshotModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={() => setScreenshotModal(null)}
+        >
+          <div className="relative max-w-4xl w-full" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setScreenshotModal(null)}
+              className="absolute -top-10 right-0 text-gray-400 hover:text-white"
+            >
+              <XIcon className="w-6 h-6" />
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`data:image/png;base64,${screenshotModal}`} alt="Slot screenshot" className="rounded-xl w-full" />
+          </div>
+        </div>
+      )}
+
       {/* Toast notification */}
       {toast && (
         <motion.div
@@ -175,7 +240,7 @@ export default function DashboardPage() {
         </motion.div>
       )}
 
-      {/* License Key Card */}
+      {/* License Key + Download Card */}
       {licenseKey && (
         <motion.div initial={fadeUp.hidden} animate={fadeUp.visible} className="glass-card p-6 border-accent-green/30 bg-accent-green/5">
           <div className="flex items-center gap-3 mb-4">
@@ -183,13 +248,13 @@ export default function DashboardPage() {
               <ShieldCheck className="w-5 h-5 text-accent-green" />
             </div>
             <div>
-              <div className="font-semibold text-accent-green">Your Desktop License Key</div>
+              <div className="font-semibold text-accent-green">{td.licenseKeyTitle}</div>
               <div className="text-xs text-gray-400">
-                {licensePlan ? licensePlan.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Desktop Plan"} • Install it in the desktop app to activate
+                {licensePlan ? licensePlan.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Desktop Plan"} • {td.licenseKeySubtitle}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3 bg-black/30 rounded-xl px-4 py-3 border border-white/10">
+          <div className="flex items-center gap-3 bg-black/30 rounded-xl px-4 py-3 border border-white/10 mb-4">
             <Key className="w-4 h-4 text-accent-green shrink-0" />
             <code className="flex-1 text-sm font-mono text-accent-green tracking-wider break-all">{licenseKey}</code>
             <button
@@ -204,6 +269,23 @@ export default function DashboardPage() {
               )}
             </button>
           </div>
+          {downloadUrl ? (
+            <a
+              href={downloadUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-accent-green/10 border border-accent-green/30 text-accent-green text-sm font-medium hover:bg-accent-green/20 transition-colors"
+            >
+              <Download className="w-4 h-4" /> {td.downloadDesktop}
+            </a>
+          ) : (
+            <Link
+              href="/#download"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-accent-green/10 border border-accent-green/30 text-accent-green text-sm font-medium hover:bg-accent-green/20 transition-colors"
+            >
+              <Download className="w-4 h-4" /> {td.downloadDesktop}
+            </Link>
+          )}
         </motion.div>
       )}
 
@@ -248,23 +330,28 @@ export default function DashboardPage() {
 
         <motion.div variants={fadeUp} className="stat-card">
           <div className="flex items-center gap-2 text-gray-400 text-sm mb-2">
-            <Clock className="w-4 h-4" /> {td.expiresLabel}
+            <Hash className="w-4 h-4" /> {td.totalChecksLabel}
           </div>
-          <div className="text-sm font-medium">
-            {status?.expires_at
-              ? new Date(status.expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-              : "—"}
-          </div>
+          <div className="text-2xl font-bold">{totalChecks.toLocaleString()}</div>
         </motion.div>
+
+        {hasActiveSubscription && isPremium && (
+          <motion.div variants={fadeUp} className="stat-card">
+            <div className="flex items-center gap-2 text-gray-400 text-sm mb-2">
+              <Timer className="w-4 h-4" /> {td.nextCheckLabel}
+            </div>
+            <div className="text-lg font-bold tabular-nums text-accent-green">{countdown}</div>
+          </motion.div>
+        )}
 
         <motion.div variants={fadeUp} className="stat-card">
           <div className="flex items-center gap-2 text-gray-400 text-sm mb-2">
-            <Bell className="w-4 h-4" /> {td.planLabel}
+            <Calendar className="w-4 h-4" /> {td.expiresLabel}
           </div>
           <div className="text-sm font-medium">
-            {(user?.active_plans?.length ?? 0) > 0
-              ? (user?.active_plans as string[]).map((p: string) => (t.planNames as Record<string, string>)[p] ?? p).join(" + ")
-              : (t.planNames as Record<string, string>)[user?.active_plan ?? ""] ?? user?.active_plan ?? "—"}
+            {status?.expires_at
+              ? new Date(status.expires_at.includes('Z') || status.expires_at.includes('+') ? status.expires_at : status.expires_at + 'Z').toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', year: 'numeric' })
+              : "—"}
           </div>
         </motion.div>
       </motion.div>
@@ -277,9 +364,9 @@ export default function DashboardPage() {
           </div>
           <div className="divide-y divide-white/5">
             {monitoredBranches.map((branch: any) => {
-              const lastCheckDate = branch.last_check ? new Date(branch.last_check) : null;
+              const lastCheckDate = branch.last_check ? new Date(branch.last_check.includes('Z') || branch.last_check.includes('+') ? branch.last_check : branch.last_check + 'Z') : null;
               const ageMs = lastCheckDate ? Date.now() - lastCheckDate.getTime() : Infinity;
-              const isStale = ageMs > 60 * 60 * 1000; // older than 1 hour
+              const isStale = ageMs > 60 * 60 * 1000;
               const checkTimeStr = lastCheckDate
                 ? lastCheckDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
                 : null;
@@ -306,10 +393,10 @@ export default function DashboardPage() {
                         </span>
                       ) : branch.last_slots_available && isStale ? (
                         <span className="text-yellow-400 text-xs font-medium flex items-center gap-1">
-                          <Sparkles className="w-3 h-3" /> Slots found (as of {checkTimeStr})
+                          <Sparkles className="w-3 h-3" /> {td.slotsFoundAs} {checkTimeStr})
                         </span>
                       ) : checkTimeStr ? (
-                        <span className="text-gray-500 text-xs">Last check: {checkTimeStr}</span>
+                        <span className="text-gray-500 text-xs">{td.lastCheckAt} {checkTimeStr}</span>
                       ) : (
                         <span className="text-gray-600 text-xs">{td.pendingFirstCheck}</span>
                       )}
@@ -319,7 +406,6 @@ export default function DashboardPage() {
               );
             })}
           </div>
-          {/* Monitoring-active footer — always visible when subscription is active */}
           {hasActiveSubscription && (
             <div className="px-4 py-3 border-t border-white/5 bg-accent-green/5">
               <div className="flex items-center gap-2">
@@ -333,13 +419,14 @@ export default function DashboardPage() {
       )}
 
       {/* Recent check results */}
-      {results.length > 0 && (
+      {resultsData.results.length > 0 && (
         <div className="glass-card overflow-hidden">
-          <div className="p-4 border-b border-white/5">
+          <div className="p-4 border-b border-white/5 flex items-center justify-between">
             <h2 className="font-semibold">{td.recentChecks}</h2>
+            <span className="text-xs text-gray-500">{resultsData.total} total</span>
           </div>
           <div className="divide-y divide-white/5">
-            {results.map((r: any) => (
+            {resultsData.results.map((r: any) => (
               <div key={r.id} className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {r.slots_available ? (
@@ -352,27 +439,61 @@ export default function DashboardPage() {
                   <div>
                     <div className="text-sm font-medium">{(t.branchNames as Record<string, string>)[r.branch_name] ?? r.branch_name}</div>
                     <div className="text-xs text-gray-500">
-                      {new Date(r.checked_at).toLocaleString()} &middot; {r.duration_seconds}s
+                      {new Date(r.checked_at.includes('Z') || r.checked_at.includes('+') ? r.checked_at : r.checked_at + 'Z').toLocaleString()} &middot; {r.duration_seconds}s
                     </div>
                   </div>
                 </div>
-                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                  r.slots_available
-                    ? "bg-accent-green/10 text-accent-green"
-                    : r.error
-                    ? "bg-amber-500/10 text-amber-400"
-                    : "bg-gray-500/10 text-gray-400"
-                }`}>
-                  {r.slots_available ? td.available : r.error ? td.error : td.noSlots}
-                </span>
+                <div className="flex items-center gap-2">
+                  {r.slots_available && r.screenshot_b64 && (
+                    <button
+                      onClick={() => setScreenshotModal(r.screenshot_b64)}
+                      className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-accent-green"
+                      title="View screenshot"
+                    >
+                      <ImageIcon className="w-4 h-4" />
+                    </button>
+                  )}
+                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                    r.slots_available
+                      ? "bg-accent-green/10 text-accent-green"
+                      : r.error
+                      ? "bg-amber-500/10 text-amber-400"
+                      : "bg-gray-500/10 text-gray-400"
+                  }`}>
+                    {r.slots_available ? td.available : r.error ? td.error : td.noSlots}
+                  </span>
+                </div>
               </div>
             ))}
           </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="p-4 border-t border-white/5 flex items-center justify-between">
+              <button
+                onClick={() => setResultsPage(p => Math.max(0, p - 1))}
+                disabled={resultsPage === 0}
+                className="flex items-center gap-1 text-sm text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" /> Previous
+              </button>
+              <span className="text-xs text-gray-500">
+                Page {resultsPage + 1} of {totalPages}
+              </span>
+              <button
+                onClick={() => setResultsPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={resultsPage >= totalPages - 1}
+                className="flex items-center gap-1 text-sm text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                Next <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {/* Empty state — desktop license but no checks yet */}
-      {!hasActiveSubscription && licenseKey && results.length === 0 && (
+      {!hasActiveSubscription && licenseKey && resultsData.results.length === 0 && (
         <div className="glass-card p-12 text-center">
           <Monitor className="w-12 h-12 text-accent-green mx-auto mb-4" />
           <h3 className="font-semibold text-lg mb-2 text-accent-green">Desktop App Connected</h3>
