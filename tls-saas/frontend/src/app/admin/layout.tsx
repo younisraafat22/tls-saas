@@ -38,7 +38,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="min-h-screen bg-dark-900 flex">
+    <div className="min-h-screen bg-dark-900 flex overflow-x-hidden">
       {/* Sidebar */}
       <aside className="w-64 bg-dark-800 border-r border-white/5 flex flex-col fixed h-full z-20 max-lg:hidden">
         <div className="p-5 border-b border-white/5">
@@ -73,7 +73,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       {/* Mobile top bar */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 bg-dark-800 border-b border-white/5 z-20 px-4 py-3 flex items-center justify-between">
+      <div className="lg:hidden fixed top-0 left-0 right-0 bg-dark-800 border-b border-white/5 z-20 px-4 py-3 flex items-center justify-between overflow-x-hidden">
         <div className="flex items-center gap-2 text-primary-400 font-display font-bold text-lg">
           <Shield className="w-5 h-5" /> Admin
         </div>
@@ -83,14 +83,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </div>
 
       {/* Mobile bottom nav */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-dark-800 border-t border-white/5 z-20 flex justify-around py-2">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-dark-800 border-t border-white/5 z-20 flex gap-1 px-2 py-2 overflow-x-auto whitespace-nowrap">
         {adminNav.map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center gap-0.5 p-2 rounded-lg text-xs ${
+              className={`flex flex-col items-center gap-0.5 p-2 rounded-lg text-xs min-w-[68px] shrink-0 ${
                 isActive ? "text-primary-400" : "text-gray-500"
               }`}
             >
@@ -102,8 +102,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </div>
 
       {/* Main content */}
-      <main className="flex-1 lg:ml-64 max-lg:pt-14 max-lg:pb-20">
-        <div className="max-w-6xl mx-auto p-6">
+      <main className="flex-1 lg:ml-64 max-lg:pt-14 max-lg:pb-20 overflow-x-hidden w-full">
+        <div className="max-w-6xl mx-auto p-4 sm:p-6 w-full min-w-0">
           {children}
         </div>
       </main>

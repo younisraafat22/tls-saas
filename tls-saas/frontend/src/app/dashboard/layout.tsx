@@ -36,7 +36,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   ];
 
   return (
-    <div className="min-h-screen bg-dark-800 flex">
+    <div className="min-h-screen bg-dark-800 flex overflow-x-hidden">
       {/* Sidebar */}
       <aside className="w-64 border-r border-white/5 bg-dark-700/50 hidden lg:flex flex-col">
         <div className="p-6">
@@ -81,13 +81,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* Mobile top nav */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-dark-800/95 backdrop-blur-xl border-b border-white/5">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-dark-800/95 backdrop-blur-xl border-b border-white/5 overflow-x-hidden">
         <div className="flex items-center justify-between px-4 h-14">
-          <Link href="/" className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2 min-w-0 max-w-[70%]">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-500 to-blue-600 flex items-center justify-center">
               <Monitor className="w-4 h-4 text-white" />
             </div>
-            <span className="font-display font-bold text-sm">TLS Appointment Checker</span>
+            <span className="font-display font-bold text-sm truncate">TLS Appointment Checker</span>
           </Link>
           <div className="flex items-center gap-4">
             {user.is_admin && (
@@ -98,20 +98,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </div>
         {/* Mobile bottom nav */}
-        <div className="fixed bottom-0 left-0 right-0 bg-dark-800/95 backdrop-blur-xl border-t border-white/5 flex justify-around py-2 z-50">
+        <div className="fixed bottom-0 left-0 right-0 bg-dark-800/95 backdrop-blur-xl border-t border-white/5 flex gap-1 px-2 overflow-x-auto whitespace-nowrap z-50">
           {navItems.map((item) => (
-            <Link key={item.href} href={item.href} className="flex flex-col items-center gap-1 text-gray-500 hover:text-white p-2">
+            <Link key={item.href} href={item.href} className="flex flex-col items-center gap-1 text-gray-500 hover:text-white p-2 min-w-[64px] shrink-0">
               <item.icon className="w-5 h-5" />
               <span className="text-xs">{item.label}</span>
             </Link>
           ))}
           {user.is_admin && (
-            <Link href="/admin" className="flex flex-col items-center gap-1 text-amber-400 hover:text-amber-300 p-2">
+            <Link href="/admin" className="flex flex-col items-center gap-1 text-amber-400 hover:text-amber-300 p-2 min-w-[64px] shrink-0">
               <Shield className="w-5 h-5" />
               <span className="text-xs">{sb.adminPanel}</span>
             </Link>
           )}
-          <button onClick={logout} className="flex flex-col items-center gap-1 text-gray-500 hover:text-red-400 p-2">
+          <button onClick={logout} className="flex flex-col items-center gap-1 text-gray-500 hover:text-red-400 p-2 min-w-[64px] shrink-0">
             <LogOut className="w-5 h-5" />
             <span className="text-xs">{sb.logOut}</span>
           </button>
@@ -119,8 +119,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
       {/* Main content */}
-      <main className="flex-1 min-h-screen lg:pt-0 pt-14 pb-20 lg:pb-0 overflow-x-hidden">
-        <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
+      <main className="flex-1 min-h-screen lg:pt-0 pt-14 pb-20 lg:pb-0 overflow-x-hidden w-full">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full min-w-0">
           {children}
         </div>
       </main>

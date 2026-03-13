@@ -868,7 +868,7 @@ export default function AdminLicensesPage() {
       </AnimatePresence>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-display font-bold flex items-center gap-2">
             <KeyRound className="w-6 h-6 text-primary-400" /> License Management
@@ -883,7 +883,7 @@ export default function AdminLicensesPage() {
             ) : "No licenses yet"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
           <button onClick={loadLicenses} className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors" title="Refresh">
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -1073,7 +1073,7 @@ export default function AdminLicensesPage() {
                           {lic.reference && lic.reference !== "admin-direct" && (
                             <div className="text-xs">
                               <span className="text-gray-500">Ref: </span>
-                              <span className="font-mono text-gray-300">{lic.reference}</span>
+                              <span className="font-mono text-gray-300 break-all">{lic.reference}</span>
                             </div>
                           )}
                           <div className="text-xs text-gray-500">
@@ -1175,7 +1175,7 @@ export default function AdminLicensesPage() {
 
       {/* Pagination */}
       {pages > 1 && (
-        <div className="flex items-center justify-between text-sm text-gray-400">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-sm text-gray-400">
           <span>Showing {(page - 1) * 30 + 1}{Math.min(page * 30, total)} of {total}</span>
           <div className="flex items-center gap-2">
             <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="p-1.5 rounded-lg hover:bg-white/5 disabled:opacity-30 transition-colors">

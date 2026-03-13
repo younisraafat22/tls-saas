@@ -28,6 +28,12 @@
 *::-webkit-scrollbar-thumb { background: #1e2448; border-radius: 3px; }
 *::-webkit-scrollbar-thumb:hover { background: #2a3058; }
 
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 body {
   background: var(--bg-dark);
   color: var(--text-primary);
