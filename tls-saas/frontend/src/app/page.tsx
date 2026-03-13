@@ -45,7 +45,6 @@ function LangSwitcher() {
     </div>
   );
 }
-            { value: 2, suffix: "", label: t.stats.alertChannels },
 // ── Animation Variants ─────────────────────────────────
 
 const fadeUp = {
