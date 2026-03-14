@@ -225,7 +225,7 @@ export default function PaymentsPage() {
               <div>
                 <div className="font-semibold text-accent-green">{t.payment.activeSubLabel}</div>
                 <div className="text-sm text-gray-400">
-                  {getPlanName(activeSub.plan?.plan_type ?? "", activeSub.plan?.display_name ?? "")} &middot; Expires {new Date(activeSub.expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  {getPlanName(activeSub.plan?.plan_type ?? "", activeSub.plan?.display_name ?? "")} &middot; {(t.payment as any).expiresLabel || 'Expires'} {new Date(activeSub.expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </div>
               </div>
             </div>

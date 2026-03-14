@@ -136,7 +136,7 @@ export default function NotificationsPage() {
                   </div>
                   <div>
                     <div className="text-sm font-medium">
-                      {n.branch_name || "System Notification"}
+                        {(t.branchNames as any)?.[n.branch_name] || n.branch_name || "System Notification"}
                     </div>
                     <div className="text-xs text-gray-500">
                       {new Date(n.sent_at).toLocaleString()}

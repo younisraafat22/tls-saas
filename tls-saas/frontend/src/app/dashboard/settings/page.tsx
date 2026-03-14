@@ -111,7 +111,7 @@ export default function SettingsPage() {
 
   const tabs = [
     { id: "profile", label: ts.tabProfile, icon: <User className="w-4 h-4" /> },
-    { id: "credentials", label: "TLS Credentials", icon: <Key className="w-4 h-4" /> },
+    { id: "credentials", label: (ts as any).tlsTab || "TLS Credentials", icon: <Key className="w-4 h-4" /> },
     { id: "password", label: ts.tabPassword, icon: <Lock className="w-4 h-4" /> },
     { id: "notifications", label: ts.tabNotifications, icon: <Bell className="w-4 h-4" /> },
   ];
@@ -276,16 +276,16 @@ export default function SettingsPage() {
       {/* Danger Zone */}
       <div className="border border-red-500/30 rounded-xl p-6 space-y-4">
         <h2 className="font-semibold flex items-center gap-2 text-red-400">
-          <AlertTriangle className="w-5 h-5" /> Danger Zone
+          <AlertTriangle className="w-5 h-5" /> {(ts as any).dangerZoneTitle || "Danger Zone"}
         </h2>
         <p className="text-sm text-gray-400">
-          Permanently delete your account and all associated data. This action cannot be undone.
+          {(ts as any).dangerZoneDesc || "Permanently delete your account and all associated data. This action cannot be undone."}
         </p>
         <button
           onClick={() => setShowDeleteModal(true)}
           className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/40 text-red-400 hover:bg-red-500/20 hover:border-red-500/60 rounded-lg text-sm font-medium transition"
         >
-          <Trash2 className="w-4 h-4" /> Delete My Account
+          <Trash2 className="w-4 h-4" /> {(ts as any).deleteAccountBtn || "Delete My Account"}
         </button>
       </div>
 
@@ -463,6 +463,8 @@ function PushNotifToggle() {
 
 
 function TLSCredentialsTab({ showToast }: { showToast: (type: "success" | "error", msg: string) => void }) {
+  const { t } = useLanguage();
+  const ts = t.settings;
   const [credentials, setCredentials] = useState<Array<{ service_type: string; tls_email: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -522,11 +524,10 @@ function TLSCredentialsTab({ showToast }: { showToast: (type: "success" | "error
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-card p-6 space-y-5">
       <h2 className="font-semibold flex items-center gap-2">
-        <Key className="w-5 h-5 text-primary-400" /> TLS Website Credentials
+        <Key className="w-5 h-5 text-primary-400" /> {(ts as any).credInfoTitle || "TLS Website Credentials"}
       </h2>
       <p className="text-sm text-gray-400">
-        Enter your TLS website login credentials for server-side monitoring. Your credentials are encrypted and stored securely.
-        This is required for premium plans where the server checks appointments on your behalf.
+        {(ts as any).credInfoDesc || "Enter your TLS website login credentials for server-side monitoring. Your credentials are encrypted and stored securely. This is required for premium plans where the server checks appointments on your behalf."}
       </p>
 
       {loading ? (
@@ -619,7 +620,7 @@ function TLSCredentialsTab({ showToast }: { showToast: (type: "success" | "error
               onClick={() => setShowForm(true)}
               className="btn-gradient flex items-center gap-2"
             >
-              <Plus className="w-4 h-4" /> Add TLS Credentials
+              <Plus className="w-4 h-4" /> {(ts as any).addTlsCredentialsBtn || "Add TLS Credentials"}
             </button>
           )}
         </>
