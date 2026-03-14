@@ -439,26 +439,100 @@ function HowItWorks() {
 
 function Pricing() {
   const { t } = useLanguage();
-  const [plans, setPlans] = useState<any[]>([]);
+  const fallbackPlans = [
+    {
+      id: 0,
+      plan_type: "trial",
+      display_name: "Free Trial",
+      price_monthly: 0,
+      currency: "EGP",
+      features: [
+        "3 checks - 1-day trial only",
+        "Email notifications",
+        "Real-time dashboard",
+        "No payment needed",
+        "Desktop app - PC must stay on",
+      ],
+      sort_order: 0,
+    },
+    {
+      id: 1,
+      plan_type: "legalization",
+      display_name: "Legalization Monitor",
+      price_monthly: 500,
+      currency: "EGP",
+      features: [
+        "One branch of your choice",
+        "Email & web push notifications",
+        "Real-time dashboard",
+        "60-minute check interval",
+        "No TLS credentials needed",
+        "Desktop app - PC must stay on",
+      ],
+      sort_order: 1,
+    },
+    {
+      id: 2,
+      plan_type: "visa",
+      display_name: "Visa Monitor",
+      price_monthly: 500,
+      currency: "EGP",
+      features: [
+        "One branch of your choice",
+        "Individual check using your TLS credentials",
+        "Email & web push notifications",
+        "Real-time dashboard",
+        "60-minute check interval",
+        "Desktop app - PC must stay on",
+      ],
+      sort_order: 2,
+    },
+    {
+      id: 4,
+      plan_type: "all_in_one",
+      display_name: "Legalization + Visa",
+      price_monthly: 900,
+      currency: "EGP",
+      features: [
+        "Both legalization & visa monitoring",
+        "Switch service type anytime",
+        "All branches available",
+        "Email & web push notifications",
+        "Real-time dashboard",
+        "60-minute check interval",
+        "Desktop app - PC must stay on",
+      ],
+      sort_order: 3,
+    },
+    {
+      id: 3,
+      plan_type: "premium",
+      display_name: "Premium - Server Monitored",
+      price_monthly: 2500,
+      currency: "EGP",
+      features: [
+        "Server-based monitoring - no PC needed",
+        "1 service: legalization or visa (your choice)",
+        "Email & web push notifications",
+        "Real-time dashboard",
+        "Priority support",
+        "60-minute check interval",
+      ],
+      sort_order: 4,
+    },
+  ];
 
-  const TRIAL_PLAN = {
-    id: 0, plan_type: "trial", display_name: "Free Trial", price_monthly: 0, currency: "EGP",
-    features: ["3 checks � 1-day trial only", "Email notifications", "Real-time dashboard", "No payment needed", "Desktop app � PC must stay on"],
-    sort_order: 0,
-  };
+  const [plans, setPlans] = useState<any[]>(fallbackPlans);
 
   useEffect(() => {
     subscriptionApi.getPlans()
-      .then((data) => setPlans([TRIAL_PLAN, ...data]))
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setPlans([fallbackPlans[0], ...data]);
+        }
+      })
       .catch(() => {
-        // Fallback plans if API not reachable
-        setPlans([
-          TRIAL_PLAN,
-          { id: 1, plan_type: "legalization", display_name: "Legalization Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice", "Email & web push notifications", "Real-time dashboard", "60-minute check interval", "No TLS credentials needed", "Desktop app � PC must stay on"], sort_order: 1 },
-          { id: 2, plan_type: "visa", display_name: "Visa Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice", "Individual check using your TLS credentials", "Email & web push notifications", "Real-time dashboard", "60-minute check interval", "Desktop app � PC must stay on"], sort_order: 2 },
-          { id: 4, plan_type: "all_in_one", display_name: "Legalization + Visa", price_monthly: 900, currency: "EGP", features: ["Both legalization & visa monitoring", "Switch service type anytime", "All branches available", "Email & web push notifications", "Real-time dashboard", "60-minute check interval", "Desktop app � PC must stay on"], sort_order: 3 },
-          { id: 3, plan_type: "premium", display_name: "Premium � Server Monitored", price_monthly: 2500, currency: "EGP", features: ["Server-based monitoring � no PC needed", "1 service: legalization or visa (your choice)", "Email & web push notifications", "Real-time dashboard", "Priority support", "60-minute check interval"], sort_order: 4 },
-        ]);
+        // Keep fallback cards on network/API errors.
       });
   }, []);
 
@@ -476,7 +550,7 @@ function Pricing() {
         </AnimatedSection>
 
         <AnimatedSection className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-5xl mx-auto">
-          {plans.sort((a, b) => a.sort_order - b.sort_order).map((plan) => {
+          {[...plans].sort((a, b) => a.sort_order - b.sort_order).map((plan) => {
             const isPremium = plan.plan_type === "premium";
             const isTrial = plan.plan_type === "trial";
             const isAllInOne = plan.plan_type === "all_in_one";
