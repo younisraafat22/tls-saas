@@ -115,6 +115,7 @@ export default function PaymentsPage() {
           displayName: b.name
             .replace(/ - Normal Legalization$/, "")
             .replace(/ - Students Legalization$/, "")
+            .replace(/ \([Ll]egalization\)$/, "") // catch (Legalization) or (legalization)
             .replace(/ - Visa$/, ""),
         });
       }
@@ -336,7 +337,7 @@ export default function PaymentsPage() {
                           : "border-white/5 bg-dark-700/50 hover:border-white/10"
                       }`}
                     >
-                      <div className="font-medium text-sm">{branch.displayName}</div>
+                        <div className="font-medium text-sm">{t.branchNames?.[branch.displayName] || branch.displayName}</div>
                       <div className="text-xs text-gray-500 capitalize mt-0.5">{(t.payment.serviceTypes as Record<string,string>)[branch.service_type] ?? branch.service_type}</div>
                       {isSelected && (
                         <div className="mt-2 text-primary-400 text-xs flex items-center gap-1">
