@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { motion, useInView } from "framer-motion";
 import { useRef, useState, useEffect } from "react";
@@ -12,7 +12,7 @@ import { useAuth } from "@/lib/auth-context";
 import { subscriptionApi } from "@/lib/api";
 import { useLanguage, localeLabels, type Locale } from "@/lib/i18n";
 
-// ── Language Switcher ───────────────────────────────────
+// -- Language Switcher -----------------------------------
 
 function LangSwitcher() {
   const { locale, setLocale } = useLanguage();
@@ -45,7 +45,6 @@ function LangSwitcher() {
     </div>
   );
 }
-
 const fadeUp = {
   hidden: { opacity: 0, y: 40 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
@@ -73,7 +72,7 @@ const slideInRight = {
   hidden: { opacity: 0, x: 60 },
 };
 
-// ── Animated Section wrapper ────────────────────────────
+// -- Animated Section wrapper ----------------------------
 
 function AnimatedSection({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   const ref = useRef(null);
@@ -91,7 +90,7 @@ function AnimatedSection({ children, className = "" }: { children: React.ReactNo
   );
 }
 
-// ── Particle Background ─────────────────────────────────
+// -- Particle Background ---------------------------------
 
 function Particles() {
   return (
@@ -113,7 +112,7 @@ function Particles() {
   );
 }
 
-// ── Counter Animation ───────────────────────────────────
+// -- Counter Animation -----------------------------------
 
 function Counter({ target, suffix = "" }: { target: number; suffix?: string }) {
   const [count, setCount] = useState(0);
@@ -139,7 +138,7 @@ function Counter({ target, suffix = "" }: { target: number; suffix?: string }) {
   return <span ref={ref}>{count}{suffix}</span>;
 }
 
-// ── Navbar ──────────────────────────────────────────────
+// -- Navbar ----------------------------------------------
 
 function Navbar() {
   const { user, logout } = useAuth();
@@ -206,7 +205,7 @@ function Navbar() {
           </div>
         </div>
 
-        {/* Mobile menu — nav has bg-dark-900 when mobileOpen */}
+        {/* Mobile menu � nav has bg-dark-900 when mobileOpen */}
         {mobileOpen && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
@@ -236,7 +235,7 @@ function Navbar() {
   );
 }
 
-// ── Hero Section ────────────────────────────────────────
+// -- Hero Section ----------------------------------------
 
 function Hero() {
   const { t } = useLanguage();
@@ -284,7 +283,7 @@ function Hero() {
             </motion.div>
           </motion.div>
 
-          {/* Hero visual — animated dashboard mockup */}
+          {/* Hero visual � animated dashboard mockup */}
           <motion.div
             initial={{ opacity: 0, scale: 0.9, x: 40 }}
             animate={{ opacity: 1, scale: 1, x: 0 }}
@@ -347,7 +346,7 @@ function Hero() {
             { value: 4, suffix: "", label: t.stats.branches },
             { value: 24, suffix: "/7", label: t.stats.monitoring },
             { value: 60, suffix: "min", label: t.stats.checkInterval },
-            { value: 3, suffix: "", label: t.stats.alertChannels },
+            { value: 2, suffix: "", label: t.stats.alertChannels },
           ].map((stat) => (
             <motion.div key={stat.label} variants={fadeUp} className="text-center">
               <div className="text-3xl font-display font-bold text-primary-400">
@@ -362,7 +361,7 @@ function Hero() {
   );
 }
 
-// ── Features Section ────────────────────────────────────
+// -- Features Section ------------------------------------
 
 function Features() {
   const { t } = useLanguage();
@@ -400,7 +399,7 @@ function Features() {
   );
 }
 
-// ── How It Works ────────────────────────────────────────
+// -- How It Works ----------------------------------------
 
 function HowItWorks() {
   const { t } = useLanguage();
@@ -436,7 +435,7 @@ function HowItWorks() {
   );
 }
 
-// ── Pricing Section ─────────────────────────────────────
+// -- Pricing Section -------------------------------------
 
 function Pricing() {
   const { t } = useLanguage();
@@ -444,7 +443,7 @@ function Pricing() {
 
   const TRIAL_PLAN = {
     id: 0, plan_type: "trial", display_name: "Free Trial", price_monthly: 0, currency: "EGP",
-    features: ["3 checks — 1-day trial only", "Email notifications", "Real-time dashboard", "No payment needed", "Desktop app — PC must stay on"],
+    features: ["3 checks � 1-day trial only", "Email notifications", "Real-time dashboard", "No payment needed", "Desktop app � PC must stay on"],
     sort_order: 0,
   };
 
@@ -455,10 +454,10 @@ function Pricing() {
         // Fallback plans if API not reachable
         setPlans([
           TRIAL_PLAN,
-          { id: 1, plan_type: "legalization", display_name: "Legalization Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice", "Email & web push notifications", "Real-time dashboard", "60-minute check interval", "No TLS credentials needed", "Desktop app — PC must stay on"], sort_order: 1 },
-          { id: 2, plan_type: "visa", display_name: "Visa Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice", "Individual check using your TLS credentials", "Email & web push notifications", "Real-time dashboard", "60-minute check interval", "Desktop app — PC must stay on"], sort_order: 2 },
-          { id: 4, plan_type: "all_in_one", display_name: "Legalization + Visa", price_monthly: 900, currency: "EGP", features: ["Both legalization & visa monitoring", "Switch service type anytime", "All branches available", "Email & web push notifications", "Real-time dashboard", "60-minute check interval", "Desktop app — PC must stay on"], sort_order: 3 },
-          { id: 3, plan_type: "premium", display_name: "Premium — Server Monitored", price_monthly: 2500, currency: "EGP", features: ["Server-based monitoring — no PC needed", "1 service: legalization or visa (your choice)", "Email & web push notifications", "Real-time dashboard", "Priority support", "60-minute check interval"], sort_order: 4 },
+          { id: 1, plan_type: "legalization", display_name: "Legalization Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice", "Email & web push notifications", "Real-time dashboard", "60-minute check interval", "No TLS credentials needed", "Desktop app � PC must stay on"], sort_order: 1 },
+          { id: 2, plan_type: "visa", display_name: "Visa Monitor", price_monthly: 500, currency: "EGP", features: ["One branch of your choice", "Individual check using your TLS credentials", "Email & web push notifications", "Real-time dashboard", "60-minute check interval", "Desktop app � PC must stay on"], sort_order: 2 },
+          { id: 4, plan_type: "all_in_one", display_name: "Legalization + Visa", price_monthly: 900, currency: "EGP", features: ["Both legalization & visa monitoring", "Switch service type anytime", "All branches available", "Email & web push notifications", "Real-time dashboard", "60-minute check interval", "Desktop app � PC must stay on"], sort_order: 3 },
+          { id: 3, plan_type: "premium", display_name: "Premium � Server Monitored", price_monthly: 2500, currency: "EGP", features: ["Server-based monitoring � no PC needed", "1 service: legalization or visa (your choice)", "Email & web push notifications", "Real-time dashboard", "Priority support", "60-minute check interval"], sort_order: 4 },
         ]);
       });
   }, []);
@@ -489,15 +488,15 @@ function Pricing() {
               >
                 {isPremium ? (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-4 py-1 rounded-full whitespace-nowrap">
-                    ☁ SERVER MONITORED
+                    ? SERVER MONITORED
                   </div>
                 ) : isAllInOne ? (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold px-4 py-1 rounded-full whitespace-nowrap">
-                    ★ BEST VALUE
+                    ? BEST VALUE
                   </div>
                 ) : isTrial ? (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-cyan-500 to-teal-500 text-white text-xs font-bold px-4 py-1 rounded-full whitespace-nowrap">
-                    ✶ FREE TRIAL
+                    ? FREE TRIAL
                   </div>
                 ) : (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-primary-500 to-blue-600 text-white text-xs font-bold px-4 py-1 rounded-full whitespace-nowrap">
@@ -558,7 +557,7 @@ function Pricing() {
   );
 }
 
-// ── Download App Section ────────────────────────────────
+// -- Download App Section --------------------------------
 
 function DownloadApp() {
   const { t } = useLanguage();
@@ -653,7 +652,7 @@ function DownloadApp() {
               {downloadInfo.download_url && (
                 <div className="mt-5 p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-left">
                   <p className="text-yellow-300/80 text-xs leading-relaxed">
-                    ⚠️ {dl.smartscreenNote}
+                    ?? {dl.smartscreenNote}
                   </p>
                 </div>
               )}
@@ -664,7 +663,7 @@ function DownloadApp() {
     </section>
   );
 }
-// ── User Guide ──────────────────────────────────────────────────
+// -- User Guide --------------------------------------------------
 
 function UserGuide() {
   const { t } = useLanguage();
@@ -756,7 +755,7 @@ function UserGuide() {
     </section>
   );
 }
-// ── FAQ ─────────────────────────────────────────────────
+// -- FAQ -------------------------------------------------
 
 function FAQ() {
   const { t } = useLanguage();
@@ -799,7 +798,7 @@ function FAQ() {
   );
 }
 
-// ── CTA Section ─────────────────────────────────────────
+// -- CTA Section -----------------------------------------
 
 function CTA() {
   const { t } = useLanguage();
@@ -825,7 +824,7 @@ function CTA() {
   );
 }
 
-// ── Footer ──────────────────────────────────────────────
+// -- Footer ----------------------------------------------
 
 function Footer() {
   const { t } = useLanguage();
@@ -871,7 +870,7 @@ function Footer() {
   );
 }
 
-// ── Page ────────────────────────────────────────────────
+// -- Page ------------------------------------------------
 
 export default function LandingPage() {
   return (
@@ -889,3 +888,4 @@ export default function LandingPage() {
     </main>
   );
 }
+
