@@ -83,7 +83,7 @@ export default function NotificationsPage() {
                   }`}
                 >
                   {ch !== "all" && <span className={channelColors[ch]}>{channelIcons[ch]}</span>}
-                  {ch === "all" ? tn.allChannels : ch === "web_push" ? tn.push : "Email"}
+                  {ch === "all" ? tn.allChannels : ch === "web_push" ? tn.push : ("email" in tn ? (tn as any).email : "Email")}
                 </button>
               ))}
             </motion.div>
@@ -104,7 +104,7 @@ export default function NotificationsPage() {
             >
               <div className={`flex items-center gap-2 text-sm mb-1 ${channelColors[ch]}`}>
                 {channelIcons[ch]}
-                {ch === "web_push" ? tn.push : "Email"}
+                {ch === "web_push" ? tn.push : ("email" in tn ? (tn as any).email : "Email")}
               </div>
               <div className="text-2xl font-bold">{count}</div>
             </motion.div>

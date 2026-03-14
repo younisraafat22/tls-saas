@@ -403,6 +403,7 @@ export const translations = {
       sub: "History of all alerts sent to you",
       allChannels: "All Channels",
       push: "Push",
+        email: "Email",
       emptyTitle: "No notifications yet",
       emptyBody: "When appointments are found, you'll see notification history here.",
       sent: "Sent",
@@ -851,6 +852,7 @@ export const translations = {
       sub: "سجل جميع التنبيهات المُرسَلة إليك",
       allChannels: "جميع القنوات",
       push: "إشعار",
+        email: "إيميل",
       emptyTitle: "لا توجد إشعارات بعد",
       emptyBody: "حين تُكتشف مواعيد، ستجد سجل الإشعارات هنا.",
       sent: "أُرسل",
@@ -862,7 +864,9 @@ export const translations = {
       tabProfile: "الملف الشخصي",
       tabPassword: "كلمة المرور",
       tabNotifications: "الإشعارات",
-      tabCredentials: "بيانات TLS",
+      tabCredentials: "بيانات TLS",
+
+
       credLegalization: "بيانات التوثيق",
       credVisa: "بيانات الفيزا",
       credSaved: "محفوظ",
@@ -1299,6 +1303,7 @@ export const translations = {
       sub: "Verlauf aller an dich gesendeten Benachrichtigungen",
       allChannels: "Alle Kanäle",
       push: "Push",
+        email: "Email",
       emptyTitle: "Noch keine Benachrichtigungen",
       emptyBody: "Wenn Termine gefunden werden, siehst du hier den Benachrichtigungsverlauf.",
       sent: "Gesendet",
@@ -1310,7 +1315,9 @@ export const translations = {
       tabProfile: "Profil",
       tabPassword: "Passwort",
       tabNotifications: "Benachrichtigungen",
-      tabCredentials: "TLS-Login",
+      tabCredentials: "TLS-Login",
+
+
       credLegalization: "Beglaubigungs-Zugangsdaten",
       credVisa: "Visum-Zugangsdaten",
       credSaved: "Gespeichert",

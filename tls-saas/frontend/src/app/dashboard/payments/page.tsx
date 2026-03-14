@@ -27,7 +27,8 @@ export default function PaymentsPage() {
   const [activeSub, setActiveSub] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"subscribe" | "history">("subscribe");
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
+  const dateLocale = locale === 'ar' ? 'ar-EG' : locale === 'de' ? 'de-DE' : 'en-GB';
   const getPlanName = (planType: string, fallback: string) => t.planNames[planType] ?? fallback;
   const getPlanDesc = (planType: string, fallback: string) => t.planDesc[planType] ?? fallback;
 
@@ -225,7 +226,7 @@ export default function PaymentsPage() {
               <div>
                 <div className="font-semibold text-accent-green">{t.payment.activeSubLabel}</div>
                 <div className="text-sm text-gray-400">
-                  {getPlanName(activeSub.plan?.plan_type ?? "", activeSub.plan?.display_name ?? "")} &middot; {(t.payment as any).expiresLabel || 'Expires'} {new Date(activeSub.expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  {getPlanName(activeSub.plan?.plan_type ?? "", activeSub.plan?.display_name ?? "")} &middot; {(t.payment as any).expiresLabel || 'Expires'} {new Date(activeSub.expires_at).toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', year: 'numeric' })}
                 </div>
               </div>
             </div>
@@ -575,7 +576,7 @@ export default function PaymentsPage() {
                     <div>
                       <div className="text-sm font-medium">{p.plan_name || "Subscription"}</div>
                       <div className="text-xs text-gray-500">
-                        {new Date(p.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} &middot; {p.method.replace("_", " ")}
+                        {new Date(p.created_at).toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', year: 'numeric' })} &middot; {p.method.replace("_", " ")}
                       </div>
                     </div>
                   </div>
