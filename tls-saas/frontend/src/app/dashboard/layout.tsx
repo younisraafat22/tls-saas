@@ -106,7 +106,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* Mobile top nav */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-dark-800/95 backdrop-blur-xl border-b border-white/5 overflow-x-hidden">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-dark-800/95 backdrop-blur-xl border-b border-white/5 ">
         <div className="flex items-center justify-between px-4 h-14">
           <Link href="/" className="flex items-center gap-2 min-w-0 max-w-[70%]">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-500 to-blue-600 flex items-center justify-center">
@@ -123,8 +123,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             )}
           </div>
         </div>
-        {/* Mobile bottom nav */}
-        <div className="fixed bottom-0 left-0 right-0 bg-dark-800/95 backdrop-blur-xl border-t border-white/5 flex gap-1 px-2 overflow-x-auto whitespace-nowrap z-50">
+      </div>
+
+      {/* Mobile bottom nav */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-dark-800/95 backdrop-blur-xl border-t border-white/5 flex gap-1 px-2 overflow-x-auto whitespace-nowrap z-50">
           {navItems.map((item) => (
             <Link key={item.href} href={item.href} className="flex flex-col items-center gap-1 text-gray-500 hover:text-white p-2 min-w-[64px] shrink-0">
               <item.icon className="w-5 h-5" />
@@ -142,7 +144,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <span className="text-xs">{sb.logOut}</span>
           </button>
         </div>
-      </div>
 
       {/* Main content */}
       <main className="flex-1 min-h-screen lg:pt-0 pt-14 pb-20 lg:pb-0 overflow-x-hidden w-full">
