@@ -588,7 +588,7 @@ function Pricing() {
                   ) : (
                     <>
                       <span className={`text-4xl font-display font-bold ${isPremium ? "text-amber-400" : isAllInOne ? "text-emerald-400" : ""}`}>{plan.price_monthly}</span>
-                      <span className="text-gray-400 text-sm">{plan.currency}{t.pricing.perMonth}</span>
+                        <span className="text-gray-400 text-sm">{plan.currency === "EGP" ? (t.pricing.currencyEGP || "EGP") : plan.currency}{t.pricing.perMonth}</span>
                     </>
                   )}
                 </div>
