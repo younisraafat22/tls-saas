@@ -414,6 +414,8 @@ function NotifToggle({
 }
 
 function PushNotifToggle() {
+  const { t } = useLanguage();
+  const ts = t.settings;
   const { supported, subscribed, loading, permission, subscribe, unsubscribe } = usePushNotifications(
     process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || ""
   );
@@ -424,8 +426,8 @@ function PushNotifToggle() {
         <div className="flex items-center gap-3">
           <span className="text-gray-400"><Bell className="w-4 h-4" /></span>
           <div>
-            <div className="text-sm font-medium">Browser Push</div>
-            <div className="text-xs text-gray-500">Not supported in this browser</div>
+            <div className="text-sm font-medium">{(ts as any).browserPushTitle || "Browser Push"}</div>
+            <div className="text-xs text-gray-500">{(ts as any).browserPushNotSupported || "Not supported in this browser"}</div>
           </div>
         </div>
       </div>
@@ -437,12 +439,12 @@ function PushNotifToggle() {
       <div className="flex items-center gap-3">
         <span className="text-gray-400"><Bell className="w-4 h-4" /></span>
         <div>
-          <div className="text-sm font-medium">Browser Push Notifications</div>
+          <div className="text-sm font-medium">{(ts as any).browserPushTitle || "Browser Push Notifications"}</div>
           <div className="text-xs text-gray-500">
-            {subscribed ? "Enabled — you'll get push alerts" : "Get instant alerts even when the app is closed"}
+            {subscribed ? ((ts as any).browserPushDescOn || "Enabled — you'll get push alerts") : ((ts as any).browserPushDescOff || "Get instant alerts even when the app is closed")}
           </div>
           {permission === "denied" && (
-            <div className="text-xs text-red-400 mt-0.5">Permission denied — enable in browser settings</div>
+            <div className="text-xs text-red-400 mt-0.5">{(ts as any).browserPushDenied || "Permission denied — enable in browser settings"}</div>
           )}
         </div>
       </div>

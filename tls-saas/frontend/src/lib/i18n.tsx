@@ -416,6 +416,11 @@ export const translations = {
       tabPassword: "Password",
       tabNotifications: "Notifications",
       tabCredentials: "TLS Login",
+      browserPushTitle: "Browser Push Notifications",
+      browserPushDescOn: "Enabled — you will get push alerts",
+      browserPushDescOff: "Get instant alerts even when the app is closed",
+      browserPushDenied: "Permission denied — enable in browser settings",
+      browserPushNotSupported: "Not supported in this browser",
       credLegalization: "Legalization Credentials",
       credVisa: "Visa Credentials",
       credSaved: "Saved",
@@ -865,6 +870,11 @@ export const translations = {
       tabPassword: "كلمة المرور",
       tabNotifications: "الإشعارات",
       tabCredentials: "بيانات TLS",
+      browserPushTitle: "إشعارات المتصفح",
+      browserPushDescOn: "مفعل — ستتلقى تنبيهات فورية",
+      browserPushDescOff: "احصل على تنبيهات فورية حتى عندما يكون التطبيق مغلقاً",
+      browserPushDenied: "تم الرفض — قم بتفعيلها من إعدادات المتصفح",
+      browserPushNotSupported: "غير مدعوم في هذا المتصفح",
 
 
       credLegalization: "بيانات التوثيق",
@@ -1316,6 +1326,11 @@ export const translations = {
       tabPassword: "Passwort",
       tabNotifications: "Benachrichtigungen",
       tabCredentials: "TLS-Login",
+      browserPushTitle: "Browser-Push-Benachrichtigungen",
+      browserPushDescOn: "Aktiviert — Sie erhalten Push-Benachrichtigungen",
+      browserPushDescOff: "Erhalten Sie sofortige Benachrichtigungen, auch wenn die App geschlossen ist",
+      browserPushDenied: "Zulassung verweigert — in den Browsereinstellungen aktivieren",
+      browserPushNotSupported: "In diesem Browser nicht unterstützt",
 
 
       credLegalization: "Beglaubigungs-Zugangsdaten",
