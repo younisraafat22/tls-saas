@@ -281,7 +281,7 @@ export default function PaymentsPage() {
                   <h3 className="font-semibold mb-1">{getPlanName(plan.plan_type, plan.display_name)}</h3>
                   <p className="text-sm text-gray-400 mb-3">{getPlanDesc(plan.plan_type, plan.description)}</p>
                   <div className="text-2xl font-bold text-primary-400">
-                      {plan.price_monthly} <span className="text-sm font-normal text-gray-400">{(t.pricing as any)?.currencyEGP || "EGP"}{(t.pricing as any)?.perMonth || "/mo"}</span>
+                      {plan.price_monthly.toLocaleString(locale === "ar" ? "ar-EG" : locale === "de" ? "de-DE" : "en-US")} <span className="text-sm font-normal text-gray-400">{(t.pricing as any)?.currencyEGP || "EGP"}{(t.pricing as any)?.perMonth || "/mo"}</span>
                   </div>
                   {isSelected && (
                     <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="mt-3 text-primary-400 text-sm flex items-center gap-1">
@@ -457,7 +457,7 @@ export default function PaymentsPage() {
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-400">{t.payment.amount}</span>
                       <span className="font-semibold text-accent-green">
-                          {plans.find((p) => p.id === selectedPlan)?.price_monthly} {(t.pricing as any)?.currencyEGP || "EGP"}
+                          {(plans.find((p) => p.id === selectedPlan)?.price_monthly || 0).toLocaleString(locale === "ar" ? "ar-EG" : locale === "de" ? "de-DE" : "en-US")} {(t.pricing as any)?.currencyEGP || "EGP"}
                       </span>
                     </div>
                   </>
@@ -475,7 +475,7 @@ export default function PaymentsPage() {
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-400">{t.payment.amount}</span>
                       <span className="font-semibold text-accent-green">
-                          {plans.find((p) => p.id === selectedPlan)?.price_monthly} {(t.pricing as any)?.currencyEGP || "EGP"}
+                          {(plans.find((p) => p.id === selectedPlan)?.price_monthly || 0).toLocaleString(locale === "ar" ? "ar-EG" : locale === "de" ? "de-DE" : "en-US")} {(t.pricing as any)?.currencyEGP || "EGP"}
                       </span>
                     </div>
                   </>

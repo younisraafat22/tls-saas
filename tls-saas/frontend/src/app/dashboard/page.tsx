@@ -325,14 +325,14 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2 text-gray-400 text-sm mb-2">
             <Globe className="w-4 h-4" /> {td.branchesLabel}
           </div>
-          <div className="text-2xl font-bold">{monitoredBranches.length}</div>
+          <div className="text-2xl font-bold">{monitoredBranches.length.toLocaleString(locale === "ar" ? "ar-EG" : locale === "de" ? "de-DE" : "en-US")}</div>
         </motion.div>
 
         <motion.div variants={fadeUp} className="stat-card">
           <div className="flex items-center gap-2 text-gray-400 text-sm mb-2">
             <Hash className="w-4 h-4" /> {td.totalChecksLabel}
           </div>
-          <div className="text-2xl font-bold">{totalChecks.toLocaleString()}</div>
+          <div className="text-2xl font-bold">{totalChecks.toLocaleString(locale === "ar" ? "ar-EG" : locale === "de" ? "de-DE" : "en-US")}</div>
         </motion.div>
 
         {hasActiveSubscription && isPremium && (

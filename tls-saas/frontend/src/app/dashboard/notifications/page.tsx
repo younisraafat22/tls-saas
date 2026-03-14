@@ -20,7 +20,7 @@ const channelColors: Record<string, string> = {
 };
 
 export default function NotificationsPage() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const tn = t.notifs;
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -106,7 +106,7 @@ export default function NotificationsPage() {
                 {channelIcons[ch]}
                 {ch === "web_push" ? tn.push : ("email" in tn ? (tn as any).email : "Email")}
               </div>
-              <div className="text-2xl font-bold">{count}</div>
+              <div className="text-2xl font-bold">{count.toLocaleString(locale === "ar" ? "ar-EG" : locale === "de" ? "de-DE" : "en-US")}</div>
             </motion.div>
           );
         })}

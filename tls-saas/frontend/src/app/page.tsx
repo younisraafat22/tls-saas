@@ -145,7 +145,7 @@ function Counter({ target, suffix = "" }: { target: number; suffix?: string }) {
 
 function Navbar() {
   const { user, logout } = useAuth();
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -241,7 +241,7 @@ function Navbar() {
 // -- Hero Section ----------------------------------------
 
 function Hero() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   return (
     <section className="relative min-h-screen flex items-center pt-20 overflow-hidden">
       <Particles />
@@ -367,7 +367,7 @@ function Hero() {
 // -- Features Section ------------------------------------
 
 function Features() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const icons = [Bell, Shield, Globe, Zap, Clock, Smartphone];
 
   return (
@@ -405,7 +405,7 @@ function Features() {
 // -- How It Works ----------------------------------------
 
 function HowItWorks() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
 
   return (
     <section id="how-it-works" className="py-24 bg-dark-700/30">
@@ -441,7 +441,7 @@ function HowItWorks() {
 // -- Pricing Section -------------------------------------
 
 function Pricing() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const fallbackPlans = [
     {
       id: 0,
@@ -587,7 +587,7 @@ function Pricing() {
                     <span className="text-4xl font-display font-bold text-cyan-400">FREE</span>
                   ) : (
                     <>
-                      <span className={`text-4xl font-display font-bold ${isPremium ? "text-amber-400" : isAllInOne ? "text-emerald-400" : ""}`}>{plan.price_monthly}</span>
+                      <span className={`text-4xl font-display font-bold ${isPremium ? "text-amber-400" : isAllInOne ? "text-emerald-400" : ""}`}>{plan.price_monthly.toLocaleString(locale === "ar" ? "ar-EG" : locale === "de" ? "de-DE" : "en-US")}</span>
                         <span className="text-gray-400 text-sm">{plan.currency === "EGP" ? (t.pricing.currencyEGP || "EGP") : plan.currency}{t.pricing.perMonth}</span>
                     </>
                   )}
@@ -637,7 +637,7 @@ function Pricing() {
 // -- Download App Section --------------------------------
 
 function DownloadApp() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const dl = t.downloadSection;
   const [downloadInfo, setDownloadInfo] = useState<{
     version: string;
@@ -743,7 +743,7 @@ function DownloadApp() {
 // -- User Guide --------------------------------------------------
 
 function UserGuide() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [tab, setTab] = useState<"app" | "server">("server");
   const g = t.guide;
 
@@ -835,7 +835,7 @@ function UserGuide() {
 // -- FAQ -------------------------------------------------
 
 function FAQ() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [open, setOpen] = useState<number | null>(null);
 
   return (
@@ -878,7 +878,7 @@ function FAQ() {
 // -- CTA Section -----------------------------------------
 
 function CTA() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   return (
     <section className="py-24 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-r from-primary-500/10 via-blue-600/10 to-purple-600/10" />
@@ -904,7 +904,7 @@ function CTA() {
 // -- Footer ----------------------------------------------
 
 function Footer() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   return (
     <footer className="py-12 border-t border-white/5">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
