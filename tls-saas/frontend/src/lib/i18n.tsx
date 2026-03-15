@@ -129,6 +129,27 @@ export const translations = {
         note: "📱 Works on any device — phone, tablet, or laptop. No installation needed.",
       },
     },
+    rating: {
+      title: "Rate Your Experience",
+      sub: "Let us know how the service works for you!",
+      placeholder: "Optional feedback...",
+      submit: "Submit Rating",
+      thanks: "Thank you for your feedback!",
+    },
+    rating: {
+      title: "قيّم تجربتك",
+      sub: "أخبرنا برأيك في الخدمة!",
+      placeholder: "تعليق اختياري...",
+      submit: "إرسال التقييم",
+      thanks: "شكراً على ملاحظاتك!",
+    },
+    rating: {
+      title: "Bewerten Sie Ihre Erfahrung",
+      sub: "Lassen Sie uns wissen, wie der Service für Sie funktioniert!",
+      placeholder: "Optionales Feedback...",
+      submit: "Bewertung abgeben",
+      thanks: "Vielen Dank für Ihr Feedback!",
+    },
     cta: {
       title: "Ready to Stop Refreshing?",
       sub: "Join others who are getting instant notifications when TLS appointment slots open.",
@@ -283,7 +304,7 @@ export const translations = {
       footerHome: "Home",
       sections: [
         { heading: "1. Acceptance of Terms", paras: ["By accessing or using TLS Appointment Checker (\"the Service\"), you agree to be bound by these Terms & Conditions. If you do not agree, please do not use the Service."], list: [], paras2: [] },
-        { heading: "2. Service Description", paras: ["TLS Appointment Checker is an automated monitoring tool that checks the TLS Contact website for appointment availability at supported branches in Egypt. It monitors legalization branches (Sheikh Zayed and Hurghada) and visa appointment branches (El-Sheikh Zayed, Hurghada, New Cairo, and Alexandria). The Service notifies subscribers when appointment slots are detected.", "The Service is available in two modes: (1) Desktop App Plans (Legalization Monitor & Visa Monitor) — a Windows application that runs on your PC; your computer must remain powered on with an active internet connection for monitoring to continue. Windows 10 or 11 (64-bit) is required with at least 4 GB RAM. (2) Premium (Server Monitored) — monitoring runs on our servers with no PC required; monitoring continues 24/7 regardless of whether your device is on.", "The Service does NOT book appointments on your behalf, guarantee that detected slots will still be available when you attempt to book, or have any affiliation with TLS Contact or any embassy."], list: [], paras2: [] },
+        { heading: "2. Service Description", paras: ["TLS Appointment Checker is an automated monitoring tool that checks the TLS Contact website for appointment availability at supported branches in Egypt. It monitors legalization branches (Sheikh Zayed and Hurghada) and visa appointment branches (El-Sheikh Zayed, Hurghada, New Cairo, and Alexandria). The Service notifies subscribers when appointment slots are detected. To avoid rate-limiting, monitoring will automatically pause once a valid appointment is found. You must manually restart it if needed.", "The Service is available in two modes: (1) Desktop App Plans (Legalization Monitor & Visa Monitor) — a Windows application that runs on your PC; your computer must remain powered on with an active internet connection for monitoring to continue. Windows 10 or 11 (64-bit) is required with at least 4 GB RAM. (2) Premium (Server Monitored) — monitoring runs on our servers with no PC required; monitoring continues 24/7 regardless of whether your device is on.", "The Service does NOT book appointments on your behalf, guarantee that detected slots will still be available when you attempt to book, or have any affiliation with TLS Contact or any embassy."], list: [], paras2: [] },
         { heading: "3. No Guarantee of Service", paras: ["The Service is provided \"as is\" and \"as available\" without warranties of any kind, either express or implied. We do not guarantee:"], list: ["Continuous, uninterrupted, or error-free operation", "That monitoring checks will run on a fixed schedule", "Accuracy or completeness of appointment availability data", "That you will receive a notification before an appointment slot disappears", "Any specific response or detection time"], paras2: [] },
         { heading: "4. Subscription & Payments", paras: ["The Service is offered on a monthly subscription basis. Payment is made manually via InstaPay or Vodafone Cash. Subscriptions are activated upon confirmation of payment.", "Desktop App plans (Legalization Monitor and Visa Monitor) are device-bound: each license is tied to a single device identified by its Hardware ID. If you change devices, proof of payment must be re-submitted and a new license will be issued. You may not share or transfer a Desktop license to another device or person. The 1-day free trial is limited to one trial per device."], list: [], paras2: ["All payments are non-refundable. We do not offer refunds for partial months, unused periods, missed notifications, or dissatisfaction with the Service.", "Subscription fees are subject to change. We will notify active subscribers at least 14 days before any price change takes effect."] },
         { heading: "5. User Responsibilities", paras: ["You agree to:"], list: ["Provide accurate information when registering", "Keep your account credentials confidential", "Use the Service solely for your own personal, non-commercial appointment needs", "Not attempt to reverse-engineer, scrape, abuse, or overload the Service", "Not use the Service in any way that violates applicable law"], paras2: [] },
