@@ -569,26 +569,26 @@ function Pricing() {
               >
                 {isPremium ? (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-4 py-1 rounded-full whitespace-nowrap">
-                  SERVER MONITORED
+                    {t.pricing.serverMonitored || "SERVER MONITORED"}
                   </div>
                 ) : isAllInOne ? (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold px-4 py-1 rounded-full whitespace-nowrap">
-                  BEST VALUE
+                    {t.pricing.bestValue || "BEST VALUE"}
                   </div>
                 ) : isTrial ? (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-cyan-500 to-teal-500 text-white text-xs font-bold px-4 py-1 rounded-full whitespace-nowrap">
-                  FREE TRIAL
+                    {t.pricing.freeTrialBadge || "FREE TRIAL"}
                   </div>
                 ) : (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-primary-500 to-blue-600 text-white text-xs font-bold px-4 py-1 rounded-full whitespace-nowrap">
-                    DESKTOP APP
+                    {t.pricing.desktopApp || "DESKTOP APP"}
                   </div>
                 )}
 
                 <h3 className="font-display font-bold text-xl mb-2">{t.planNames?.[plan.plan_type] ?? plan.display_name}</h3>
                 <div className="flex items-baseline gap-1 mb-6">
                   {isTrial ? (
-                    <span className="text-4xl font-display font-bold text-cyan-400">FREE</span>
+                    <span className="text-4xl font-display font-bold text-cyan-400">{t.pricing.freeWord || "FREE"}</span>
                   ) : (
                     <>
                       <span className={`text-4xl font-display font-bold ${isPremium ? "text-amber-400" : isAllInOne ? "text-emerald-400" : ""}`}>{plan.price_monthly.toLocaleString(locale === "ar" ? "ar-EG" : locale === "de" ? "de-DE" : "en-US")}</span>
