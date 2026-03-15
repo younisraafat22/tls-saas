@@ -594,6 +594,16 @@ async def report_desktop_check_by_license(
         db.add(nl)
         await db.commit()
 
+    # Check if desktop app experienced a critical error (no application, bad credentials) and alert user
+    if user and body.error:
+        error_lower = body.error.lower()
+        if('no application' in error_lower or 'invalid' in error_lower or 'incorrect' in error_lower or 'wrong' in error_lower):
+            try:
+                from app.services.scheduler import _notify_user_check_error
+                await _notify_user_check_error(user, branch.name if branch else "unknown", body.error)
+            except Exception as e:
+                logging.getLogger("monitoring").warning(f"Failed to send desktop error alert: {e}")
+
     # Broadcast to user's dashboard via WebSocket so it auto-refreshes
     try:
         from app.websocket import ws_manager

@@ -531,6 +531,7 @@ from app.api.admin_routes import router as admin_router
 from app.api.contact_routes import router as contact_router
 from app.api.credential_routes import router as credential_router
 from app.api.desktop_routes import router as desktop_router
+from app.api.metrics_routes import router as metrics_router
 
 app.include_router(auth_router)
 app.include_router(sub_router)
@@ -540,6 +541,7 @@ app.include_router(admin_router)
 app.include_router(contact_router)
 app.include_router(credential_router)
 app.include_router(desktop_router)
+app.include_router(metrics_router)
 
 
 # ── Health Check ─────────────────────────────────────────────────────

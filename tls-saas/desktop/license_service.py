@@ -72,27 +72,27 @@ PLANS = {
         "checks_per_day": 24,
         "min_interval": 60,
         "duration_days": 30,
-        "price": 500,
+        "price": 400,
         "currency": "EGP",
-        "max_emails": 2,
+        "max_emails": 1,
     },
     "visa": {
         "name": "Visa",
         "checks_per_day": 24,
         "min_interval": 60,
         "duration_days": 30,
-        "price": 500,
+        "price": 400,
         "currency": "EGP",
-        "max_emails": 2,
+        "max_emails": 1,
     },
     "legalization_monthly": {
         "name": "Legalization",
         "checks_per_day": 24,      # 24h / 60min
         "min_interval": 60,
         "duration_days": 30,
-        "price": 500,
+        "price": 400,
         "currency": "EGP",
-        "max_emails": 2,
+        "max_emails": 1,
     },
     "legalization_quarterly": {
         "name": "Legalization (3 months)",
@@ -101,16 +101,16 @@ PLANS = {
         "duration_days": 90,
         "price": 1200,
         "currency": "EGP",
-        "max_emails": 2,
+        "max_emails": 1,
     },
     "visa_monthly": {
         "name": "Visa",
         "checks_per_day": 24,      # 24h / 60min
         "min_interval": 60,
         "duration_days": 30,
-        "price": 500,
+        "price": 400,
         "currency": "EGP",
-        "max_emails": 2,
+        "max_emails": 1,
     },
     "visa_quarterly": {
         "name": "Visa (3 months)",
@@ -119,7 +119,7 @@ PLANS = {
         "duration_days": 90,
         "price": 1200,
         "currency": "EGP",
-        "max_emails": 2,
+        "max_emails": 1,
     },
     "premium": {
         "name": "Premium",
@@ -128,7 +128,7 @@ PLANS = {
         "duration_days": 30,
         "price": 2500,
         "currency": "EGP",
-        "max_emails": 3,
+        "max_emails": 1,
     },
     "premium_monthly": {
         "name": "Premium (Monthly)",
@@ -137,7 +137,7 @@ PLANS = {
         "duration_days": 30,
         "price": 2500,
         "currency": "EGP",
-        "max_emails": 3,
+        "max_emails": 1,
     },
     "premium_quarterly": {
         "name": "Premium (3 months)",
@@ -146,7 +146,7 @@ PLANS = {
         "duration_days": 90,
         "price": 6000,
         "currency": "EGP",
-        "max_emails": 3,
+        "max_emails": 1,
     },
     "premium_annual": {
         "name": "Premium (Annual)",
@@ -155,7 +155,7 @@ PLANS = {
         "duration_days": 365,
         "price": 20000,
         "currency": "EGP",
-        "max_emails": 3,
+        "max_emails": 1,
     },
     # Combo plan: both legalization + visa locally
     "all_in_one": {
@@ -163,18 +163,18 @@ PLANS = {
         "checks_per_day": 24,
         "min_interval": 60,
         "duration_days": 30,
-        "price": 900,
+        "price": 750,
         "currency": "EGP",
-        "max_emails": 2,
+        "max_emails": 1,
     },
     "all_in_one_monthly": {
         "name": "Legalization + Visa",
         "checks_per_day": 24,
         "min_interval": 60,
         "duration_days": 30,
-        "price": 900,
+        "price": 750,
         "currency": "EGP",
-        "max_emails": 2,
+        "max_emails": 1,
     },
     "all_in_one_quarterly": {
         "name": "Legalization + Visa (3 months)",
@@ -183,7 +183,7 @@ PLANS = {
         "duration_days": 90,
         "price": 2400,
         "currency": "EGP",
-        "max_emails": 2,
+        "max_emails": 1,
     },
     # Internal test plan — 2-hour expiry for verifying expiry logic without waiting 30 days
     "test_2h": {
@@ -194,7 +194,7 @@ PLANS = {
         "duration_hours": 2,
         "price": 0,
         "currency": "EGP",
-        "max_emails": 2,
+        "max_emails": 1,
     },
 }
 
@@ -963,7 +963,7 @@ def check_api_subscription() -> dict | None:
                 "name": active_plan,
                 "checks_per_day": 999999,
                 "min_interval": 30,
-                "max_emails": 5,
+                "max_emails": 1,
             },
             "expires_at": expires_at,
             "days_remaining": days_remaining,

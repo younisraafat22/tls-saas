@@ -100,10 +100,10 @@ class NotificationService:
   .body {{ background: #141832; padding: 30px; border-radius: 0 0 16px 16px; }}
   .badge {{ display: inline-block; background: #00ff88; color: #000; padding: 8px 20px; border-radius: 20px; font-weight: bold; font-size: 18px; margin: 15px 0; }}
   .info-row {{ display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #1e2448; }}
-  .info-label {{ color: #8892b0; }}
+  .info-label {{ color: #dddddd; }}
   .info-value {{ color: #fff; font-weight: 600; }}
   .cta {{ display: inline-block; background: linear-gradient(135deg, #00d9ff, #0066ff); color: #fff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 20px 0; }}
-  .footer {{ text-align: center; padding: 20px; color: #8892b0; font-size: 12px; }}
+  .footer {{ text-align: center; padding: 20px; color: #dddddd; font-size: 12px; }}
 </style>
 </head>
 <body>
@@ -129,7 +129,7 @@ class NotificationService:
       <div style="text-align: center;">
         <a href="{Config.TLS_URL}" class="cta">Book Now →</a>
       </div>
-      <p style="color: #8892b0; font-size: 13px; margin-top: 24px;">This is an automated notification. Please verify availability on the website before proceeding.</p>
+      <p style="color: #dddddd; font-size: 13px; margin-top: 24px;">This is an automated notification. Please verify availability on the website before proceeding.</p>
     </div>
     <div class="footer">
       <p>TLS Appointment Checker — Automated alert</p>
@@ -163,9 +163,9 @@ class NotificationService:
   .header h1 {{ margin: 0; font-size: 22px; color: #00d9ff; }}
   .body {{ background: #141832; padding: 30px; border-radius: 0 0 16px 16px; }}
   .info-row {{ display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #1e2448; }}
-  .info-label {{ color: #8892b0; }}
+  .info-label {{ color: #dddddd; }}
   .info-value {{ color: #fff; font-weight: 600; }}
-  .footer {{ text-align: center; padding: 20px; color: #8892b0; font-size: 12px; }}
+  .footer {{ text-align: center; padding: 20px; color: #dddddd; font-size: 12px; }}
 </style>
 </head>
 <body>
@@ -188,7 +188,7 @@ class NotificationService:
         <span class="info-label">App Version</span>
         <span class="info-value">{Config.APP_VERSION}</span>
       </div>
-      <p style="color: #8892b0; font-size: 13px; margin-top: 20px;">The system is monitoring for appointment slots at every configured interval. You will be notified immediately when slots become available.</p>
+      <p style="color: #dddddd; font-size: 13px; margin-top: 20px;">The system is monitoring for appointment slots at every configured interval. You will be notified immediately when slots become available.</p>
     </div>
     <div class="footer"><p>TLS Appointment Checker — Automated status report</p></div>
   </div>
@@ -216,7 +216,7 @@ class NotificationService:
   .header h1 {{ margin: 0; font-size: 24px; color: #fff; }}
   .body {{ background: #141832; padding: 30px; border-radius: 0 0 16px 16px; }}
   .cta {{ display: inline-block; background: linear-gradient(135deg, #ffaa00, #ff6600); color: #fff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 20px 0; }}
-  .footer {{ text-align: center; padding: 20px; color: #8892b0; font-size: 12px; }}
+  .footer {{ text-align: center; padding: 20px; color: #dddddd; font-size: 12px; }}
 </style>
 </head>
 <body>
@@ -225,13 +225,13 @@ class NotificationService:
       <h1>⏰ Trial Expiring Soon</h1>
     </div>
     <div class="body">
-      <p>Hi there,</p>
+      <p style="color: #ffffff;">Hi there,</p>
       <p style="font-size: 18px; color: #ffaa00; font-weight: 600;">Your free trial expires in <strong>{days_remaining} day(s)</strong>.</p>
       <p>To continue using {Config.APP_NAME} after your trial expires, please purchase a license key from our website.</p>
       <div style="text-align: center;">
         <a href="{Config.WEBSITE_URL}" class="cta">Get a License →</a>
       </div>
-      <p style="color: #8892b0; font-size: 13px; margin-top: 24px;">Thank you for using {Config.APP_NAME}!</p>
+      <p style="color: #dddddd; font-size: 13px; margin-top: 24px;">Thank you for using {Config.APP_NAME}!</p>
     </div>
     <div class="footer"><p>TLS Appointment Checker — Automated notification</p></div>
   </div>
@@ -256,7 +256,7 @@ class NotificationService:
   .step {{ display: flex; align-items: flex-start; margin: 12px 0; }}
   .step-num {{ background: #00d9ff; color: #000; border-radius: 50%; width: 24px; height: 24px; min-width: 24px; text-align: center; font-weight: bold; margin-right: 12px; line-height: 24px; font-size: 13px; }}
   .cta {{ display: inline-block; background: linear-gradient(135deg, #00d9ff, #0066ff); color: #fff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 20px 0; }}
-  .footer {{ text-align: center; padding: 20px; color: #8892b0; font-size: 12px; }}
+  .footer {{ text-align: center; padding: 20px; color: #dddddd; font-size: 12px; }}
 </style>
 </head>
 <body>
@@ -295,7 +295,7 @@ class NotificationService:
   .body {{ background: #141832; padding: 30px; border-radius: 0 0 16px 16px; }}
   .badge {{ display: inline-block; background: #ffaa00; color: #000; padding: 8px 20px; border-radius: 20px; font-weight: bold; font-size: 16px; margin: 15px 0; }}
   .cta {{ display: inline-block; background: linear-gradient(135deg, #ffaa00, #ff6600); color: #fff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 20px 0; }}
-  .footer {{ text-align: center; padding: 20px; color: #8892b0; font-size: 12px; }}
+  .footer {{ text-align: center; padding: 20px; color: #dddddd; font-size: 12px; }}
 </style>
 </head>
 <body>
@@ -304,16 +304,16 @@ class NotificationService:
       <h1>⏰ 12-Hour Reminder — Slots Still Available</h1>
     </div>
     <div class="body">
-      <p>Hi there,</p>
+      <p style="color: #ffffff;">Hi there,</p>
       <div style="text-align: center;"><span class="badge">REMINDER</span></div>
       <p style="font-size: 16px; margin-top: 16px;">This is a reminder that <strong>appointment slots are still available</strong> on the TLS website. We notified you 12 hours ago and haven't detected any changes.</p>
       <p style="color: #ffaa00; font-size: 15px;">⚡ If you haven't booked yet, now is the time!</p>
-      {'<p style="color: #8892b0; font-size: 13px;">Details: ' + slot_details + '</p>' if slot_details else ''}
-      <p style="color: #8892b0; font-size: 12px;">Detected at: {now}</p>
+      {'<p style="color: #dddddd; font-size: 13px;">Details: ' + slot_details + '</p>' if slot_details else ''}
+      <p style="color: #dddddd; font-size: 12px;">Detected at: {now}</p>
       <div style="text-align: center;">
         <a href="{Config.TLS_URL}" class="cta">Book Now &rarr;</a>
       </div>
-      <p style="color: #8892b0; font-size: 12px; margin-top: 24px;">This is the final automated reminder for this availability window. Monitoring continues in the background.</p>
+      <p style="color: #dddddd; font-size: 12px; margin-top: 24px;">This is the final automated reminder for this availability window. Monitoring continues in the background.</p>
     </div>
     <div class="footer"><p>TLS Appointment Checker &mdash; Automated reminder</p></div>
   </div>
@@ -335,7 +335,7 @@ class NotificationService:
   .header h1 {{ margin: 0; font-size: 24px; color: #fff; }}
   .body {{ background: #141832; padding: 30px; border-radius: 0 0 16px 16px; }}
   .error-box {{ background: #2a1520; border: 1px solid #ff4444; border-radius: 8px; padding: 16px; margin: 16px 0; font-family: monospace; font-size: 13px; color: #ff8888; word-break: break-all; }}
-  .footer {{ text-align: center; padding: 20px; color: #8892b0; font-size: 12px; }}
+  .footer {{ text-align: center; padding: 20px; color: #dddddd; font-size: 12px; }}
   .tip {{ background: #1a2040; border-left: 3px solid #00d9ff; padding: 12px 16px; margin: 16px 0; border-radius: 0 8px 8px 0; }}
 </style>
 </head>
@@ -345,19 +345,19 @@ class NotificationService:
       <h1>&#9888; Monitoring Check Failed</h1>
     </div>
     <div class="body">
-      <p>Hi there,</p>
-      <p>The TLS monitoring check encountered an error at <strong>{now}</strong> and could not complete successfully.</p>
+      <p style="color: #ffffff;">Hi there,</p>
+      <p style="color: #ffffff;">The TLS monitoring check encountered an error at <strong>{now}</strong> and could not complete successfully.</p>
       <div class="error-box">{safe_error}</div>
       <div class="tip">
         <p style="margin:0; color: #00d9ff; font-weight: 600;">Common fixes:</p>
-        <ul style="margin: 8px 0 0 0; color: #8892b0;">
+        <ul style="margin: 8px 0 0 0; color: #dddddd;">
           <li>Verify your TLS email and password are correct in the app settings</li>
           <li>Check your internet connection</li>
           <li>The TLS website may be temporarily down or under maintenance</li>
           <li>If the error persists, try restarting the monitoring</li>
         </ul>
       </div>
-      <p style="color: #8892b0; font-size: 13px;">Monitoring will automatically retry. You will only receive this email once per hour for repeated errors.</p>
+      <p style="color: #dddddd; font-size: 13px;">Monitoring will automatically retry. You will only receive this email once per hour for repeated errors.</p>
     </div>
     <div class="footer"><p>TLS Appointment Checker &mdash; Error alert</p></div>
   </div>

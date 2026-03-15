@@ -9,6 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models import (
+    AppRating,
+    AppDownload,
+    FoundAppointment,
     User, Plan, Subscription, Branch, Payment, CheckResult,
     NotificationLog, ServiceAccount, SystemSetting, ActivityLog,
     UserBranchMonitor,

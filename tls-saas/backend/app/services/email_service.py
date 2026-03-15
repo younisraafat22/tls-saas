@@ -94,10 +94,10 @@ class EmailService:
                 .body {{ background: #141832; padding: 30px; border-radius: 0 0 16px 16px; }}
                 .alert-badge {{ display: inline-block; background: #00ff88; color: #000; padding: 8px 20px; border-radius: 20px; font-weight: bold; font-size: 18px; margin: 15px 0; }}
                 .info-row {{ display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #1e2448; }}
-                .info-label {{ color: #8892b0; }}
+                .info-label {{ color: #dddddd; }}
                 .info-value {{ color: #fff; font-weight: 600; }}
                 .cta {{ display: inline-block; background: linear-gradient(135deg, #00d9ff, #0066ff); color: #fff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 20px 0; }}
-                .footer {{ text-align: center; padding: 20px; color: #8892b0; font-size: 12px; }}
+                .footer {{ text-align: center; padding: 20px; color: #dddddd; font-size: 12px; }}
             </style>
         </head>
         <body>
@@ -172,7 +172,7 @@ class EmailService:
                 .body {{ background: #141832; padding: 30px; border-radius: 0 0 16px 16px; }}
                 .alert-badge {{ display: inline-block; background: #ffaa00; color: #000; padding: 8px 20px; border-radius: 20px; font-weight: bold; font-size: 18px; margin: 15px 0; }}
                 .cta {{ display: inline-block; background: linear-gradient(135deg, #ffaa00, #ff6600); color: #fff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 20px 0; }}
-                .footer {{ text-align: center; padding: 20px; color: #8892b0; font-size: 12px; }}
+                .footer {{ text-align: center; padding: 20px; color: #dddddd; font-size: 12px; }}
             </style>
         </head>
         <body>
@@ -191,7 +191,7 @@ class EmailService:
                     <div style="text-align: center;">
                         <a href="{booking_url}" class="cta">Book Now →</a>
                     </div>
-                    <p style="color: #8892b0; font-size: 13px; margin-top: 20px;">This is your final reminder for this alert. No further emails will be sent for this detection.</p>
+                    <p style="color: #dddddd; font-size: 13px; margin-top: 20px;">This is your final reminder for this alert. No further emails will be sent for this detection.</p>
                 </div>
                 <div class="footer">
                     <p style="color:#8892b0;">TLS Appointment Checker — Automated reminder.</p>
@@ -296,7 +296,7 @@ class EmailService:
                 </ol>
                 <p style="color: #ffaa00; margin-top: 20px;">⚠️ This key is bound to your device. Do not share it.</p>
             </div>
-            <div style="text-align: center; padding: 20px; color: #8892b0; font-size: 12px;">
+            <div style="text-align: center; padding: 20px; color: #dddddd; font-size: 12px;">
                 <p style="color:#8892b0;">TLS Appointment Checker — Thank you for your purchase!</p>
                 <p style="color:#8892b0;">Need help? Reply to this email or contact support.</p>
             </div>
@@ -313,7 +313,7 @@ class EmailService:
             <p style="color:#fff;">Your <strong>{plan_name}</strong> subscription is now active.</p>
             <p style="color:#fff;"><strong>Expires:</strong> {expires_at}</p>
             <p style="color:#fff;">Head to your dashboard to select which branches to monitor. You'll receive instant notifications when appointments become available.</p>
-            <p style="color: #8892b0; font-size: 12px; margin-top: 30px;">TLS Appointment Checker</p>
+            <p style="color: #dddddd; font-size: 12px; margin-top: 30px;">TLS Appointment Checker</p>
         </div>
         """
         return self.send(to_email, f"✅ {plan_name} Subscription Activated", html)
@@ -329,10 +329,10 @@ class EmailService:
             <div style="text-align: center; margin: 30px 0;">
                 <a href="{reset_url}" style="background: #00D9FF; color: #0a192f; padding: 14px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">Reset Password</a>
             </div>
-            <p style="color: #8892b0; font-size: 13px;">This link expires in 15 minutes. If you didn't request this reset, you can safely ignore this email.</p>
-            <p style="color: #8892b0; font-size: 13px;">Or copy and paste this URL into your browser:</p>
+            <p style="color: #dddddd; font-size: 13px;">This link expires in 15 minutes. If you didn't request this reset, you can safely ignore this email.</p>
+            <p style="color: #dddddd; font-size: 13px;">Or copy and paste this URL into your browser:</p>
             <p style="color: #64ffda; font-size: 12px; word-break: break-all;">{reset_url}</p>
-            <p style="color: #8892b0; font-size: 12px; margin-top: 30px;">TLS Appointment Checker</p>
+            <p style="color: #dddddd; font-size: 12px; margin-top: 30px;">TLS Appointment Checker</p>
         </div>
         """
         return self.send(to_email, "🔑 Reset Your Password - TLS Appointment Checker", html)

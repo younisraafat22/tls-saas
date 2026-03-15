@@ -273,8 +273,16 @@ class TLSApp:
                     except Exception:
                         pass
                     
-                    def close_app(e):
-                        page.window.destroy()
+                    async def close_app(e):
+                        try:
+                            if hasattr(page.window, 'close'):
+                                await page.window.close()
+                        except Exception:
+                            pass
+                        import asyncio
+                        await asyncio.sleep(0.5)
+                        import os
+                        os._exit(0)
                     
                     page.add(
                         ft.Container(
@@ -332,8 +340,16 @@ class TLSApp:
                 page.vertical_alignment = ft.MainAxisAlignment.CENTER
                 page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
                 
-                def close_app(e):
-                    page.window.destroy()
+                async def close_app(e):
+                    try:
+                        if hasattr(page.window, 'close'):
+                            await page.window.close()
+                    except Exception:
+                        pass
+                    import asyncio
+                    await asyncio.sleep(0.5)
+                    import os
+                    os._exit(0)
                 
                 page.add(
                     ft.Container(
@@ -1229,6 +1245,7 @@ class TLSApp:
                 user_id=USER_ID,
                 on_status_update=self.update_status_log,
                 on_countdown_update=self.update_countdown,
+                on_progress_update=self.update_progress,
             )
         # Always sync developer mode to checker (handles mode changes while checker exists)
         self.checker.developer_mode = self._developer_mode
@@ -1263,6 +1280,9 @@ class TLSApp:
             spacing=8, padding=10, auto_scroll=True, expand=True,
             scroll=ft.ScrollMode.AUTO,
         )
+
+        self.check_progress_bar = ft.ProgressBar(width=None, value=0.0, color="#00D9FF", bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.WHITE), visible=False)
+        self.check_progress_text = ft.Text("Idle", size=11, color=ft.Colors.GREY_400, visible=False, italic=True)
 
         initial_msg = ft.Container(
             content=ft.Row(
@@ -1497,6 +1517,13 @@ class TLSApp:
             self.checker.stop_monitoring()
             if self.countdown_text:
                 self.countdown_text.value = "--:--"
+                self.countdown_text.visible = True
+            
+            if hasattr(self, 'check_progress_bar') and self.check_progress_bar:
+                self.check_progress_bar.visible = False
+                self.check_progress_bar.value = 0.0
+            if hasattr(self, 'check_progress_text') and self.check_progress_text:
+                self.check_progress_text.visible = False
 
         def change_plan(e):
             if self.checker:
@@ -2322,6 +2349,10 @@ class TLSApp:
                                             ),
                                             ft.Divider(height=1, color=ft.Colors.with_opacity(0.2, "#00D9FF")),
                                             ft.Container(content=self.status_list, expand=True),
+                                            ft.Column([
+                                                self.check_progress_text,
+                                                self.check_progress_bar
+                                            ], spacing=5, alignment=ft.MainAxisAlignment.END)
                                         ],
                                         spacing=8,
                                     ),
@@ -2567,10 +2598,26 @@ class TLSApp:
                 elif kind == "countdown":
                     minutes, seconds = item[1], item[2]
                     if self.countdown_text:
-                        if minutes == 0 and seconds == 0:
+                        if minutes == -1 and seconds == -1:
+                            self.countdown_text.value = "--:--"
+                        elif minutes == 0 and seconds == 0:
                             self.countdown_text.value = "--:--"
                         else:
                             self.countdown_text.value = f"{minutes}:{seconds:02d}"
+
+                elif kind == "progress":
+                    text, value = item[1], item[2]
+                    if hasattr(self, 'check_progress_text') and hasattr(self, 'check_progress_bar'):
+                        if value <= 0.0 or value >= 1.0:
+                            # Hide when complete or idle
+                            self.check_progress_text.visible = False
+                            self.check_progress_bar.visible = False
+                            self.check_progress_bar.value = 0.0
+                        else:
+                            self.check_progress_text.visible = True
+                            self.check_progress_text.value = text
+                            self.check_progress_bar.visible = True
+                            self.check_progress_bar.value = value
 
                 elif kind == "credentials_error":
                     self.show_credentials_error_dialog()
@@ -2668,6 +2715,12 @@ class TLSApp:
             self._ui_queue.put(("countdown", minutes, seconds))
         except Exception as e:
             print(f"Error updating countdown: {e}")
+
+    def update_progress(self, text: str, value: float):
+        try:
+            self._ui_queue.put(("progress", text, value))
+        except Exception as e:
+            print(f"Error updating progress: {e}")
 
     def show_no_application_dialog(self):
         """Show popup when no application is found on TLS website."""

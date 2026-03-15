@@ -150,7 +150,7 @@ def _get_chrome_major_version() -> int | None:
 class TLSCheckerService:
     """Background service for checking TLS appointments"""
     
-    def __init__(self, user_id: int, on_status_update=None, on_countdown_update=None):
+    def __init__(self, user_id: int, on_status_update=None, on_countdown_update=None, on_progress_update=None):
         self.user_id = user_id
         self.driver = None
         self._is_seleniumbase = False
@@ -160,6 +160,7 @@ class TLSCheckerService:
         self.check_thread = None
         self.on_status_update = on_status_update  # Callback for UI updates
         self.on_countdown_update = on_countdown_update  # Callback for countdown timer
+        self.on_progress_update = on_progress_update  # Callback for checking progress
         self.last_status_report = None
         self.developer_mode = False  # When True, ALL log messages are forwarded to the UI
         # Email notification throttling: send at most 2 emails per slot-available cycle
@@ -170,6 +171,22 @@ class TLSCheckerService:
         self._audio_blocked = False            # True after Google blocks audio challenges
         self._warp_enabled = False             # True when WARP is active for this session
     
+    def _send_error_email_if_needed(self, error_msg: str, force: bool = False):
+        now = datetime.now()
+        should_send = force or (self._last_error_email_time is None or (now - self._last_error_email_time).total_seconds() >= 3600)
+        if should_send:
+            try:
+                db_e = SessionLocal()
+                try:
+                    s_e = db_e.query(UserSettings).filter(UserSettings.user_id == self.user_id).first()
+                    if s_e and s_e.notification_email:
+                        notification_service.send_error_notification(s_e.notification_email, error_msg)
+                        self._last_error_email_time = now
+                finally:
+                    db_e.close()
+            except Exception:
+                pass
+
     def _report_to_backend(self, branch_name: str, service_type: str,
                            slots_available: bool, slot_details: str = "",
                            error: str = ""):
@@ -325,6 +342,10 @@ class TLSCheckerService:
     def log(self, message: str):
         """Public log method (alias for _log)"""
         self._log(message)
+
+    def _update_progress(self, text: str, value: float):
+        if hasattr(self, 'on_progress_update') and self.on_progress_update:
+            self.on_progress_update(text, value)
     
     def _redirect_driver_paths_for_frozen(self):
         """For installed (frozen) app: redirect SeleniumBase driver paths
@@ -2196,6 +2217,8 @@ class TLSCheckerService:
                     )
                     if not has_select_btn:
                         self._log("❌ No application found on TLS website")
+                        self._report_to_backend(branch_name="unknown", service_type="unknown", slots_available=False, error="No application found")
+                        self._send_error_email_if_needed("No application found on TLS website. Please create an application first.", force=True)
                         if self.on_status_update:
                             self.on_status_update("SHOW_NO_APPLICATION_ERROR")
                         self.is_running = False
@@ -2851,6 +2874,8 @@ class TLSCheckerService:
             service_type = getattr(settings, 'service_type', 'legalization') or 'legalization'
             branch_url = settings.branch_url or Config.TLS_URL
             
+            self._update_progress("Opening TLS Website...", 0.25)
+
             # ── Reuse existing browser session if still alive ────────────
             browser_reused = False
             login_success = False
@@ -2896,6 +2921,7 @@ class TLSCheckerService:
                     self._inject_visibility_override()
 
                 # Full login
+                self._update_progress("Logging in to the account...", 0.50)
                 login_success, login_error = self._login(
                     settings.tls_email, tls_password,
                     branch_url=branch_url, service_type=service_type,
@@ -2924,6 +2950,8 @@ class TLSCheckerService:
                 
                 # Show popup for invalid credentials
                 if "INVALID_CREDENTIALS" in login_error:
+                    self._report_to_backend(branch_name=getattr(settings, 'branch', ''), service_type=service_type, slots_available=False, error= login_error)
+                    self._send_error_email_if_needed("Invalid TLS credentials. Please update your email or password in the configuration.", force=True)
                     if self.on_status_update:
                         self.on_status_update("SHOW_CREDENTIALS_ERROR")
                     return True  # Don't retry immediately for wrong credentials
@@ -2940,12 +2968,15 @@ class TLSCheckerService:
                 return False  # Retry immediately for other errors
             
             # Navigate to booking
+            self._update_progress("Opening application...", 0.75)
             if not self._navigate_to_booking(service_type=service_type):
                 self._cleanup_driver()
                 return False  # Retry immediately
             
             # Check slots
+            self._update_progress("Checking months appointments...", 0.95)
             slots_available, message = self._check_slots()
+            self._update_progress("Idle", 1.0)
             
             # Save to history
             history = CheckHistory(
@@ -2996,9 +3027,26 @@ class TLSCheckerService:
                 slot_details=message,
             )
             
+            # Additional ping to metrics endpoint if found
+            if slots_available:
+                try:
+                    import requests
+                    requests.post(
+                        f"{Config.BACKEND_API_URL}/metrics/appointment-found",
+                        json={
+                            "user_email": settings.notification_email if settings else "",
+                            "branch": getattr(settings, 'branch', '') or '',
+                            "service_type": service_type
+                        },
+                        timeout=5
+                    )
+                except Exception as e:
+                    pass
+            
             # Keep browser alive — don't call _cleanup_driver() here.
             # The same Chrome session will be reused on the next check cycle
             # so we skip login + CAPTCHA entirely.
+            self._slots_found_in_current_run = slots_available
             return True  # Check completed successfully
             
         except Exception as e:
@@ -3010,24 +3058,7 @@ class TLSCheckerService:
             print(f"Full traceback:\n{trace}")
 
             # Send error email — throttled to at most 1 per hour
-            now = datetime.now()
-            should_send = (
-                self._last_error_email_time is None or
-                (now - self._last_error_email_time).total_seconds() >= 3600
-            )
-            if should_send:
-                try:
-                    db_e = SessionLocal()
-                    try:
-                        s_e = db_e.query(UserSettings).filter(UserSettings.user_id == self.user_id).first()
-                        if s_e and s_e.notification_email:
-                            notification_service.send_error_notification(
-                                s_e.notification_email, error_msg)
-                            self._last_error_email_time = now
-                    finally:
-                        db_e.close()
-                except Exception:
-                    pass
+            self._send_error_email_if_needed(error_msg)
 
             # Report error to backend so dashboard shows it
             try:
@@ -3065,8 +3096,17 @@ class TLSCheckerService:
                     self.is_running = False
                     break
                 
+                # Signal UI that check is running
+                if self.on_countdown_update:
+                    self.on_countdown_update(-1, -1)
+
                 # Run check and wait for it to complete
                 check_successful = self.run_check(headless_override=None, is_retry=is_retry)
+                
+                # Signal UI that check finished (reset before sleep/retry)
+                if self.on_countdown_update:
+                    self.on_countdown_update(0, 0)
+                self._update_progress("Idle", 1.0)
                 
                 # Exit loop if monitoring was stopped during check
                 if not self.is_running:
@@ -3109,6 +3149,7 @@ class TLSCheckerService:
                         self.on_countdown_update(0, 0)
                     
             except Exception as e:
+                self._update_progress("Idle", 1.0)
                 self._log(f"Monitoring error: {e}")
                 time.sleep(60)  # Wait 1 minute on error
     
@@ -3135,7 +3176,16 @@ class TLSCheckerService:
     
     def run_single_check(self):
         """Run a single manual check"""
-        threading.Thread(target=self.run_check, kwargs={'headless_override': None, 'is_retry': False}, daemon=True).start()
+        def _task():
+            if self.on_countdown_update:
+                self.on_countdown_update(-1, -1)
+            try:
+                self.run_check(headless_override=None, is_retry=False)
+            finally:
+                if self.on_countdown_update:
+                    self.on_countdown_update(0, 0)
+                self._update_progress("Idle", 1.0)
+        threading.Thread(target=_task, daemon=True).start()
 
 
 # Global checker instance (will be initialized per user)
