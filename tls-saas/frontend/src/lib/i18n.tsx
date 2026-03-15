@@ -136,20 +136,6 @@ export const translations = {
       submit: "Submit Rating",
       thanks: "Thank you for your feedback!",
     },
-    rating: {
-      title: "قيّم تجربتك",
-      sub: "أخبرنا برأيك في الخدمة!",
-      placeholder: "تعليق اختياري...",
-      submit: "إرسال التقييم",
-      thanks: "شكراً على ملاحظاتك!",
-    },
-    rating: {
-      title: "Bewerten Sie Ihre Erfahrung",
-      sub: "Lassen Sie uns wissen, wie der Service für Sie funktioniert!",
-      placeholder: "Optionales Feedback...",
-      submit: "Bewertung abgeben",
-      thanks: "Vielen Dank für Ihr Feedback!",
-    },
     cta: {
       title: "Ready to Stop Refreshing?",
       sub: "Join others who are getting instant notifications when TLS appointment slots open.",
@@ -603,6 +589,13 @@ export const translations = {
         ],
         note: "📱 يعمل على أي جهاز — هاتف، تابلت، أو لابتوب. لا تثبيت مطلوب.",
       },
+    },
+    rating: {
+      title: "قيّم تجربتك",
+      sub: "أخبرنا برأيك في الخدمة!",
+      placeholder: "تعليق اختياري...",
+      submit: "إرسال التقييم",
+      thanks: "شكراً على ملاحظاتك!",
     },
     cta: {
       title: "هل أنت مستعد لتوقف عن التحديث اليدوي؟",
@@ -1059,6 +1052,13 @@ export const translations = {
         ],
         note: "📱 Funktioniert auf jedem Gerät — Handy, Tablet oder Laptop. Keine Installation nötig.",
       },
+    },
+    rating: {
+      title: "Bewerten Sie Ihre Erfahrung",
+      sub: "Lassen Sie uns wissen, wie der Service für Sie funktioniert!",
+      placeholder: "Optionales Feedback...",
+      submit: "Bewertung abgeben",
+      thanks: "Vielen Dank für Ihr Feedback!",
     },
     cta: {
       title: "Bereit, mit dem manuellen Aktualisieren aufzuhören?",
