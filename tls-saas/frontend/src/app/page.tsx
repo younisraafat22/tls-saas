@@ -183,7 +183,7 @@ function Navbar() {
       }`}
     >
       <div className="bg-amber-500/10 border-b border-amber-500/20 py-2 px-4 text-center text-xs md:text-sm text-amber-200">
-        <p dangerouslySetInnerHTML={{ __html: ((t as any).features?.notice || (t.hero as any).notice) || '<strong>⚠️ IMPORTANT NOTICE:</strong> TLS Appointment Checker is <strong>monitoring only</strong>. No auto-booking, and it does not guarantee appointments. It is a tool to help you find open slots by checking the TLS website automatically.' }} />
+        <p dangerouslySetInnerHTML={{ __html: (t.features as any)?.notice || (t.hero as any)?.notice || '<strong>⚠️ IMPORTANT NOTICE:</strong> TLS Appointment Checker is <strong>monitoring only</strong>. No auto-booking, and it does not guarantee appointments. It is a tool to help you find open slots by checking the TLS website automatically.' }} />
       </div>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20">
