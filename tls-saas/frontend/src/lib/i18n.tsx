@@ -43,7 +43,7 @@ export const translations = {
         suffix3: "min",
       },
     features: {
-      notice: "<strong>⚠️ تنبيه هام:</strong> تطبيق TLS Appointment Checker هو <strong>أداة مراقبة فقط</strong>. لا يقوم بالحجز التلقائي، ولا يضمن لك المواعيد. هو مجرد أداة لتسهيل العثور على المواعيد المتاحة عن طريق فحص الموقع تلقائيًا.", 
+      notice: "<strong>⚠️ IMPORTANT NOTICE:</strong> TLS Appointment Checker is <strong>monitoring only</strong>. No auto-booking, and it does not guarantee appointments. It is a tool to help you find open slots by checking the TLS website automatically.",
       title: "Why Choose",
       titleHighlight: "TLS Appointment Checker",
       titleEnd: "?",
@@ -983,7 +983,7 @@ export const translations = {
         suffix3: "min",
       },
     features: {
-      notice: "<strong>⚠️ تنبيه هام:</strong> تطبيق TLS Appointment Checker هو <strong>أداة مراقبة فقط</strong>. لا يقوم بالحجز التلقائي، ولا يضمن لك المواعيد. هو مجرد أداة لتسهيل العثور على المواعيد المتاحة عن طريق فحص الموقع تلقائيًا.", 
+      notice: "<strong>⚠️ WICHTIGER HINWEIS:</strong> TLS Appointment Checker <strong>überwacht nur</strong>. Keine automatische Buchung und keine Garantie für Termine. Es ist ein Tool, das Ihnen hilft, freie Termine zu finden, indem es die TLS-Website automatisch überprüft.",
       title: "Warum",
       titleHighlight: "TLS Appointment Checker",
       titleEnd: "wählen?",

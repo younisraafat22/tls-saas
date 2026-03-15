@@ -141,14 +141,13 @@ function Counter({ target, suffix = "", language = "en" }: { target: number; suf
   const formattedCount = count.toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US');
   let formattedSuffix = suffix;
   if (language === 'ar' && suffix === '/7') {
-    formattedSuffix = '/٧';
+    formattedSuffix = '/\u0667';
   }
   
   if (language === 'ar') {
     return (
-        <span ref={ref} dir="rtl" className="inline-flex flex-row-reverse gap-1 items-baseline">
-            {formattedSuffix && <span>{formattedSuffix}</span>}
-            <span>{formattedCount}</span>
+        <span ref={ref} dir="ltr" className="inline-block">
+            {formattedCount}{formattedSuffix && <span className="mr-1">{formattedSuffix}</span>}
         </span>
     );
   }
