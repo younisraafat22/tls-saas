@@ -1,4 +1,4 @@
-Ôªø"""
+"""
 TLS Appointment Checker - Main Application
 License-based desktop app - enter license key to activate monitoring
 """
@@ -39,7 +39,7 @@ if sys.platform == "win32":
 # App version
 VERSION = "1.0.0"
 
-# Update check URL ‚Äî fetched from backend /api/app/version
+# Update check URL ó fetched from backend /api/app/version
 UPDATE_CHECK_URL = f"{Config.BACKEND_URL}/api/app/version"
 
 # Fixed single-user ID for all DB operations (desktop app, no auth)
@@ -198,7 +198,7 @@ class TLSApp:
             except Exception:
                 self.page.window.left = 100
                 self.page.window.top = 50
-        self.self.page.update()
+        self.page.update()
 
         # Register window event handler for cleanup
         self.page.window.on_event = self.on_window_event
@@ -210,7 +210,7 @@ class TLSApp:
         init_db()
         self._ensure_default_settings()
 
-        # Start UI-update loop (thread-safe queue ‚Üí main thread)
+        # Start UI-update loop (thread-safe queue ? main thread)
         self.page.run_task(self._ui_update_loop)
 
         # Check for updates in background
@@ -413,10 +413,10 @@ class TLSApp:
     _DEV_PASSWORD = "tls2026dev"
 
     def on_keyboard_event(self, e: ft.KeyboardEvent):
-        """Handle keyboard events ‚Äî Ctrl+Shift+F12 opens developer mode password dialog."""
+        """Handle keyboard events ó Ctrl+Shift+F12 opens developer mode password dialog."""
         if e.key == "F12" and e.ctrl and e.shift:
             if self._developer_mode:
-                # Already in dev mode ‚Äî just toggle off
+                # Already in dev mode ó just toggle off
                 self._developer_mode = False
                 if self.checker:
                     self.checker.developer_mode = False
@@ -454,7 +454,7 @@ class TLSApp:
 
         dlg = ft.AlertDialog(
             modal=True,
-            title=ft.Text("üîí Developer Mode", size=18, weight=ft.FontWeight.BOLD),
+            title=ft.Text("?? Developer Mode", size=18, weight=ft.FontWeight.BOLD),
             content=ft.Column([
                 ft.Text("Enter developer password to continue.", size=14),
                 pw_field,
@@ -574,7 +574,7 @@ class TLSApp:
                 self.page.window.left = 100
                 self.page.window.top = 50
         try:
-            self.self.page.update()
+            self.page.update()
         except Exception:
             pass
 
@@ -606,7 +606,7 @@ class TLSApp:
                 alignment=ft.Alignment(0, 0),
             )
         )
-        self.self.page.update()
+        self.page.update()
 
     def check_license_and_route(self):
         """Decide which page to show based on offline license."""
@@ -645,7 +645,7 @@ class TLSApp:
             elif plan.startswith('legalization'):
                 svc = 'legalization'
             else:
-                # all_in_one / trial ‚Äî use flow_data or DB
+                # all_in_one / trial ó use flow_data or DB
                 svc = self.flow_data.get('service_type', 'legalization') or 'legalization'
         else:
             svc = self.flow_data.get('service_type', 'legalization') or 'legalization'
@@ -917,11 +917,11 @@ class TLSApp:
         else:
             status_msg.value = message
             status_msg.color = ft.Colors.RED_400
-            self.self.page.update()
+            self.page.update()
 
     def _close_dialog(self, dialog):
         dialog.open = False
-        self.self.page.update()
+        self.page.update()
 
     def show_activation_page(self, message=None):
         """Build and display the license activation page."""
@@ -949,19 +949,19 @@ class TLSApp:
             if not key_field.value or not key_field.value.strip():
                 status_msg.value = "Please enter a license key"
                 status_msg.color = ft.Colors.RED_400
-                self.self.page.update()
+                self.page.update()
                 return
 
             entered_key = key_field.value.strip().upper()
 
-            # Reject premium licenses ‚Äî premium users should use the website dashboard
+            # Reject premium licenses ó premium users should use the website dashboard
             if entered_key.startswith("PREMIUM"):
                 status_msg.value = (
                     "Premium plans are managed via the web dashboard.\n"
                     "Please visit the website to use your Premium subscription."
                 )
                 status_msg.color = ft.Colors.ORANGE_400
-                self.self.page.update()
+                self.page.update()
                 return
 
             # Show loading state immediately so the user knows activation is in progress
@@ -972,7 +972,7 @@ class TLSApp:
                 activate_btn.update()
             except Exception:
                 pass
-            self.self.page.update()
+            self.page.update()
 
             def _activate_in_background():
                 try:
@@ -989,7 +989,7 @@ class TLSApp:
                             )
                             status_msg.color = ft.Colors.ORANGE_400
                             activate_btn.disabled = False
-                            self.self.page.update()
+                            self.page.update()
                             return
                         # Save the selected service type to DB
                         self._save_service_type_to_db()
@@ -999,13 +999,13 @@ class TLSApp:
                         status_msg.value = message
                         status_msg.color = ft.Colors.RED_400
                         activate_btn.disabled = False
-                        self.self.page.update()
+                        self.page.update()
                 except Exception as exc:
                     status_msg.value = f"Activation error: {str(exc)[:80]}"
                     status_msg.color = ft.Colors.RED_400
                     activate_btn.disabled = False
                     try:
-                        self.self.page.update()
+                        self.page.update()
                     except Exception:
                         pass
 
@@ -1030,7 +1030,7 @@ class TLSApp:
         top_bar = ft.Container(
             content=ft.Row([
                 ft.TextButton(
-                    "üåê Get a License on Website",
+                    "?? Get a License on Website",
                     on_click=open_website,
                     style=ft.ButtonStyle(color="#00D9FF"),
                 ),
@@ -1047,13 +1047,13 @@ class TLSApp:
                 copy_btn.text = "Copied!"
                 copy_btn.style = ft.ButtonStyle(color=ft.Colors.GREEN_400)
             except ImportError:
-                # Fallback: nothing ‚Äî pyperclip not available
+                # Fallback: nothing ó pyperclip not available
                 copy_btn.text = "Ctrl+C to copy"
                 copy_btn.style = ft.ButtonStyle(color=ft.Colors.ORANGE_400)
             except Exception as ex:
                 copy_btn.text = "Ctrl+C to copy"
                 copy_btn.style = ft.ButtonStyle(color=ft.Colors.ORANGE_400)
-            self.self.page.update()
+            self.page.update()
 
         copy_btn = ft.TextButton(
             "Copy",
@@ -1141,7 +1141,7 @@ class TLSApp:
                     status_msg,
                     ft.Container(height=10),
                     ft.TextButton(
-                        "üåê Visit Website",
+                        "?? Visit Website",
                         on_click=open_website,
                         style=ft.ButtonStyle(color="#00D9FF"),
                     ),
@@ -1174,7 +1174,7 @@ class TLSApp:
                 expand=True,
             )
         )
-        self.self.page.update()
+        self.page.update()
 
     # ==================================================================
     #  SAVE SETTINGS
@@ -1290,7 +1290,7 @@ class TLSApp:
                     ft.Icon(ft.Icons.INFO_OUTLINE, size=16, color="#00D9FF"),
                     ft.Column(
                         [
-                            ft.Text("No checks yet ‚Äî start monitoring to see results here.", size=12, color=ft.Colors.GREY_400),
+                            ft.Text("No checks yet ó start monitoring to see results here.", size=12, color=ft.Colors.GREY_400),
                             ft.Text(datetime.now().strftime("%H:%M:%S"), size=10, color=ft.Colors.GREY_600),
                         ],
                         spacing=2, expand=True,
@@ -1412,7 +1412,7 @@ class TLSApp:
                 self.page.show_dialog(ft.SnackBar(content=ft.Text(msg, size=14, color=ft.Colors.WHITE), bgcolor=color, duration=5000))
 
         def start_monitoring(e):
-            """Called on the Flet main thread ‚Äî validates inputs, then offloads to a bg thread."""
+            """Called on the Flet main thread ó validates inputs, then offloads to a bg thread."""
             try:
                 print("[UI] start_monitoring entered")
 
@@ -1421,10 +1421,10 @@ class TLSApp:
 
                 if not settings or not settings.tls_email or not settings.tls_password:
                     db.close()
-                    _show_snack("‚ùå Please configure your TLS email and password first, then Save.")
+                    _show_snack("? Please configure your TLS email and password first, then Save.")
                     return
 
-                # Check for unsaved configuration changes (fast ‚Äî no network)
+                # Check for unsaved configuration changes (fast ó no network)
                 unsaved_changes = []
                 try:
                     if config_service_dropdown.value and config_service_dropdown.value != (settings.service_type or 'legalization'):
@@ -1440,13 +1440,13 @@ class TLSApp:
 
                 if unsaved_changes:
                     db.close()
-                    _show_snack(f"‚ö†Ô∏è Unsaved changes in: {', '.join(unsaved_changes)} ‚Äî click Save first.")
+                    _show_snack(f"?? Unsaved changes in: {', '.join(unsaved_changes)} ó click Save first.")
                     return
 
                 db.close()
 
                 # Disable the button immediately so the user can't double-click
-                _toggle_label_ctrl.value = "Starting‚Ä¶"
+                _toggle_label_ctrl.value = "StartingÖ"
                 _icon_play.visible = False
                 _icon_stop.visible = False
                 try:
@@ -1456,17 +1456,17 @@ class TLSApp:
 
             except Exception as exc:
                 print(f"[UI] EXCEPTION in start_monitoring (pre-thread): {exc}")
-                _show_snack(f"‚ùå Error: {exc}")
+                _show_snack(f"? Error: {exc}")
                 return
 
             def _bg_start():
                 """Run license check + cloud/local start on a background thread."""
                 try:
-                    # License check (may hit network ‚Äî must NOT be on main thread)
+                    # License check (may hit network ó must NOT be on main thread)
                     allowed, reason = can_check()
                     print(f"[UI] can_check: allowed={allowed}, reason={reason}")
                     if not allowed:
-                        self._ui_queue.put(lambda: _show_snack(f"‚ö†Ô∏è {reason}"))
+                        self._ui_queue.put(lambda: _show_snack(f"?? {reason}"))
                         self._ui_queue.put(update_toggle_button)
                         return
 
@@ -1474,9 +1474,9 @@ class TLSApp:
                     db2 = SessionLocal()
                     s2 = db2.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
 
-                    # Try cloud monitoring first (network call ‚Äî safe on bg thread)
+                    # Try cloud monitoring first (network call ó safe on bg thread)
                     if self._try_cloud_start(s2):
-                        print("[UI] Cloud start succeeded ‚Äî marking as_monitoring in DB")
+                        print("[UI] Cloud start succeeded ó marking as_monitoring in DB")
                         s2.is_monitoring = True
                         db2.commit()
                         db2.close()
@@ -1485,7 +1485,7 @@ class TLSApp:
 
                     print("[UI] Starting local monitoring")
                     self.checker.start_monitoring()
-                    print("[UI] Local monitoring started ‚Äî marking is_monitoring in DB")
+                    print("[UI] Local monitoring started ó marking is_monitoring in DB")
                     s2.is_monitoring = True
                     db2.commit()
                     db2.close()
@@ -1498,7 +1498,7 @@ class TLSApp:
                     s3.is_monitoring = False
                     db3.commit()
                     db3.close()
-                    self._ui_queue.put(lambda: _show_snack(f"‚ùå Error: {exc}"))
+                    self._ui_queue.put(lambda: _show_snack(f"? Error: {exc}"))
                     self._ui_queue.put(update_toggle_button)
 
             threading.Thread(target=_bg_start, daemon=True).start()
@@ -1574,11 +1574,11 @@ class TLSApp:
             current_service_type = 'legalization'
             service_locked = True
         elif license_plan.startswith('all_in_one'):
-            # Combo plan ‚Äî user can switch between legalization and visa
+            # Combo plan ó user can switch between legalization and visa
             current_service_type = getattr(settings, 'service_type', 'legalization') if settings else 'legalization'
             service_locked = False
         else:
-            # Trial ‚Äî use whatever is saved in DB, allow changing
+            # Trial ó use whatever is saved in DB, allow changing
             current_service_type = getattr(settings, 'service_type', 'legalization') if settings else 'legalization'
         if not current_service_type:
             current_service_type = 'legalization'
@@ -1596,7 +1596,7 @@ class TLSApp:
         if branch_value not in branch_options_list:
             branch_value = default_branch
 
-        # Step 1 (offline): license file may store "Hurghada - Legalization" ‚Äî strip to get "Hurghada"
+        # Step 1 (offline): license file may store "Hurghada - Legalization" ó strip to get "Hurghada"
         if service_locked and license_status:
             lic_branch_raw = license_status.get('branch_name') or ''
             if lic_branch_raw:
@@ -1728,7 +1728,7 @@ class TLSApp:
                 new_default = "Sheikh Zayed"
             config_branch_dropdown.options = [ft.dropdown.Option(b, b) for b in new_branches]
             config_branch_dropdown.value = new_default
-            self.self.page.update()
+            self.page.update()
 
         config_service_dropdown = ft.Dropdown(
             label="Service Type" + (" (locked by license)" if service_locked else ""),
@@ -1811,7 +1811,7 @@ class TLSApp:
                     config_notification_field.error = None
 
                 if has_error:
-                    self.self.page.update()
+                    self.page.update()
                     db.close()
                     return
 
@@ -1823,7 +1823,7 @@ class TLSApp:
                         can_change, message = can_change_tls_email(new_tls_email)
                         if not can_change:
                             config_email_field.error = message
-                            self.self.page.update()
+                            self.page.update()
                             db.close()
                             return
                         record_tls_email_change(old_tls_email, new_tls_email)
@@ -1972,7 +1972,7 @@ class TLSApp:
                 toggle_btn.update()
             except Exception:
                 pass
-            self.self.page.update()
+            self.page.update()
 
         toggle_btn = ft.FilledButton(
             content=ft.Row(
@@ -1992,7 +1992,7 @@ class TLSApp:
             plan_info = license_status['plan_info']
             plan_key_curr = license_status['plan']
             if plan_key_curr == 'premium':
-                badge_text = "Premium ‚òÅ"
+                badge_text = "Premium ?"
                 badge_border = ft.Colors.AMBER_600
                 badge_bg = ft.Colors.with_opacity(0.15, ft.Colors.AMBER)
                 badge_color = ft.Colors.AMBER_400
@@ -2000,7 +2000,7 @@ class TLSApp:
             elif plan_key_curr in ('legalization_monthly', 'visa_monthly', 'lifetime'):
                 days = license_status.get('days_remaining', 0)
                 pname = plan_info.get('name', plan_key_curr.replace('_', ' ').title())
-                badge_text = f"{pname} ¬∑ {days}d left"
+                badge_text = f"{pname} ∑ {days}d left"
                 badge_border = ft.Colors.AMBER_600
                 badge_bg = ft.Colors.with_opacity(0.15, ft.Colors.AMBER)
                 badge_color = ft.Colors.AMBER_400
@@ -2008,14 +2008,14 @@ class TLSApp:
             elif plan_key_curr == 'trial':
                 secs_left = (license_status['expires_at'] - datetime.now(timezone.utc)).total_seconds()
                 hrs = max(0, int(secs_left / 3600))
-                badge_text = f"Trial ¬∑ {hrs}h left"
+                badge_text = f"Trial ∑ {hrs}h left"
                 badge_border = ft.Colors.GREEN_600
                 badge_bg = ft.Colors.with_opacity(0.15, ft.Colors.GREEN)
                 badge_color = ft.Colors.GREEN_400
                 badge_icon_color = ft.Colors.GREEN_400
             else:
                 days = license_status.get('days_remaining', 0)
-                badge_text = f"{plan_info['name']} ¬∑ {days}d left"
+                badge_text = f"{plan_info['name']} ∑ {days}d left"
                 badge_border = "#00D9FF"
                 badge_bg = ft.Colors.with_opacity(0.15, "#00D9FF")
                 badge_color = "#00D9FF"
@@ -2137,12 +2137,12 @@ class TLSApp:
                 if not subj or not msg:
                     support_status.value = "Please fill in subject and message."
                     support_status.color = ft.Colors.RED_400
-                    self.self.page.update()
+                    self.page.update()
                     return
                 # Send email in background
                 support_status.value = "Sending..."
                 support_status.color = ft.Colors.GREY_400
-                self.self.page.update()
+                self.page.update()
 
                 def _send():
                     try:
@@ -2172,13 +2172,13 @@ class TLSApp:
                             server.login("tlsappointmentchecker@gmail.com", "zylc etmv kuic uluq")
                             server.send_message(email_msg)
 
-                        support_status.value = "‚Ä¶ Message sent! We'll get back to you soon."
+                        support_status.value = "Ö Message sent! We'll get back to you soon."
                         support_status.color = ft.Colors.GREEN_400
                     except Exception as ex:
                         support_status.value = f"Failed to send: {str(ex)[:60]}"
                         support_status.color = ft.Colors.RED_400
                     try:
-                        self.self.page.update()
+                        self.page.update()
                     except Exception:
                         pass
 
@@ -2260,8 +2260,8 @@ class TLSApp:
         _plan_raw = _lic_data.get('plan', 'trial') or 'trial'
         _days_rem = _lic_data.get('days_remaining', '?')
         _lic_key  = _lic_data.get('key', '') or ''
-        _lic_key_display = _lic_key or "‚Äî"
-        _hw_id = get_hardware_id() or "‚Äî"
+        _lic_key_display = _lic_key or "ó"
+        _hw_id = get_hardware_id() or "ó"
         _plan_label = _plan_raw.replace('_', ' ').title()
         _days_color = (
             ft.Colors.RED_400 if isinstance(_days_rem, int) and _days_rem <= 3
@@ -2274,7 +2274,7 @@ class TLSApp:
                 import pyperclip
                 pyperclip.copy(text)
             except Exception:
-                pass  # pyperclip failed ‚Äî text still shown for manual copy
+                pass  # pyperclip failed ó text still shown for manual copy
             if self.page:
                 self.page.show_dialog(ft.SnackBar(
                     content=ft.Text(f"{label} copied to clipboard", size=13, color=ft.Colors.WHITE),
@@ -2409,7 +2409,7 @@ class TLSApp:
                                 width=520,
                             ),
 
-                            # Right column ‚Äî recent checks
+                            # Right column ó recent checks
                             ft.Container(
                                 content=self.create_glass_container(
                                     ft.Column(
@@ -2477,7 +2477,7 @@ class TLSApp:
         except Exception:
             pass
 
-        self.self.page.update()
+        self.page.update()
 
         # Auto-start if coming from trial activation
         if auto_start:
@@ -2603,10 +2603,10 @@ class TLSApp:
         )
 
         self.page.add(content)
-        self.self.page.update()
+        self.page.update()
 
     # ==================================================================
-    #  UI UPDATE LOOP  (thread-safe queue ‚Üí main thread)
+    #  UI UPDATE LOOP  (thread-safe queue ? main thread)
     # ==================================================================
     async def _ui_update_loop(self):
         while True:
@@ -2620,7 +2620,7 @@ class TLSApp:
             if callable(item):
                 try:
                     item()
-                    self.self.page.update()
+                    self.page.update()
                 except Exception:
                     pass
                 continue
@@ -2709,7 +2709,7 @@ class TLSApp:
                     self.show_license_invalid_dialog()
             finally:
                 try:
-                    self.self.page.update()
+                    self.page.update()
                 except Exception:
                     pass
 
@@ -2767,7 +2767,7 @@ class TLSApp:
 
         error_dialog = ft.AlertDialog(
             modal=True,
-            title=ft.Text("‚ùå Invalid TLS Credentials", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_400),
+            title=ft.Text("? Invalid TLS Credentials", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_400),
             content=ft.Column([
                 ft.Text("Your TLS email or password is incorrect.", size=16),
                 ft.Container(height=10),
@@ -2898,9 +2898,9 @@ class TLSApp:
                     size=14, color=ft.Colors.GREY_400,
                 ),
                 ft.Container(height=5),
-                ft.Text("‚Ä¢ License was manually revoked", size=13, color=ft.Colors.GREY_300),
-                ft.Text("‚Ä¢ License expired", size=13, color=ft.Colors.GREY_300),
-                ft.Text("‚Ä¢ License is being used on another device", size=13, color=ft.Colors.GREY_300),
+                ft.Text("ï License was manually revoked", size=13, color=ft.Colors.GREY_300),
+                ft.Text("ï License expired", size=13, color=ft.Colors.GREY_300),
+                ft.Text("ï License is being used on another device", size=13, color=ft.Colors.GREY_300),
                 ft.Container(height=10),
                 ft.Text(
                     "Monitoring has been stopped.",
@@ -2934,7 +2934,7 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    # Set DPI awareness BEFORE Flet creates the window ‚Äî fixes height/size mismatch
+    # Set DPI awareness BEFORE Flet creates the window ó fixes height/size mismatch
     # between running via `python main.py` and the built executable.
     if sys.platform == "win32":
         try:
@@ -2947,7 +2947,7 @@ if __name__ == "__main__":
             except Exception:
                 pass
 
-    # Determine base directory ‚Äî handles both source and frozen (.exe) mode
+    # Determine base directory ó handles both source and frozen (.exe) mode
     if getattr(sys, 'frozen', False):
         # PyInstaller unpacks data to sys._MEIPASS
         app_dir = sys._MEIPASS
