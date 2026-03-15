@@ -39,7 +39,9 @@ export const translations = {
       monitoring: "Monitoring",
       checkInterval: "Check Interval",
       alertChannels: "Alert Channels",
-    },
+        suffix2: "/7",
+        suffix3: "min",
+      },
     features: {
       title: "Why Choose",
       titleHighlight: "TLS Appointment Checker",
@@ -505,7 +507,9 @@ export const translations = {
       monitoring: "مراقبة",
       checkInterval: "فترة الفحص",
       alertChannels: "قنوات التنبيه",
-    },
+        suffix2: "/7",
+        suffix3: "دقيقة",
+      },
     features: {
       title: "لماذا تختار",
       titleHighlight: "TLS Appointment Checker",
@@ -973,7 +977,9 @@ export const translations = {
       monitoring: "Überwachung",
       checkInterval: "Prüfintervall",
       alertChannels: "Benachrichtigungskanäle",
-    },
+        suffix2: "/7",
+        suffix3: "min",
+      },
     features: {
       title: "Warum",
       titleHighlight: "TLS Appointment Checker",
