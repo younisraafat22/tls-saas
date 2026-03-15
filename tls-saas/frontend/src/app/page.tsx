@@ -1039,7 +1039,64 @@ function Footer() {
     </footer>
   );
 }
+// -- Reviews Display -------------------------------------------------
 
+function ReviewsSection() {
+  const { t, locale } = useLanguage();
+  const [reviews, setReviews] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch("/api/ratings?limit=3")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setReviews(data);
+      })
+      .catch(console.error);
+  }, []);
+
+  if (reviews.length === 0) return null;
+
+  return (
+    <section className="py-32 relative bg-dark-700/20 overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-t from-dark-800 via-transparent to-transparent pointer-events-none" />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <AnimatedSection className="text-center mb-16">
+          <motion.h2 variants={fadeUp} className="text-4xl sm:text-5xl font-display font-bold mb-4 tracking-tight">
+            {locale === "ar" ? "ماذا يقول عملاؤنا" : locale === "de" ? "Was unsere Kunden sagen" : "What Our Customers Say"}
+          </motion.h2>
+          <motion.div variants={fadeUp} className="w-24 h-1 bg-gradient-to-r from-primary-400 to-cyan-400 mx-auto rounded-full mt-6" />
+        </AnimatedSection>
+        <div className="grid gap-8 md:grid-cols-3 mb-16">
+          {reviews.map((r: any, i: number) => (
+            <AnimatedSection key={r.id}>
+              <motion.div variants={fadeUp} className="glass-card p-8 border border-white/5 shadow-2xl rounded-2xl h-full flex flex-col pt-10 bg-white/[0.02] backdrop-blur-xl hover:bg-white/[0.04] transition-all duration-500">
+                <div className="flex text-[#FFD700] mb-6 space-x-1" dir="ltr">
+                  {[...Array(5)].map((_, j) => (
+                    <Star key={j} className="w-5 h-5 drop-shadow-md" fill={j < r.rating ? "currentColor" : "none"} />
+                  ))}
+                </div>
+                <p className="text-gray-200 mb-8 flex-1 italic text-lg leading-relaxed font-medium">"{r.comment}"</p>
+                <div className="text-xs text-gray-400 font-semibold border-t border-white/10 pt-5 flex justify-between items-center mt-auto tracking-wide">
+                  <span className="flex items-center gap-1.5">{r.source === "desktop" ? "🖥️ Desktop App" : "🌐 Website"}</span>
+                  <span className="opacity-70">{new Date(r.created_at).toLocaleDateString(locale === 'ar' ? 'ar-EG' : locale === 'de' ? 'de-DE' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                </div>
+              </motion.div>
+            </AnimatedSection>
+          ))}
+        </div>
+        <div className="text-center mt-12">
+          <Link href="/reviews" className="group inline-flex items-center justify-center gap-3 px-8 h-14 rounded-full font-bold transition-all duration-300 bg-white/5 hover:bg-white/10 border border-white/10 text-white shadow-lg overflow-hidden relative">
+            <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-primary-500/20 to-cyan-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <span className="relative z-10">{locale === "ar" ? "عرض جميع التقييمات" : locale === "de" ? "Alle Bewertungen ansehen" : "See All Reviews"}</span>
+            <span className="relative z-10 group-hover:translate-x-1 transition-transform duration-300" dir="ltr">
+            →
+            </span>
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
 // -- Page ------------------------------------------------
 
 export default function LandingPage() {
@@ -1050,6 +1107,7 @@ export default function LandingPage() {
       <Features />
       <HowItWorks />
       <Pricing />
+      <ReviewsSection />
       <DownloadApp />
       <UserGuide />
       <FAQ />

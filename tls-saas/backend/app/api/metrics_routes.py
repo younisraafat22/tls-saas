@@ -5,6 +5,7 @@ from app.models import AppRating, AppDownload, FoundAppointment
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+from sqlalchemy import select, desc
 
 router = APIRouter(prefix="/metrics", tags=["Metrics"])
 
@@ -57,3 +58,13 @@ async def record_found_appointment(req: FoundAppointmentRequest, db: AsyncSessio
     db.add(record)
     await db.commit()
     return {"status": "success"}
+
+@router.get('/ratings')
+async def get_ratings(limit: Optional[int] = None, db: AsyncSession = Depends(get_db)):
+    query = select(AppRating).where(AppRating.comment.is_not(None), AppRating.comment != '').order_by(desc(AppRating.created_at))
+    if limit:
+        query = query.limit(limit)
+    result = await db.execute(query)
+    ratings = result.scalars().all()
+    return [{'id': r.id, 'rating': r.rating, 'comment': r.comment, 'source': r.source, 'created_at': r.created_at.isoformat() if r.created_at else None, 'user_email': r.user_email} for r in ratings]
+
