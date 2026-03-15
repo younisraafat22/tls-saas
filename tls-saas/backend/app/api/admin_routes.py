@@ -1801,3 +1801,43 @@ async def admin_websocket(websocket: WebSocket):
             # Admin can send commands via WS if needed
     except WebSocketDisconnect:
         await ws_manager.disconnect_admin(websocket)
+
+@router.delete("/ratings/{rating_id}", response_model=MessageResponse)
+async def delete_rating(
+    rating_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models import AppRating
+    res = await db.execute(select(AppRating).where(AppRating.id == rating_id))
+    rating = res.scalar_one_or_none()
+    if not rating:
+        raise HTTPException(404, "Rating not found")
+    await db.delete(rating)
+    db.add(ActivityLog(
+        actor_id=admin.id,
+        action="rating_deleted",
+        details={"rating_id": rating_id},
+    ))
+    await db.commit()
+    return MessageResponse(message=f"Rating #{rating_id} deleted")
+
+@router.delete("/ratings/{rating_id}", response_model=MessageResponse)
+async def delete_rating(
+    rating_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models import AppRating
+    res = await db.execute(select(AppRating).where(AppRating.id == rating_id))
+    rating = res.scalar_one_or_none()
+    if not rating:
+        raise HTTPException(404, "Rating not found")
+    await db.delete(rating)
+    db.add(ActivityLog(
+        actor_id=admin.id,
+        action="rating_deleted",
+        details={"rating_id": rating_id},
+    ))
+    await db.commit()
+    return MessageResponse(message=f"Rating #{rating_id} deleted")
