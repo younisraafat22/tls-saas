@@ -43,6 +43,7 @@ export const translations = {
         suffix3: "min",
       },
     features: {
+      notice: "<strong>⚠️ تنبيه هام:</strong> تطبيق TLS Appointment Checker هو <strong>أداة مراقبة فقط</strong>. لا يقوم بالحجز التلقائي، ولا يضمن لك المواعيد. هو مجرد أداة لتسهيل العثور على المواعيد المتاحة عن طريق فحص الموقع تلقائيًا.", 
       title: "Why Choose",
       titleHighlight: "TLS Appointment Checker",
       titleEnd: "?",
@@ -511,6 +512,7 @@ export const translations = {
         suffix3: "دقيقة",
       },
     features: {
+      notice: "<strong>⚠️ تنبيه هام:</strong> تطبيق TLS Appointment Checker هو <strong>أداة مراقبة فقط</strong>. لا يقوم بالحجز التلقائي، ولا يضمن لك المواعيد. هو مجرد أداة لتسهيل العثور على المواعيد المتاحة عن طريق فحص الموقع تلقائيًا.", 
       title: "لماذا تختار",
       titleHighlight: "TLS Appointment Checker",
       titleEnd: "؟",
@@ -981,6 +983,7 @@ export const translations = {
         suffix3: "min",
       },
     features: {
+      notice: "<strong>⚠️ تنبيه هام:</strong> تطبيق TLS Appointment Checker هو <strong>أداة مراقبة فقط</strong>. لا يقوم بالحجز التلقائي، ولا يضمن لك المواعيد. هو مجرد أداة لتسهيل العثور على المواعيد المتاحة عن طريق فحص الموقع تلقائيًا.", 
       title: "Warum",
       titleHighlight: "TLS Appointment Checker",
       titleEnd: "wählen?",

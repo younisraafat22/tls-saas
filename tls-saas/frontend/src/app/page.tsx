@@ -117,7 +117,7 @@ function Particles() {
 
 // -- Counter Animation -----------------------------------
 
-function Counter({ target, suffix = "" }: { target: number; suffix?: string }) {
+function Counter({ target, suffix = "", language = "en" }: { target: number; suffix?: string; language?: string }) {
   const [count, setCount] = useState(0);
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true });
@@ -138,7 +138,8 @@ function Counter({ target, suffix = "" }: { target: number; suffix?: string }) {
     return () => clearInterval(interval);
   }, [isInView, target]);
 
-  return <span ref={ref}>{count}{suffix}</span>;
+  const formattedCount = count.toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US');
+  return <span ref={ref}>{formattedCount}{language === 'ar' ? ` ${suffix}` : suffix}</span>;
 }
 
 // -- Navbar ----------------------------------------------
@@ -169,7 +170,7 @@ function Navbar() {
       }`}
     >
       <div className="bg-amber-500/10 border-b border-amber-500/20 py-2 px-4 text-center text-xs md:text-sm text-amber-200">
-        <p><strong>⚠️ IMPORTANT NOTICE:</strong> TLS Appointment Checker is <strong>monitoring only</strong>. No auto-booking, and it does not guarantee appointments. It is a tool to help you find open slots by checking the TLS website automatically.</p>
+        <p dangerouslySetInnerHTML={{ __html: (t.hero as any).notice || '<strong>⚠️ IMPORTANT NOTICE:</strong> TLS Appointment Checker is <strong>monitoring only</strong>. No auto-booking, and it does not guarantee appointments. It is a tool to help you find open slots by checking the TLS website automatically.' }} />
       </div>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20">
@@ -356,7 +357,7 @@ function Hero() {
           ].map((stat) => (
             <motion.div key={stat.label} variants={fadeUp} className="text-center">
               <div className="text-3xl font-display font-bold text-primary-400">
-                <Counter target={stat.value} suffix={stat.suffix} />
+                <Counter target={stat.value} suffix={stat.suffix} language={locale} />
               </div>
               <div className="text-sm text-gray-500 mt-1">{stat.label}</div>
             </motion.div>
