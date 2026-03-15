@@ -4,9 +4,10 @@ import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/i18n";
 import {
   LayoutDashboard, Users, CreditCard, Activity,
-  Settings, ArrowLeft, Shield, KeyRound,
+  Settings, ArrowLeft, Shield, KeyRound, Star
 } from "lucide-react";
 
 const adminNav = [
@@ -15,13 +16,19 @@ const adminNav = [
   { href: "/admin/payments", label: "Payments", icon: CreditCard },
   { href: "/admin/licenses", label: "Licenses", icon: KeyRound },
   { href: "/admin/monitoring", label: "Monitoring", icon: Activity },
+  { href: "/admin/reviews", label: "Reviews", icon: Star },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (!loading && (!user || !user.is_admin)) {
@@ -103,6 +110,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Main content */}
       <main className="flex-1 lg:ml-64 max-lg:pt-14 max-lg:pb-20 overflow-x-hidden w-full">
+        <div className="bg-amber-500/10 border-b border-amber-500/20 text-amber-200/90 py-2 sm:py-3 px-4 text-xs sm:text-sm text-center">
+          {(t.hero as any).notice || "⚠️ IMPORTANT NOTICE: TLS Appointment Checker is monitoring only. No auto-booking, and it does not guarantee appointments. It is a tool to help you find open slots by checking the TLS website automatically."}
+        </div>
         <div className="max-w-6xl mx-auto p-4 sm:p-6 w-full min-w-0">
           {children}
         </div>

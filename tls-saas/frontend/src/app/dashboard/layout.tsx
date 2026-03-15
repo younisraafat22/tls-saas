@@ -147,6 +147,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Main content */}
       <main className="flex-1 min-h-screen lg:pt-0 pt-14 pb-20 lg:pb-0 overflow-x-hidden w-full">
+        <div className="bg-amber-500/10 border-b border-amber-500/20 text-amber-200/90 py-2 sm:py-3 px-4 text-xs sm:text-sm text-center">
+          {(t.hero as any).notice || "⚠️ IMPORTANT NOTICE: TLS Appointment Checker is monitoring only. No auto-booking, and it does not guarantee appointments. It is a tool to help you find open slots by checking the TLS website automatically."}
+        </div>
         <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full min-w-0">
           {children}
         </div>

@@ -350,8 +350,8 @@ function Hero() {
         <AnimatedSection className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-20 pt-10 border-t border-white/5">
           {[
             { value: 4, suffix: "", label: t.stats.branches },
-            { value: 24, suffix: "/7", label: t.stats.monitoring },
-            { value: 60, suffix: "min", label: t.stats.checkInterval },
+            { value: 24, suffix: (t.stats as any).suffix2 || "/7", label: t.stats.monitoring },
+            { value: 60, suffix: (t.stats as any).suffix3 || "min", label: t.stats.checkInterval },
             { value: 2, suffix: "", label: t.stats.alertChannels },
           ].map((stat) => (
             <motion.div key={stat.label} variants={fadeUp} className="text-center">
