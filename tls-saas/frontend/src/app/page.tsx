@@ -954,7 +954,7 @@ export default function LandingPage() {
   return (
     <main>
       <Navbar />
-      <div className="bg-red-500/10 border-b border-red-500/20 py-3 px-4 text-center text-sm md:text-base text-red-200">
+      <div className="pt-24 pb-3 px-4 bg-red-500/10 border-b border-red-500/20 text-center text-sm md:text-base text-red-200">
         <p><strong>⚠️ IMPORTANT NOTICE:</strong> TLS Appointment Checker is <strong>monitoring only</strong>. No auto-booking, and it does not guarantee appointments. It is a tool to help you find open slots by checking the TLS website automatically.</p>
       </div>
       <Hero />
