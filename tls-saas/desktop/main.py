@@ -198,7 +198,7 @@ class TLSApp:
             except Exception:
                 self.page.window.left = 100
                 self.page.window.top = 50
-        self.page.update()
+        self.self.page.update()
 
         # Register window event handler for cleanup
         self.page.window.on_event = self.on_window_event
@@ -316,7 +316,7 @@ class TLSApp:
                             padding=30,
                         )
                     )
-                    page.update()
+                    self.page.update()
                     return False
             except Exception as e:
                 print(f"Error creating mutex: {e}")
@@ -383,7 +383,7 @@ class TLSApp:
                         padding=30,
                     )
                 )
-                page.update()
+                self.page.update()
                 return False
             except Exception as e:
                 print(f"Error creating file lock: {e}")
@@ -574,7 +574,7 @@ class TLSApp:
                 self.page.window.left = 100
                 self.page.window.top = 50
         try:
-            self.page.update()
+            self.self.page.update()
         except Exception:
             pass
 
@@ -606,7 +606,7 @@ class TLSApp:
                 alignment=ft.Alignment(0, 0),
             )
         )
-        self.page.update()
+        self.self.page.update()
 
     def check_license_and_route(self):
         """Decide which page to show based on offline license."""
@@ -917,11 +917,11 @@ class TLSApp:
         else:
             status_msg.value = message
             status_msg.color = ft.Colors.RED_400
-            self.page.update()
+            self.self.page.update()
 
     def _close_dialog(self, dialog):
         dialog.open = False
-        self.page.update()
+        self.self.page.update()
 
     def show_activation_page(self, message=None):
         """Build and display the license activation page."""
@@ -949,7 +949,7 @@ class TLSApp:
             if not key_field.value or not key_field.value.strip():
                 status_msg.value = "Please enter a license key"
                 status_msg.color = ft.Colors.RED_400
-                self.page.update()
+                self.self.page.update()
                 return
 
             entered_key = key_field.value.strip().upper()
@@ -961,7 +961,7 @@ class TLSApp:
                     "Please visit the website to use your Premium subscription."
                 )
                 status_msg.color = ft.Colors.ORANGE_400
-                self.page.update()
+                self.self.page.update()
                 return
 
             # Show loading state immediately so the user knows activation is in progress
@@ -972,7 +972,7 @@ class TLSApp:
                 activate_btn.update()
             except Exception:
                 pass
-            self.page.update()
+            self.self.page.update()
 
             def _activate_in_background():
                 try:
@@ -989,7 +989,7 @@ class TLSApp:
                             )
                             status_msg.color = ft.Colors.ORANGE_400
                             activate_btn.disabled = False
-                            self.page.update()
+                            self.self.page.update()
                             return
                         # Save the selected service type to DB
                         self._save_service_type_to_db()
@@ -999,13 +999,13 @@ class TLSApp:
                         status_msg.value = message
                         status_msg.color = ft.Colors.RED_400
                         activate_btn.disabled = False
-                        self.page.update()
+                        self.self.page.update()
                 except Exception as exc:
                     status_msg.value = f"Activation error: {str(exc)[:80]}"
                     status_msg.color = ft.Colors.RED_400
                     activate_btn.disabled = False
                     try:
-                        self.page.update()
+                        self.self.page.update()
                     except Exception:
                         pass
 
@@ -1053,7 +1053,7 @@ class TLSApp:
             except Exception as ex:
                 copy_btn.text = "Ctrl+C to copy"
                 copy_btn.style = ft.ButtonStyle(color=ft.Colors.ORANGE_400)
-            self.page.update()
+            self.self.page.update()
 
         copy_btn = ft.TextButton(
             "Copy",
@@ -1174,7 +1174,7 @@ class TLSApp:
                 expand=True,
             )
         )
-        self.page.update()
+        self.self.page.update()
 
     # ==================================================================
     #  SAVE SETTINGS
@@ -1728,7 +1728,7 @@ class TLSApp:
                 new_default = "Sheikh Zayed"
             config_branch_dropdown.options = [ft.dropdown.Option(b, b) for b in new_branches]
             config_branch_dropdown.value = new_default
-            self.page.update()
+            self.self.page.update()
 
         config_service_dropdown = ft.Dropdown(
             label="Service Type" + (" (locked by license)" if service_locked else ""),
@@ -1811,7 +1811,7 @@ class TLSApp:
                     config_notification_field.error = None
 
                 if has_error:
-                    self.page.update()
+                    self.self.page.update()
                     db.close()
                     return
 
@@ -1823,7 +1823,7 @@ class TLSApp:
                         can_change, message = can_change_tls_email(new_tls_email)
                         if not can_change:
                             config_email_field.error = message
-                            self.page.update()
+                            self.self.page.update()
                             db.close()
                             return
                         record_tls_email_change(old_tls_email, new_tls_email)
@@ -1972,7 +1972,7 @@ class TLSApp:
                 toggle_btn.update()
             except Exception:
                 pass
-            self.page.update()
+            self.self.page.update()
 
         toggle_btn = ft.FilledButton(
             content=ft.Row(
@@ -2045,7 +2045,7 @@ class TLSApp:
                 rating_var[0] = val
                 for i in range(5):
                     stars_row.controls[i].icon = ft.Icons.STAR if i < val else ft.Icons.STAR_BORDER
-                page.update()
+                self.page.update()
 
             def submit_rating(e):
                 if rating_var[0] == 0:
@@ -2066,7 +2066,7 @@ class TLSApp:
 
             def close_rating(e):
                 rating_dlg.open = False
-                page.update()
+                self.page.update()
 
             stars_row = ft.Row(
                 [
@@ -2109,9 +2109,9 @@ class TLSApp:
                 bgcolor="#0D1612",
                 shape=ft.RoundedRectangleBorder(radius=15),
             )
-            page.dialog = rating_dlg
+            self.page.dialog = rating_dlg
             rating_dlg.open = True
-            page.update()
+            self.page.update()
 
         def show_support_dialog(e):
             support_subject = ft.TextField(
@@ -2137,12 +2137,12 @@ class TLSApp:
                 if not subj or not msg:
                     support_status.value = "Please fill in subject and message."
                     support_status.color = ft.Colors.RED_400
-                    self.page.update()
+                    self.self.page.update()
                     return
                 # Send email in background
                 support_status.value = "Sending..."
                 support_status.color = ft.Colors.GREY_400
-                self.page.update()
+                self.self.page.update()
 
                 def _send():
                     try:
@@ -2178,7 +2178,7 @@ class TLSApp:
                         support_status.value = f"Failed to send: {str(ex)[:60]}"
                         support_status.color = ft.Colors.RED_400
                     try:
-                        self.page.update()
+                        self.self.page.update()
                     except Exception:
                         pass
 
@@ -2217,6 +2217,12 @@ class TLSApp:
             [
                 plan_badge,
                 self.create_website_icon_button(),
+                ft.IconButton(
+                    icon=ft.Icons.STAR,
+                    tooltip="Rate App",
+                    on_click=show_rating_dialog,
+                    icon_color="#FFD700",
+                ),
                 ft.IconButton(
                     icon=ft.Icons.SUPPORT_AGENT,
                     tooltip="Contact Support",
@@ -2471,7 +2477,7 @@ class TLSApp:
         except Exception:
             pass
 
-        self.page.update()
+        self.self.page.update()
 
         # Auto-start if coming from trial activation
         if auto_start:
@@ -2597,7 +2603,7 @@ class TLSApp:
         )
 
         self.page.add(content)
-        self.page.update()
+        self.self.page.update()
 
     # ==================================================================
     #  UI UPDATE LOOP  (thread-safe queue → main thread)
@@ -2614,7 +2620,7 @@ class TLSApp:
             if callable(item):
                 try:
                     item()
-                    self.page.update()
+                    self.self.page.update()
                 except Exception:
                     pass
                 continue
@@ -2703,7 +2709,7 @@ class TLSApp:
                     self.show_license_invalid_dialog()
             finally:
                 try:
-                    self.page.update()
+                    self.self.page.update()
                 except Exception:
                     pass
 

@@ -1,5 +1,5 @@
 ﻿from fastapi import APIRouter, Depends, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models import AppRating, AppDownload, FoundAppointment
 from pydantic import BaseModel
@@ -24,7 +24,7 @@ class FoundAppointmentRequest(BaseModel):
     service_type: Optional[str] = None
 
 @router.post("/rate")
-def submit_rating(req: RatingRequest, db: Session = Depends(get_db)):
+async def submit_rating(req: RatingRequest, db: AsyncSession = Depends(get_db)):
     record = AppRating(
         user_email=req.user_email,
         rating=req.rating,
@@ -32,11 +32,11 @@ def submit_rating(req: RatingRequest, db: Session = Depends(get_db)):
         source=req.source
     )
     db.add(record)
-    db.commit()
+    await db.commit()
     return {"status": "success"}
 
 @router.post("/download")
-def record_download(req: DownloadRequest, request: Request, db: Session = Depends(get_db)):
+async def record_download(req: DownloadRequest, request: Request, db: AsyncSession = Depends(get_db)):
     ip_addr = request.client.host if request.client else "unknown"
     record = AppDownload(
         ip_address=ip_addr,
@@ -44,16 +44,16 @@ def record_download(req: DownloadRequest, request: Request, db: Session = Depend
         platform=req.platform
     )
     db.add(record)
-    db.commit()
+    await db.commit()
     return {"status": "success"}
 
 @router.post("/appointment-found")
-def record_found_appointment(req: FoundAppointmentRequest, db: Session = Depends(get_db)):
+async def record_found_appointment(req: FoundAppointmentRequest, db: AsyncSession = Depends(get_db)):
     record = FoundAppointment(
         user_email=req.user_email,
         branch=req.branch,
         service_type=req.service_type
     )
     db.add(record)
-    db.commit()
+    await db.commit()
     return {"status": "success"}

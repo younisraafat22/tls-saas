@@ -15,6 +15,7 @@ from sqlalchemy import select, text
 from app.config import settings
 from app.database import create_tables, async_session
 from app.models import (
+    AppRating, AppDownload, FoundAppointment,
     User, Plan, Branch, PlanType, ServiceType, UserCredential, SystemSetting,
 )
 from app.auth import hash_password, decode_token, get_current_user
