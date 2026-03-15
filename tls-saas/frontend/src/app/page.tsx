@@ -462,7 +462,7 @@ function Pricing() {
       id: 1,
       plan_type: "legalization",
       display_name: "Legalization Monitor",
-      price_monthly: 500,
+      price_monthly: 400,
       currency: "EGP",
       features: [
         "One branch of your choice",
@@ -478,7 +478,7 @@ function Pricing() {
       id: 2,
       plan_type: "visa",
       display_name: "Visa Monitor",
-      price_monthly: 500,
+      price_monthly: 400,
       currency: "EGP",
       features: [
         "One branch of your choice",
@@ -494,7 +494,7 @@ function Pricing() {
       id: 4,
       plan_type: "all_in_one",
       display_name: "Legalization + Visa",
-      price_monthly: 900,
+      price_monthly: 750,
       currency: "EGP",
       features: [
         "Both legalization & visa monitoring",
@@ -520,6 +520,7 @@ function Pricing() {
         "Real-time dashboard",
         "Priority support",
         "60-minute check interval",
+        "⚠️ Premium server is limited to 5 users per month",
       ],
       sort_order: 4,
     },
@@ -953,6 +954,9 @@ export default function LandingPage() {
   return (
     <main>
       <Navbar />
+      <div className="bg-red-500/10 border-b border-red-500/20 py-3 px-4 text-center text-sm md:text-base text-red-200">
+        <p><strong>⚠️ IMPORTANT NOTICE:</strong> TLS Appointment Checker is <strong>monitoring only</strong>. No auto-booking, and it does not guarantee appointments. It is a tool to help you find open slots by checking the TLS website automatically.</p>
+      </div>
       <Hero />
       <Features />
       <HowItWorks />
