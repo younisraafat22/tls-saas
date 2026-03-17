@@ -56,10 +56,10 @@ class Settings(BaseSettings):
     CREDENTIAL_ENCRYPTION_KEY: str = "credential-encryption-key-change-this"
 
     # ── Pricing (EGP) ───────────────────────────────────
-    PRICE_LEGALIZATION_MONTHLY: float = 500.0
-    PRICE_VISA_MONTHLY: float = 500.0
+    PRICE_LEGALIZATION_MONTHLY: float = 300.0
+    PRICE_VISA_MONTHLY: float = 300.0
     PRICE_PREMIUM_MONTHLY: float = 2500.0
-    PRICE_ALL_IN_ONE_MONTHLY: float = 900.0
+    PRICE_ALL_IN_ONE_MONTHLY: float = 500.0
     CURRENCY: str = "EGP"
 
     # ── License Generation ───────────────────────────────

@@ -194,7 +194,7 @@ class TLSCheckerService:
         def _do_report():
             try:
                 from license_service import _read_license_file, _safe_urlopen
-                import json as _json
+                import json as _json, urllib.request
 
                 # Read key directly from file (avoid get_license_status network call)
                 lic_data = _read_license_file()
@@ -271,7 +271,7 @@ class TLSCheckerService:
                     self.on_status_update(message)
                     return
     
-    def _hide_chrome_window(self):
+    def _hide_chrome_window(self, force=False):
         """Make Chrome practically invisible in background mode.
 
         Uses Win32 layered-window transparency (alpha ≈ 0%) so the window
@@ -283,7 +283,7 @@ class TLSCheckerService:
         Falls back to CDP viewport lock + minimize if the transparency
         helper is unavailable.
         """
-        if self._window_hidden or not Config.BROWSER_HEADLESS or not self.driver:
+        if (self._window_hidden and not force) or not Config.BROWSER_HEADLESS or not self.driver:
             return
 
         # Strategy 1: Win32 transparency (preferred — anti-bot friendly)
@@ -1924,13 +1924,34 @@ class TLSCheckerService:
                         break
 
                 if not login_found:
+                    # Check if already auto-redirected to dashboard/group before waiting
+                    curr_url = self.driver.current_url.lower()
+                    if "login" not in curr_url and ("dashboard" in curr_url or "group" in curr_url or "application" in curr_url):
+                        self._log("✓ Already logged in (skipped login page)")
+                        return True, ""
+
                     self._log("⏳ Page still loading... waiting for Login button")
                     # Handle cookie consent one more time
                     self._handle_cookie_consent()
                     
-                    wait = WebDriverWait(self.driver, 40)
-                    # Wait for any of the possible selectors
-                    wait.until(lambda d: d.find_elements(By.CSS_SELECTOR, ", ".join(login_selectors)))
+                    try:
+                        wait = WebDriverWait(self.driver, 15)
+                        # Wait for any of the possible selectors, SVG icon, or a sign of already being logged in
+                        wait.until(lambda d: 
+                            d.find_elements(By.CSS_SELECTOR, ", ".join(login_selectors)) or 
+                            d.find_elements(By.CSS_SELECTOR, "svg[aria-label='User icon']") or
+                            "logout" in d.page_source.lower()
+                        )
+                    except Exception:
+                        pass # Prevent timeout crash and proceed to fallbacks
+                        
+                    # Check if actually already logged in (look for typical post-login indicators)
+                    page_lower = self.driver.page_source.lower()
+                    curr_url_now = self.driver.current_url.lower()
+                    if ("dashboard" in curr_url_now or "group" in curr_url_now) or (">log out<" in page_lower or ">logout<" in page_lower or "sign out" in page_lower):
+                        self._log("✓ Already logged in (detected from page state)")
+                        return True, ""
+
                     for selector in login_selectors:
                         login_links = self.driver.find_elements(By.CSS_SELECTOR, selector)
                         for link in login_links:
@@ -1951,6 +1972,19 @@ class TLSCheckerService:
                         self.driver.execute_script("arguments[0].click();", login_button)
                         self._log("✓ Clicked SVG icon login button")
                         time.sleep(1.5)  # wait for dropdown to open
+                        
+                        # First check if we are actually ALREADY logged in (the dropdown shows Logout or My application)
+                        try:
+                            page_lower = self.driver.page_source.lower()
+                            if ">logout<" in page_lower or "sign out" in page_lower or ">my application" in page_lower or ">my group" in page_lower:
+                                self._log("✓ Already logged in (detected from opened dropdown)")
+                                # Click somewhere else (like the body) or re-click icon to close the menu 
+                                # so it doesn't block the next steps.
+                                self.driver.execute_script("arguments[0].click();", login_button)
+                                return True, ""
+                        except Exception:
+                            pass
+
                         # Look for Login link inside the opened dropdown
                         try:
                             login_link = self.driver.find_element(
@@ -1963,9 +1997,11 @@ class TLSCheckerService:
                             login_found = True
                             self._log("✓ Clicked Login link in dropdown")
                         except Exception:
-                            # Dropdown didn't have a direct Login link;
-                            # the icon click may have navigated directly
-                            login_found = True
+                            # Verify if maybe it navigated to login directly without a dropdown
+                            if "login" in self.driver.current_url.lower():
+                                login_found = True
+                            else:
+                                pass # Keep searching
                     except Exception:
                         pass
 
@@ -2189,6 +2225,34 @@ class TLSCheckerService:
                         self.driver.execute_script("arguments[0].click();", btn)
                         self._wait_random(0.5, 1)
                         break
+            except Exception:
+                pass
+
+
+            # --- Step 0: Ensure we are on the applications page ---
+            try:
+                # If we don't immediately see application row elements, try to navigate via the User menu
+                if not self.driver.find_elements(By.CSS_SELECTOR, "button[name='formGroupId'], .TlsTable_tls-table-row__1Z9QY"):
+                    self._log("Navigating to My Applications...")
+                    # Try to find user svg icon
+                    try:
+                        icon_svg = self.driver.find_element(By.CSS_SELECTOR, "svg[aria-label='User icon']")
+                        user_menu_btn = icon_svg.find_element(By.XPATH, "..")
+                        self.driver.execute_script("arguments[0].click();", user_menu_btn)
+                        time.sleep(1.5)
+                        
+                        # Click 'My application' in the dropdown
+                        my_app_link = self.driver.find_element(
+                            By.XPATH,
+                            "//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'my application')]"
+                        )
+                        self.driver.execute_script("arguments[0].click();", my_app_link)
+                        self._wait_random(3, 5)
+                        
+                        # Check for application error after navigating
+                        self._handle_application_error()
+                    except Exception as e:
+                        pass # Silently continue and let Step 1 fail if it truly isn't there
             except Exception:
                 pass
 
@@ -2895,9 +2959,45 @@ class TLSCheckerService:
 
                     # Check if TLS session is still alive or we got redirected to login
                     cur = self.driver.current_url.lower()
-                    page_src = self.driver.page_source.lower()
-                    if "/login" in cur or "email-input-field" in page_src or "password-input-field" in page_src:
+                    is_expired = False
+                    try:
+                        expire_texts = self.driver.find_elements(By.XPATH, "//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'session expired') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'log in again')]")
+                        for el in expire_texts:
+                            try:
+                                if el.is_displayed():
+                                    is_expired = True
+                                    break
+                            except:
+                                pass
+                    except:
+                        pass
+                    
+                    has_login_fields = False
+                    try:
+                        login_inputs = self.driver.find_elements(By.CSS_SELECTOR, '#email-input-field, #password-input-field')
+                        if login_inputs:
+                            for el in login_inputs:
+                                try:
+                                    if el.is_displayed():
+                                        has_login_fields = True
+                                        break
+                                except:
+                                    pass
+                    except Exception:
+                        pass
+                        
+                    if "/login" in cur or has_login_fields or is_expired:
                         self._log("🔑 TLS session expired — will re-login")
+                        # If a 'Login' button exists specifically on the session expired overlay, click it to clear the overlay
+                        try:
+                            exp_login_btns = self.driver.find_elements(By.XPATH, "//*[normalize-space(text())='Login' or normalize-space(text())='LOGIN']")
+                            for btn in exp_login_btns:
+                                if btn.is_displayed():
+                                    self.driver.execute_script("arguments[0].click();", btn)
+                                    break
+                        except Exception:
+                            pass
+                            
                         # Browser is fine but session is gone — do full login
                         browser_reused = False
                         login_success = False
@@ -2933,7 +3033,7 @@ class TLSCheckerService:
             # during the entire login flow so anti-bot systems see a real
             # browser.  Now it's safe to fully hide it.
             if login_success:
-                self._hide_chrome_window()
+                self._hide_chrome_window(force=True)
 
             if not login_success:
                 self._cleanup_driver()
@@ -3032,7 +3132,7 @@ class TLSCheckerService:
                 try:
                     import requests
                     requests.post(
-                        f"{Config.BACKEND_API_URL}/metrics/appointment-found",
+                        f"{Config.BACKEND_URL.rstrip('/')}/api/metrics/appointment-found",
                         json={
                             "user_email": settings.notification_email if settings else "",
                             "branch": getattr(settings, 'branch', '') or '',
@@ -3043,9 +3143,9 @@ class TLSCheckerService:
                 except Exception as e:
                     pass
             
-            # Keep browser alive — don't call _cleanup_driver() here.
-            # The same Chrome session will be reused on the next check cycle
-            # so we skip login + CAPTCHA entirely.
+            # End of check — tear down Chrome completely to avoid stale sessions and free memory
+            self._cleanup_driver()
+            
             self._slots_found_in_current_run = slots_available
             return True  # Check completed successfully
             
@@ -3086,8 +3186,17 @@ class TLSCheckerService:
             db.close()
         
         is_retry = False
+        consecutive_failures = 0
         while self.is_running:
             try:
+                # Reload settings to ensure we have the fresh interval
+                db_loop = SessionLocal()
+                try:
+                    settings = db_loop.query(UserSettings).filter(UserSettings.user_id == self.user_id).first()
+                    check_interval = settings.check_interval if settings else Config.DEFAULT_CHECK_INTERVAL
+                finally:
+                    db_loop.close()
+
                 # Validate license before each check cycle
                 from license_service import get_license_status
                 license_status = get_license_status()
