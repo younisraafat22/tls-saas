@@ -478,7 +478,7 @@ function Pricing() {
       id: 1,
       plan_type: "legalization",
       display_name: "Legalization Monitor",
-      price_monthly: 400,
+      price_monthly: 300,
       currency: "EGP",
       features: [
         "One branch of your choice",
@@ -494,7 +494,7 @@ function Pricing() {
       id: 2,
       plan_type: "visa",
       display_name: "Visa Monitor",
-      price_monthly: 400,
+      price_monthly: 300,
       currency: "EGP",
       features: [
         "One branch of your choice",
@@ -510,7 +510,7 @@ function Pricing() {
       id: 4,
       plan_type: "all_in_one",
       display_name: "Legalization + Visa",
-      price_monthly: 750,
+      price_monthly: 500,
       currency: "EGP",
       features: [
         "Both legalization & visa monitoring",
