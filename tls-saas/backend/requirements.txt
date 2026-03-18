@@ -43,3 +43,7 @@ Pillow>=10.2.0
 
 # CORS
 # (included in fastapi)
+
+slowapi==0.1.9
+
+slowapi==0.1.9

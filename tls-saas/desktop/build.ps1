@@ -16,11 +16,12 @@ Write-Host "[1/2] Running PyInstaller..." -ForegroundColor Yellow
 $distPath  = Join-Path $root "dist"
 $buildPath = Join-Path $root "build"
 
-python -m PyInstaller TLSAppointmentChecker.spec `
-    --clean `
-    --distpath "$distPath" `
-    --workpath "$buildPath" `
-    --noconfirm
+$oldErrorAction = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+
+cmd.exe /c "python -m PyInstaller TLSAppointmentChecker.spec --clean --distpath ""$distPath"" --workpath ""$buildPath"" --noconfirm"
+
+$ErrorActionPreference = $oldErrorAction
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "PyInstaller failed!" -ForegroundColor Red

@@ -7,9 +7,14 @@ import asyncio
 import sys
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+limiter = Limiter(key_func=get_remote_address)
 from sqlalchemy import select, text
 
 from app.config import settings
@@ -138,14 +143,7 @@ async def seed_data():
         for pd in plans_data:
             result = await db.execute(select(Plan).where(Plan.plan_type == pd["plan_type"]))
             existing_plan = result.scalar_one_or_none()
-            if existing_plan:
-                # Upsert: update price, features, sort_order on existing plans
-                existing_plan.price_monthly = pd["price_monthly"]
-                existing_plan.features = pd["features"]
-                existing_plan.display_name = pd["display_name"]
-                existing_plan.description = pd["description"]
-                existing_plan.sort_order = pd["sort_order"]
-            else:
+            if not existing_plan:
                 db.add(Plan(**pd))
 
         # Create branches — 2 legalization + 4 visa branches
@@ -303,37 +301,24 @@ async def lifespan(app: FastAPI):
             ])
             await db.execute(
                 text(
-                    "UPDATE plans SET display_name = :n, description = :d, features = :f, price_monthly = :p "
+                    "UPDATE plans SET display_name = :n, description = :d, features = :f "
                     "WHERE UPPER(plan_type) = 'LEGALIZATION'"
                 ),
                 {
                     "n": "Legalization Monitor",
                     "d": "Monitor legalization branches for appointment availability",
                     "f": new_features,
-                    "p": settings.PRICE_LEGALIZATION_MONTHLY,
                 },
             )
-            # Ensure all-in-one plan price is up to date
-            await db.execute(
-                text("UPDATE plans SET price_monthly = :p WHERE UPPER(plan_type) = 'ALL_IN_ONE'"),
-                {"p": settings.PRICE_ALL_IN_ONE_MONTHLY},
-            )
-            # Update legalization price to 300
-            await db.execute(
-                text("UPDATE plans SET price_monthly = :p WHERE UPPER(plan_type) = 'LEGALIZATION'"),
-                {"p": settings.PRICE_LEGALIZATION_MONTHLY},
-            )
-            # Restore visa plan if it was deleted — seed_data will add it back; just ensure price is correct
-            await db.execute(
-                text("UPDATE plans SET price_monthly = :p WHERE UPPER(plan_type) = 'VISA'"),
-                {"p": settings.PRICE_VISA_MONTHLY},
-            )
+            # Ensure all-in-one plan price is up to date (Removed to prevent overwriting admin custom prices)
+            # Update legalization price to 300 (Removed to prevent overwriting admin custom prices)
+            # Restore visa plan if it was deleted — seed_data will add it back; just ensure price is correct (Removed)
             # Restore visa branches if deactivated
             await db.execute(
                 text("UPDATE branches SET is_active = 1 WHERE UPPER(service_type) = 'VISA'")
             )
             await db.commit()
-            logger.info("Migration: updated legalization plan name/features/price, restored visa plans/branches")
+            logger.info("Migration: updated legalization plan name, restored visa branches")
         except Exception as e:
             logger.warning(f"Plan price migration skipped: {e}")
 

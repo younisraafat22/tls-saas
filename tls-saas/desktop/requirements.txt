@@ -38,3 +38,5 @@ imageio-ffmpeg>=0.5.1
 
 # Browser fingerprint stealth
 selenium-stealth>=1.0.6
+
+undetected-chromedriver==3.5.5

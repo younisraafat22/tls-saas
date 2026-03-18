@@ -10,6 +10,7 @@ import tempfile
 import requests as http_requests
 from datetime import datetime, timedelta, timezone
 from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -716,7 +717,7 @@ class TLSCheckerService:
                 options.add_argument(f'--window-size={_vw_fb},{_vh_fb}')
             options.add_argument('--start-maximized')
             
-            self.driver = webdriver.Chrome(options=options)
+            self.driver = uc.Chrome(options=options)
             self._apply_stealth()
             self.driver.maximize_window()
             if WINDOW_HIDER_AVAILABLE and self._chrome_hider and Config.BROWSER_HEADLESS:
@@ -2294,16 +2295,17 @@ class TLSCheckerService:
             try:
                 # New TLS layout: button with name="formGroupId" and TlsButton class
                 select_btn = wait.until(EC.element_to_be_clickable(
-                    (By.CSS_SELECTOR, "button[name='formGroupId'].TlsButton_tls-button__syUS5")
+                    (By.CSS_SELECTOR, "button[name='formGroupId']")
                 ))
             except Exception:
                 if not self.is_running:
                     return False  # Stopped mid-check — exit silently
-                # Fallback: any button containing "Select" text
+                # Fallback: any button containing "Select" or "Track" or "View"
                 try:
                     buttons = self.driver.find_elements(By.CSS_SELECTOR, "button")
                     for btn in buttons:
-                        if btn.text.strip().lower() == "select":
+                        text_lower = btn.text.strip().lower()
+                        if text_lower in {"select", "track", "view", "track my application", "view my application", "my application"}:
                             select_btn = btn
                             break
                 except Exception:
@@ -2316,10 +2318,30 @@ class TLSCheckerService:
                 try:
                     select_btn = self.driver.find_element(By.CSS_SELECTOR, "button.tls-button-primary.button-neo-inside")
                 except Exception:
-                    if not self.is_running:
-                        return False  # Stopped mid-check — exit silently
-                    self._log("❌ Select / Enter button not found.")
-                    return False
+                    # Before giving up, try looking for the "Order summary" div
+                    try:
+                        order_els = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Order summary') or contains(text(), 'Order Summary')]")
+                        for el in order_els:
+                            if el.is_displayed():
+                                select_btn = el
+                                break
+                    except Exception:
+                        pass
+                        
+                    if not select_btn:
+                        if not self.is_running:
+                            return False  # Stopped mid-check — exit silently
+                            
+                        try:
+                            # Dump all button texts to help debugging
+                            all_btns = self.driver.find_elements(By.CSS_SELECTOR, "button")
+                            btn_texts = [b.text.strip() for b in all_btns if b.is_displayed() and b.text.strip()]
+                            self._log(f"Available buttons on page: {', '.join(btn_texts[:10])}")
+                        except:
+                            pass
+                            
+                        self._log("❌ Select / Enter / Order Summary button not found.")
+                        return False
 
             self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", select_btn)
             self._wait_random(0.5, 1)
@@ -2365,13 +2387,14 @@ class TLSCheckerService:
                         if not self.is_running:
                             return False  # Stopped mid-check — exit silently
                         self._log("❌ Continue / Book appointment button not found.")
+                        if self.on_status_update:
+                            self.on_status_update("SHOW_EXISTING_APPOINTMENT_ERROR")
                         return False
 
                 self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", continue_btn)
                 self._wait_random(0.5, 1)
                 self.driver.execute_script("arguments[0].click();", continue_btn)
                 self._wait_random(3, 5)
-
             # Handle Application error after Continue / group select
             if not self._handle_application_error():
                 self._log("⚠️ Application error persists - will retry navigation")
@@ -3211,7 +3234,7 @@ class TLSCheckerService:
 
                 # Run check and wait for it to complete
                 check_successful = self.run_check(headless_override=None, is_retry=is_retry)
-                
+
                 # Signal UI that check finished (reset before sleep/retry)
                 if self.on_countdown_update:
                     self.on_countdown_update(0, 0)

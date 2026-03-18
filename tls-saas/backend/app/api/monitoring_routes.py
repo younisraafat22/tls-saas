@@ -5,7 +5,15 @@ and license verification / deactivation for the desktop app.
 
 import logging
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address), Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
 from pydantic import BaseModel
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +24,7 @@ from app.models import (
     User, Branch, CheckResult, UserBranchMonitor,
     NotificationLog, NotificationLogStatus, NotificationChannel,
     SubscriptionStatus, Subscription, Payment, PaymentStatus,
-    SystemSetting, ServiceType,
+    SystemSetting, ServiceType, HardwareUsage,
 )
 from app.auth import get_current_user
 from app.schemas import CheckResultPublic, NotificationLogPublic, DesktopCheckReport
@@ -835,3 +843,41 @@ async def worker_post_result(
     await scheduler_service._persist_and_notify(db, branch, check_result, active_users)
 
     return {"status": "ok", "notified": len(active_users)}
+
+@router.get("/hardware/{hardware_id}/usage")
+@limiter.limit("30/minute")
+async def get_hardware_usage(request: Request, hardware_id: str, db: AsyncSession = Depends(get_db)):
+    "Fetch usage counts for a hardware id."
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    from sqlalchemy import select
+    from app.models import HardwareUsage
+    result = await db.execute(select(HardwareUsage).where(HardwareUsage.hardware_id == hardware_id))
+    usage = result.scalar_one_or_none()
+    
+    if usage and usage.last_reset_date == today:
+        return {"checks_today": usage.checks_today}
+    else:
+        return {"checks_today": 0}
+
+@router.post("/hardware/{hardware_id}/increment")
+@limiter.limit("10/minute")
+async def increment_hardware_usage(request: Request, hardware_id: str, db: AsyncSession = Depends(get_db)):
+    "Increment usage count for a hardware id."
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    from sqlalchemy import select
+    from app.models import HardwareUsage
+    result = await db.execute(select(HardwareUsage).where(HardwareUsage.hardware_id == hardware_id))
+    usage = result.scalar_one_or_none()
+    
+    if usage:
+        if usage.last_reset_date != today:
+            usage.checks_today = 1
+            usage.last_reset_date = today
+        else:
+            usage.checks_today += 1
+    else:
+        usage = HardwareUsage(hardware_id=hardware_id, checks_today=1, last_reset_date=today)
+        db.add(usage)
+        
+    await db.commit()
+    return {"status": "ok", "checks_today": usage.checks_today}
