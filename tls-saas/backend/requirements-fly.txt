@@ -40,3 +40,4 @@ Pillow>=10.2.0
 
 # NOTE: patchright, seleniumbase, SpeechRecognition, pydub, imageio-ffmpeg
 # are intentionally EXCLUDED — they are only needed on the laptop worker.
+slowapi==0.1.9
