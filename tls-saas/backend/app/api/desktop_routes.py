@@ -171,3 +171,24 @@ async def desktop_payment_submit(
         ),
     }
 
+
+@router.get("/config")
+async def get_desktop_config():
+    """
+    Remote configuration for the desktop app.
+    Provides ability to update CSS selectors or wait timings over-the-air 
+    without needing to completely reinstall the executable.
+    """
+    return {
+        "selectors": {
+            "login_button": ".login-btn, button[type='submit']",
+            "recaptcha_iframe": "iframe[src*='recaptcha']",
+            "audio_button": "#recaptcha-audio-button, button.rc-button-audio",
+            "popup_close": "button.tls-button-primary, button[data-tls-value='confirm'], .tls-popup button",
+            "calendar_slots": ".tls-time-unit:not(.-unavailable)",
+        },
+        "timeouts": {
+            "page_load": 60,
+            "captcha": 30
+        }
+    }

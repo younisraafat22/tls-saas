@@ -2,8 +2,25 @@
 TLS Appointment Checker - Main Application
 License-based desktop app - enter license key to activate monitoring
 """
-import flet as ft
 import sys
+import os
+
+# Redirect standard outputs in PyInstaller noconsole mode to avoid blocking OS Error loops on button clicks
+if getattr(sys, 'frozen', False):
+    class DevNull:
+        def write(self, *args, **kwargs):
+            pass
+        def flush(self, *args, **kwargs):
+            pass
+        def isatty(self):
+            return False
+        def close(self):
+            pass
+
+    sys.stdout = DevNull()
+    sys.stderr = DevNull()
+
+import flet as ft
 from auth_service import auth_service  # kept for encrypt/decrypt only
 from checker_service import TLSCheckerService
 from database import init_db, SessionLocal, UserSettings, CheckHistory
@@ -494,9 +511,41 @@ class TLSApp:
             def close_dlg(e):
                 self.page.pop_dialog()
 
-            def open_download(e):
-                self.page.launch_url(download_url)
+            def do_silent_update(e):
                 self.page.pop_dialog()
+                
+                # Show downloading progress
+                progress_ring = ft.ProgressRing(width=20, height=20, stroke_width=2, color="#00D9FF")
+                download_dlg = ft.AlertDialog(
+                    modal=True,
+                    title=ft.Text("Downloading Update...", size=18, weight=ft.FontWeight.W_600),
+                    content=ft.Row([
+                        progress_ring,
+                        ft.Text(" Please wait while the update downloads.")
+                    ], spacing=15)
+                )
+                self.page.dialog = download_dlg
+                download_dlg.open = True
+                self.page.update()
+
+                def _download_and_run():
+                    try:
+                        exe_path = os.path.join(tempfile.gettempdir(), "TLS_Appointment_Checker_Update.exe")
+                        req = urllib.request.Request(download_url, headers={'User-Agent': 'Mozilla/5.0'})
+                        with urllib.request.urlopen(req, timeout=30) as response, open(exe_path, 'wb') as out_file:
+                            data = response.read()
+                            out_file.write(data)
+                        
+                        # Execute the installer silently to overwrite old files and restart
+                        subprocess.Popen([exe_path, '/VERYSILENT', '/SUPPRESSMSGBOXES', '/FORCECLOSEAPPLICATIONS'])
+                        os._exit(0) # Force close current python process immediately
+                    except Exception as ex:
+                        print(f"Update failed: {ex}")
+                        # Fallback to browser
+                        self.page.launch_url(download_url)
+                        os._exit(0)
+
+                threading.Thread(target=_download_and_run, daemon=True).start()
 
             update_dlg = ft.AlertDialog(
                 modal=True,
@@ -617,18 +666,20 @@ class TLSApp:
                 if status.get('plan', '').startswith('premium'):
                     from license_service import deactivate_license
                     deactivate_license()
-                    self.show_activation_page(
-                        message="Premium plans are managed via the web dashboard.\n"
-                                "Please visit the website to use your Premium subscription."
+                    self._ui_queue.put(
+                        lambda: self.show_activation_page(
+                            message="Premium plans are managed via the web dashboard.\n"
+                                    "Please visit the website to use your Premium subscription."
+                        )
                     )
                 else:
-                    self.show_monitoring_page()
+                    self._ui_queue.put(self.show_monitoring_page)
             else:
-                self.show_activation_page()
+                self._ui_queue.put(self.show_activation_page)
         except Exception as exc:
             print(f"[STARTUP] check_license_and_route crashed: {exc}", flush=True)
             try:
-                self.show_activation_page()
+                self._ui_queue.put(self.show_activation_page)
             except Exception:
                 pass
 
@@ -983,31 +1034,34 @@ class TLSApp:
                         if lic and lic.get('plan', '').startswith('premium'):
                             from license_service import deactivate_license
                             deactivate_license()
-                            status_msg.value = (
-                                "Premium plans are managed via the web dashboard.\n"
-                                "Please visit the website to use your Premium subscription."
-                            )
-                            status_msg.color = ft.Colors.ORANGE_400
-                            activate_btn.disabled = False
-                            self.page.update()
+                            def _show_premium_blocked():
+                                status_msg.value = (
+                                    "Premium plans are managed via the web dashboard.\n"
+                                    "Please visit the website to use your Premium subscription."
+                                )
+                                status_msg.color = ft.Colors.ORANGE_400
+                                activate_btn.disabled = False
+
+                            self._ui_queue.put(_show_premium_blocked)
                             return
                         # Save the selected service type to DB
                         self._save_service_type_to_db()
-                        # Navigate to monitoring page on main thread
-                        self.show_monitoring_page()
+                        # In packaged apps, routing UI updates via queue avoids cross-thread UI hangs.
+                        self._ui_queue.put(self.show_monitoring_page)
                     else:
-                        status_msg.value = message
+                        def _show_activation_error():
+                            status_msg.value = message
+                            status_msg.color = ft.Colors.RED_400
+                            activate_btn.disabled = False
+
+                        self._ui_queue.put(_show_activation_error)
+                except Exception as exc:
+                    def _show_unexpected_error():
+                        status_msg.value = f"Activation error: {str(exc)[:80]}"
                         status_msg.color = ft.Colors.RED_400
                         activate_btn.disabled = False
-                        self.page.update()
-                except Exception as exc:
-                    status_msg.value = f"Activation error: {str(exc)[:80]}"
-                    status_msg.color = ft.Colors.RED_400
-                    activate_btn.disabled = False
-                    try:
-                        self.page.update()
-                    except Exception:
-                        pass
+
+                    self._ui_queue.put(_show_unexpected_error)
 
             threading.Thread(target=_activate_in_background, daemon=True).start()
 
@@ -1233,6 +1287,14 @@ class TLSApp:
     #  MONITORING PAGE
     # ==================================================================
     def show_monitoring_page(self, auto_start=False):
+        try:
+            self._show_monitoring_page_internal(auto_start)
+        except Exception as e:
+            import traceback
+            print(f"CRITICAL ERROR IN SHOW_MONITORING_PAGE: {e}")
+            traceback.print_exc()
+
+    def _show_monitoring_page_internal(self, auto_start=False):
         self.page.controls.clear()
         self.page.scroll = None
 
@@ -1263,6 +1325,12 @@ class TLSApp:
         # Only reset DB flag when checker truly isn't running
         if settings and not auto_start and not is_monitoring:
             settings.is_monitoring = False
+            db.commit()
+            
+        # Ensure total_checks aligns with current daily checks (fixing desync if DB was wiped)
+        checks_today_val = license_status.get('checks_today', 0) if license_status and license_status.get('valid') else 0
+        if settings and settings.total_checks < checks_today_val:
+            settings.total_checks = checks_today_val
             db.commit()
 
         total_checks = settings.total_checks if settings else 0
@@ -1793,22 +1861,22 @@ class TLSApp:
                 # --- Field validation ---
                 has_error = False
                 if not new_tls_email:
-                    config_email_field.error = "TLS email is required"
+                    config_email_field.error_text = "TLS email is required"
                     has_error = True
                 else:
-                    config_email_field.error = None
+                    config_email_field.error_text = None
 
                 if not new_password and not existing_password:
-                    config_password_field.error = "TLS password is required"
+                    config_password_field.error_text = "TLS password is required"
                     has_error = True
                 else:
-                    config_password_field.error = None
+                    config_password_field.error_text = None
 
                 if not new_email:
-                    config_notification_field.error = "Notification email is required"
+                    config_notification_field.error_text = "Notification email is required"
                     has_error = True
                 else:
-                    config_notification_field.error = None
+                    config_notification_field.error_text = None
 
                 if has_error:
                     self.page.update()
@@ -1817,18 +1885,24 @@ class TLSApp:
 
                 # Check if TLS credential email change is allowed
                 old_tls_email = settings_obj.tls_email or ""
+                did_show_error = False
+
                 if old_tls_email and new_tls_email and old_tls_email.lower() != new_tls_email.lower():
                     try:
                         from license_service import can_change_tls_email, record_tls_email_change
                         can_change, message = can_change_tls_email(new_tls_email)
                         if not can_change:
-                            config_email_field.error = message
-                            self.page.update()
-                            db.close()
-                            return
-                        record_tls_email_change(old_tls_email, new_tls_email)
+                            config_email_field.error_text = message
+                            config_email_field.value = old_tls_email
+                            new_tls_email = old_tls_email
+                            did_show_error = True
+                            self._show_info_snack("Email limit reached. Other settings saved.", color=ft.Colors.ORANGE_400)
+                        else:
+                            record_tls_email_change(old_tls_email, new_tls_email)
                     except Exception as ex:
                         print(f"[UI] TLS email change check failed: {ex}")
+
+
 
                 settings_obj.tls_email = new_tls_email
                 if new_password:
@@ -1855,9 +1929,14 @@ class TLSApp:
                 db.commit()
                 db.close()
                 print("[UI] Configuration saved OK")
+                
                 if self.page:
+                    config_email_field.update()
+                    config_notification_field.update()
+                    self.page.update()
                     try:
-                        self.page.show_dialog(ft.SnackBar(content=ft.Text("\u2705 Configuration saved successfully", size=14, color=ft.Colors.WHITE), bgcolor="#1A3A2A", duration=3000))
+                        if not did_show_error:
+                            self.page.show_dialog(ft.SnackBar(content=ft.Text("Configuration saved successfully", size=14, color=ft.Colors.WHITE), bgcolor="#1A3A2A", duration=3000))
                     except Exception as snack_exc:
                         print(f"[UI] show_dialog FAILED: {snack_exc}")
             except Exception as exc:
@@ -1895,7 +1974,42 @@ class TLSApp:
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN, spacing=10,
                 )
             )
-        
+            
+            def dev_simulate_expiry(e):
+                from license_service import deactivate_license
+                deactivate_license()
+                self._show_info_snack("Dev Tools: License revoked & deactivated. Restart or refresh dashboard.", color=ft.Colors.GREEN_400)
+                self.page.update()
+            
+            def dev_set_checks_24(e):
+                from license_service import _read_license_file, _write_license_file
+                data = _read_license_file()
+                if data:
+                    data['checks_today'] = 24
+                    _write_license_file(data)
+                    self._show_info_snack("Dev Tools: Checks today set to 24. Restart or refresh dashboard.", color=ft.Colors.GREEN_400)
+                    self.page.update()
+
+            def dev_reset_checks(e):
+                from license_service import _read_license_file, _write_license_file
+                data = _read_license_file()
+                if data:
+                    data['checks_today'] = 0
+                    _write_license_file(data)
+                    self._show_info_snack("Dev Tools: Checks reset to 0. Restart or refresh dashboard.", color=ft.Colors.GREEN_400)
+                    self.page.update()
+            
+            config_children.append(
+                ft.Row(
+                    [
+                        ft.FilledButton("Dev: Expire License", on_click=dev_simulate_expiry, style=ft.ButtonStyle(bgcolor="#00D9FF", color="#0A0E27")),
+                        ft.FilledButton("Dev: 24 Checks", on_click=dev_set_checks_24, style=ft.ButtonStyle(bgcolor="#00D9FF", color="#0A0E27")),
+                        ft.FilledButton("Dev: 0 Checks", on_click=dev_reset_checks, style=ft.ButtonStyle(bgcolor="#00D9FF", color="#0A0E27"))
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                )
+            )
+
         # Save button
         config_children.append(
             ft.Row(
@@ -2430,7 +2544,7 @@ class TLSApp:
                                         ],
                                         spacing=8,
                                     ),
-                                    padding=10, height=630,
+                                    padding=10, height=650,
                                 ),
                                 expand=True,
                             ),
@@ -2697,6 +2811,8 @@ class TLSApp:
                     self.show_credentials_error_dialog()
                 elif kind == "no_application_error":
                     self.show_no_application_dialog()
+                elif kind == "existing_appointment_error":
+                    self.show_existing_appointment_dialog()
                 elif kind == "license_invalid":
                     self.show_license_invalid_dialog()
             finally:
@@ -2731,6 +2847,9 @@ class TLSApp:
                 return
             if message == "SHOW_NO_APPLICATION_ERROR":
                 self._ui_queue.put(("no_application_error",))
+                return
+            if message == "SHOW_EXISTING_APPOINTMENT_ERROR":
+                self._ui_queue.put(("existing_appointment_error",))
                 return
             if "License no longer valid" in message or "License revoked" in message:
                 self._ui_queue.put(("license_invalid",))
@@ -2854,6 +2973,65 @@ class TLSApp:
         )
 
         self.page.show_dialog(no_app_dlg)
+
+    def show_existing_appointment_dialog(self):
+        """Show popup when existing appointment prevents calendar access."""
+        if self.checker:
+            self.checker.stop_monitoring()
+
+        db = SessionLocal()
+        settings = db.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
+        if settings:
+            settings.is_monitoring = False
+            db.commit()
+        db.close()
+
+        def close_dialog(e):
+            self.page.pop_dialog()
+            self.show_monitoring_page()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row([
+                ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=ft.Colors.AMBER_400, size=28),
+                ft.Text("Cannot Check Calendar", size=20, weight=ft.FontWeight.BOLD),
+            ]),
+            content=ft.Column([
+                ft.Text(
+                    "The bot could not find the 'Continue' or 'Book' button.",
+                    size=16, color="#FFFFFF",
+                ),
+                ft.Container(height=10),
+                ft.Text(
+                    "If you already have an appointment or pending payment, the standard calendar is blocked.",
+                    size=14, color=ft.Colors.GREY_400,
+                ),
+                ft.Container(height=10),
+                ft.Text("How to fix this safely:", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER_300),
+                ft.Text("1. Create a NEW (duplicate) application on TLS.", size=13, color=ft.Colors.GREY_300),
+                ft.Text("2. Let the bot use the NEW app to monitor dates.", size=13, color=ft.Colors.GREY_300),
+                ft.Text("3. When a slot is found, manually log in.", size=13, color=ft.Colors.GREY_300),
+                ft.Text("4. Update your ORIGINAL application to the new date.", size=13, color=ft.Colors.GREY_300),
+                ft.Container(height=10),
+                ft.Text(
+                    "Monitoring has been stopped.",
+                    size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER_400,
+                ),
+            ], tight=True, spacing=4, width=500),
+            actions=[
+                ft.FilledButton(
+                    "I Understand",
+                    on_click=close_dialog,
+                    style=ft.ButtonStyle(bgcolor="#00D9FF", color="#0A0E27"),
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            bgcolor="#1A1F3A",
+        )
+
+        self.page.show_dialog(dlg)
+
+
 
     def show_license_invalid_dialog(self):
         """Show popup when license is revoked or becomes invalid during monitoring."""

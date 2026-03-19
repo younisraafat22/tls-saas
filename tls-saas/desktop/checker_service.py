@@ -3,6 +3,9 @@ TLS Checker Service
 Background service for checking appointment availability
 """
 import threading
+import urllib.request
+import urllib.error
+import json
 import time
 import os
 import sys
