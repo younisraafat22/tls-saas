@@ -3222,7 +3222,7 @@ class TLSCheckerService:
 
                 # Validate license before each check cycle
                 from license_service import get_license_status
-                license_status = get_license_status()
+                license_status = get_license_status(force_network=True)
                 if not license_status or not license_status.get('valid'):
                     self._log("❌ License no longer valid. Monitoring stopped.")
                     self.is_running = False

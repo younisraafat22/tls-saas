@@ -74,7 +74,7 @@ PLANS = {
         "duration_days": 30,
         "price": 300,
         "currency": "EGP",
-        "max_emails": 1,
+        "max_emails": 2,
     },
     "visa": {
         "name": "Visa",
@@ -83,7 +83,7 @@ PLANS = {
         "duration_days": 30,
         "price": 300,
         "currency": "EGP",
-        "max_emails": 1,
+        "max_emails": 2,
     },
     "legalization_monthly": {
         "name": "Legalization",
@@ -92,7 +92,7 @@ PLANS = {
         "duration_days": 30,
         "price": 300,
         "currency": "EGP",
-        "max_emails": 1,
+        "max_emails": 2,
     },
     "legalization_quarterly": {
         "name": "Legalization (3 months)",
@@ -101,7 +101,7 @@ PLANS = {
         "duration_days": 90,
         "price": 900,
         "currency": "EGP",
-        "max_emails": 1,
+        "max_emails": 2,
     },
     "visa_monthly": {
         "name": "Visa",
@@ -110,7 +110,7 @@ PLANS = {
         "duration_days": 30,
         "price": 300,
         "currency": "EGP",
-        "max_emails": 1,
+        "max_emails": 2,
     },
     "visa_quarterly": {
         "name": "Visa (3 months)",
@@ -119,7 +119,7 @@ PLANS = {
         "duration_days": 90,
         "price": 900,
         "currency": "EGP",
-        "max_emails": 1,
+        "max_emails": 2,
     },
     "premium": {
         "name": "Premium",
@@ -128,7 +128,7 @@ PLANS = {
         "duration_days": 30,
         "price": 2500,
         "currency": "EGP",
-        "max_emails": 1,
+        "max_emails": 2,
     },
     "premium_monthly": {
         "name": "Premium (Monthly)",
@@ -137,7 +137,7 @@ PLANS = {
         "duration_days": 30,
         "price": 2500,
         "currency": "EGP",
-        "max_emails": 1,
+        "max_emails": 2,
     },
     "premium_quarterly": {
         "name": "Premium (3 months)",
@@ -146,7 +146,7 @@ PLANS = {
         "duration_days": 90,
         "price": 6000,
         "currency": "EGP",
-        "max_emails": 1,
+        "max_emails": 2,
     },
     "premium_annual": {
         "name": "Premium (Annual)",
@@ -155,7 +155,7 @@ PLANS = {
         "duration_days": 365,
         "price": 20000,
         "currency": "EGP",
-        "max_emails": 1,
+        "max_emails": 2,
     },
     # Combo plan: both legalization + visa locally
     "all_in_one": {
@@ -165,7 +165,7 @@ PLANS = {
         "duration_days": 30,
         "price": 500,
         "currency": "EGP",
-        "max_emails": 1,
+        "max_emails": 2,
     },
     "all_in_one_monthly": {
         "name": "Legalization + Visa",
@@ -174,7 +174,7 @@ PLANS = {
         "duration_days": 30,
         "price": 500,
         "currency": "EGP",
-        "max_emails": 1,
+        "max_emails": 2,
     },
     "all_in_one_quarterly": {
         "name": "Legalization + Visa (3 months)",
@@ -183,7 +183,7 @@ PLANS = {
         "duration_days": 90,
         "price": 1500,
         "currency": "EGP",
-        "max_emails": 1,
+        "max_emails": 2,
     },
     # Internal test plan — 2-hour expiry for verifying expiry logic without waiting 30 days
     "test_2h": {
@@ -194,7 +194,7 @@ PLANS = {
         "duration_hours": 2,
         "price": 0,
         "currency": "EGP",
-        "max_emails": 1,
+        "max_emails": 2,
     },
 }
 
@@ -478,6 +478,27 @@ def activate_license(key: str) -> tuple[bool, str]:
     # Use _safe_urlopen for reliable SSL handling in PyInstaller bundles.
     server_url = (Config.LICENSE_SERVER_URL or Config.BACKEND_URL or "").rstrip("/")
     if server_url:
+        # First verify license isn't revoked
+        for _attempt in range(2):
+            try:
+                payload = json.dumps({"license_key": key.strip().upper(), "hardware_id": hw_id}).encode()
+                _vreq = urllib.request.Request(
+                    f"{server_url}/api/monitoring/license/verify",
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                with _safe_urlopen(_vreq, timeout=5) as _vresp:
+                    vdata = json.loads(_vresp.read())
+                    if vdata.get("found") and not vdata.get("is_active", True):
+                        return False, "This license has been deactivated or revoked."
+                break
+            except Exception as exc:
+                logger.warning(f"[LICENSE] Activation verification check failed: {exc}")
+                if _attempt < 1:
+                    time.sleep(1)
+
+        # Now fetch branch
         for _attempt in range(3):
             try:
                 _url = (f"{server_url}/api/payments/license-branch"
@@ -552,7 +573,7 @@ def activate_trial() -> tuple[bool, str]:
 # Avoids blocking the UI on every get_license_status() call.
 # Format: {"time": float | None, "not_revoked": bool}
 _revoke_cache: dict = {"time": None, "not_revoked": True}
-_REVOKE_CACHE_TTL = 3600  # 1 hour
+_REVOKE_CACHE_TTL = 300  # 5 minutes
 
 # Stable URL to discover the current backend URL (survives tunnel restarts)
 _VERCEL_URL = "https://tls-saas.vercel.app"
@@ -589,7 +610,7 @@ def _fetch_current_backend_url() -> str | None:
     return None
 
 
-def get_license_status() -> dict | None:
+def get_license_status(force_network: bool = False) -> dict | None:
     """
     Get current license status.
     Returns dict with plan info or None if no valid license.
@@ -623,7 +644,8 @@ def get_license_status() -> dict | None:
     if data["plan"] != "trial" and data.get("key"):
         now_ts = time.time()
         cache_valid = (
-            _revoke_cache["time"] is not None
+            not force_network
+            and _revoke_cache["time"] is not None
             and now_ts - _revoke_cache["time"] < _REVOKE_CACHE_TTL
         )
         if cache_valid and not _revoke_cache["not_revoked"]:
@@ -648,34 +670,30 @@ def get_license_status() -> dict | None:
 
             revoked = False
             check_done = False
+            # Keep this path responsive: no retries/sleeps on UI-triggered status checks.
+            # If network is flaky, we fail open briefly and retry on next cache window.
             for try_url in urls_to_try:
-                for _attempt in range(2):
-                    try:
-                        payload = json.dumps({"license_key": data["key"]}).encode()
-                        req = urllib.request.Request(
-                            f"{try_url}/api/monitoring/license/verify",
-                            data=payload,
-                            headers={"Content-Type": "application/json"},
-                            method="POST",
-                        )
-                        with _safe_urlopen(req, timeout=5) as resp:
-                            result = json.loads(resp.read())
-                            if result.get("found") and not result.get("is_active", True):
-                                revoked = True
-                            else:
-                                logger.debug(f"[LICENSE] Server verify OK: is_active={result.get('is_active')}")
-                        check_done = True
-                        break  # success — stop retrying this URL
-                    except Exception as exc:
-                        logger.warning(f"[LICENSE] Revocation check attempt {_attempt+1}/2 failed ({try_url}): {exc}")
-                        if _attempt < 1:
-                            time.sleep(1)
-                if check_done:
-                    break  # stop trying other URLs
+                try:
+                    payload = json.dumps({"license_key": data["key"]}).encode()
+                    req = urllib.request.Request(
+                        f"{try_url}/api/monitoring/license/verify",
+                        data=payload,
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with _safe_urlopen(req, timeout=3) as resp:
+                        result = json.loads(resp.read())
+                        if result.get("found") and not result.get("is_active", True):
+                            revoked = True
+                        else:
+                            logger.debug(f"[LICENSE] Server verify OK: is_active={result.get('is_active')}")
+                    check_done = True
+                    break
+                except Exception as exc:
+                    logger.warning(f"[LICENSE] Revocation check failed ({try_url}): {exc}")
 
-            if check_done:
-                _revoke_cache["time"] = now_ts
-                _revoke_cache["not_revoked"] = not revoked
+            _revoke_cache["time"] = now_ts
+            _revoke_cache["not_revoked"] = (not revoked) if check_done else True
 
             if revoked:
                 logger.info("[LICENSE] Revoked by server — removing local license")
@@ -724,21 +742,46 @@ def can_check() -> tuple[bool, str]:
     if not status["valid"]:
         return False, "License expired. Please renew."
     if status["checks_today"] >= status["checks_limit"]:
-        return False, f"Daily check limit reached ({status['checks_limit']}). Upgrade for more."
+        return False, f"Daily check limit reached ({status['checks_limit']})."
     return True, ""
 
 
 def increment_check_count():
-    """Increment today's check counter."""
+    """Increment today's check counter. Syncs with backend to prevent local DB wipes."""
     data = _read_license_file()
     if not data:
         return
+        
     today = datetime.now(timezone.utc).date().isoformat()
-    if data.get("checks_reset_date") != today:
-        data["checks_today"] = 1
+    hw_id = get_hardware_id()
+    new_count = None
+    
+    # Send increment to backend
+    try:
+        backend_url = getattr(Config, "BACKEND_URL", "https://backend-cold-sound-6496.fly.dev").rstrip("/")
+        req = urllib.request.Request(
+            f"{backend_url}/api/monitoring/hardware/{hw_id}/increment",
+            method="POST",
+            headers={"Content-Length": "0", "Accept": "application/json"}
+        )
+        ctx = _get_ssl_context()
+        with urllib.request.urlopen(req, context=ctx, timeout=5) as response:
+            resp_data = json.loads(response.read().decode())
+            new_count = resp_data.get("checks_today")
+    except Exception as e:
+        logger.error(f"Failed to sync increment to backend: {e}")
+
+    # Fallback to local if backend fails, otherwise use backend count
+    if new_count is not None:
+        data["checks_today"] = new_count
         data["checks_reset_date"] = today
     else:
-        data["checks_today"] = data.get("checks_today", 0) + 1
+        if data.get("checks_reset_date") != today:
+            data["checks_today"] = 1
+            data["checks_reset_date"] = today
+        else:
+            data["checks_today"] = data.get("checks_today", 0) + 1
+
     _write_license_file(data)
     # Also persist to Registry so deleting .license can't reset the counter
     _set_registry_checks_today(today, data["checks_today"])
@@ -963,8 +1006,8 @@ def check_api_subscription() -> dict | None:
                 "name": active_plan,
                 "checks_per_day": 999999,
                 "min_interval": 30,
-                "max_emails": 1,
-            },
+                "max_emails": 2,
+    },
             "expires_at": expires_at,
             "days_remaining": days_remaining,
             "checks_today": 0,
