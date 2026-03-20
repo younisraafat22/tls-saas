@@ -25,6 +25,7 @@ hiddenimports = [
     'speech_recognition', 'pydub', 'imageio_ffmpeg',
     # Encryption & auth
     'bcrypt', 'cryptography', 'cryptography.fernet',
+    'pystray', 'PIL', 'PIL._tkinter_finder',
     # Notifications & utilities
     'plyer', 'plyer.platforms.win', 'plyer.platforms.win.notification',
     'dotenv', 'requests', 'urllib3', 'pyperclip',
@@ -64,7 +65,7 @@ excludes = [
     # Qt (not needed - Flet uses its own web renderer)
     'PyQt5', 'PyQt6', 'PySide2', 'PySide6', 'qtpy',
     # Image processing (not needed)
-    'skimage', 'scikit-image', 'imageio', 'PIL', 'Pillow',
+    'skimage', 'scikit-image', 'imageio', 
     # AWS/Cloud (not needed - botocore is 97MB!)
     'botocore', 'boto3', 'awscli', 's3transfer',
     # Documentation tools (not needed)

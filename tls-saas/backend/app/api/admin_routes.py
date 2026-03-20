@@ -42,7 +42,7 @@ async def dashboard_stats(
 
     total_users = (await db.execute(
         select(func.count(User.id))
-        .where(User.is_admin == False, User.email.not_like("deleted\_%@deleted.invalid"))
+        .where(User.is_admin == False, User.email.not_like(r"deleted\_%@deleted.invalid"))
     )).scalar() or 0
     active_subs = (await db.execute(
         select(func.count(Subscription.id))
@@ -80,6 +80,22 @@ async def dashboard_stats(
     pending_licenses = (await db.execute(
         select(func.count(Payment.id))
         .where(Payment.hardware_id != None, Payment.status == PaymentStatus.PENDING)
+    )).scalar() or 0
+
+    total_downloads = (await db.execute(
+        select(func.count(AppDownload.id))
+    )).scalar() or 0
+
+    avg_rating = (await db.execute(
+        select(func.avg(AppRating.rating))
+    )).scalar() or 0.0
+
+    total_appointments_found = (await db.execute(
+        select(func.count(FoundAppointment.id))
+    )).scalar() or 0
+
+    service_accounts_count = (await db.execute(
+        select(func.count(ServiceAccount.id))
     )).scalar() or 0
 
     # Recent pending payments (all types, for dashboard quick view)
@@ -129,6 +145,11 @@ async def dashboard_stats(
         total_licenses=total_licenses,
         active_licenses=active_licenses,
         pending_licenses=pending_licenses,
+        total_downloads=total_downloads,
+        average_rating=float(avg_rating) if avg_rating else 0.0,
+        total_appointments_found=total_appointments_found,
+        service_accounts=service_accounts_count,
+        scheduler_running=True,
         recent_pending_payments=recent_pending,
         recent_activity=recent_activity,
     )
@@ -1801,26 +1822,6 @@ async def admin_websocket(websocket: WebSocket):
             # Admin can send commands via WS if needed
     except WebSocketDisconnect:
         await ws_manager.disconnect_admin(websocket)
-
-@router.delete("/ratings/{rating_id}", response_model=MessageResponse)
-async def delete_rating(
-    rating_id: int,
-    admin=Depends(get_current_admin),
-    db: AsyncSession = Depends(get_db),
-):
-    from app.models import AppRating
-    res = await db.execute(select(AppRating).where(AppRating.id == rating_id))
-    rating = res.scalar_one_or_none()
-    if not rating:
-        raise HTTPException(404, "Rating not found")
-    await db.delete(rating)
-    db.add(ActivityLog(
-        actor_id=admin.id,
-        action="rating_deleted",
-        details={"rating_id": rating_id},
-    ))
-    await db.commit()
-    return MessageResponse(message=f"Rating #{rating_id} deleted")
 
 @router.delete("/ratings/{rating_id}", response_model=MessageResponse)
 async def delete_rating(

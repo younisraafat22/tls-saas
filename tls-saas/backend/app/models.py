@@ -318,3 +318,12 @@ class FoundAppointment(Base):
     branch = Column(String, nullable=True)
     service_type = Column(String, nullable=True)
     found_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+class HardwareUsage(Base):
+    __tablename__ = "hardware_usage"
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    hardware_id = Column(String(255), unique=True, index=True, nullable=False)
+    checks_today = Column(Integer, default=0)
+    last_reset_date = Column(String(20), nullable=True) # YYYY-MM-DD

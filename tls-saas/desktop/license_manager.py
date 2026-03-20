@@ -26,7 +26,27 @@ from datetime import datetime, timedelta, timezone
 
 # Ensure sibling imports work
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from license_service import generate_license_key, PLANS, get_hardware_id, parse_license_key
+from license_service import PLANS, get_hardware_id, parse_license_key
+import hmac
+import hashlib
+import secrets
+
+SECRET = "TLS-CHECKER-2026-HMAC-SECRET-KEY-DONT-SHARE"
+
+def _sign(payload: str) -> str:
+    """HMAC-SHA256 signature of payload."""
+    return hmac.new(SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+
+def generate_license_key(plan: str, hardware_id: str) -> str:
+    """
+    Generate a license key bound to a specific hardware ID.
+    Format: PLAN-HWID8-RANDOM8-SIG16
+    """
+    hw_short = hardware_id[:8].upper()
+    rand = secrets.token_hex(4).upper()
+    payload = f"{plan}:{hw_short}:{rand}"
+    sig = _sign(payload).upper()
+    return f"{plan.upper()}-{hw_short}-{rand}-{sig}"
 
 # ────────────────────────────────────────────────────────────────────
 #  Embedded server state

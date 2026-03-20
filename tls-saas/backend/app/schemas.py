@@ -297,6 +297,11 @@ class DashboardStats(BaseModel):
     checks_today: int
     slots_found_today: int
     notifications_sent_today: int
+    total_downloads: int = 0
+    average_rating: float = 0.0
+    total_appointments_found: int = 0
+    service_accounts: int = 0
+    scheduler_running: bool = False
     # Desktop license stats
     total_licenses: int = 0
     active_licenses: int = 0

@@ -22,10 +22,10 @@ logger = logging.getLogger("license")
 
 # ---------- constants ----------
 LICENSE_FILE = os.path.join(str(BASE_DIR), ".license")
-SECRET = "TLS-CHECKER-2026-HMAC-SECRET-KEY-DONT-SHARE"
 
 # Persistent trial marker (to prevent trial bypass by uninstall/reinstall)
 TRIAL_REGISTRY_KEY = r"SOFTWARE\TLSAppointmentChecker"
+
 TRIAL_REGISTRY_VALUE = "TrialActivated"
 CHECKS_TODAY_REGISTRY_VALUE = "ChecksToday"  # "YYYY-MM-DD|count"
 
@@ -339,29 +339,20 @@ def _set_registry_checks_today(date_str: str, count: int):
     except Exception:
         pass
 
-def _sign(payload: str) -> str:
-    """HMAC-SHA256 signature of payload."""
-    return hmac.new(SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+def _get_local_integrity_key() -> str:
+    """Generate a hardware-bound key for local file tampering prevention."""
+    raw = f"local-tamper-{get_hardware_id()}"
+    return hashlib.sha256(raw.encode()).hexdigest()
 
-
-def generate_license_key(plan: str, hardware_id: str) -> str:
-    """
-    Generate a license key bound to a specific hardware ID.
-    Format: PLAN-HWID8-RANDOM8-SIG16
-    Run this on YOUR machine (generate_license.py) and give the key to the buyer.
-    """
-    import secrets
-    hw_short = hardware_id[:8].upper()
-    rand = secrets.token_hex(4).upper()
-    payload = f"{plan}:{hw_short}:{rand}"
-    sig = _sign(payload).upper()
-    return f"{plan.upper()}-{hw_short}-{rand}-{sig}"
+def _sign_local(payload: str) -> str:
+    """HMAC-SHA256 signature for local file integrity only."""
+    return hmac.new(_get_local_integrity_key().encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
 
 
 def parse_license_key(key: str) -> dict | None:
     """
-    Parse and validate a license key.
-    Returns dict with plan, hw_prefix, random, signature or None if invalid.
+    Parse a license key for format.
+    Validation against tampering is now deferred exclusively to the server.
     """
     parts = key.strip().upper().split("-")
     # Handle plan names with underscores (BASIC_MONTHLY -> parts[0] + parts[1])
@@ -380,12 +371,7 @@ def parse_license_key(key: str) -> dict | None:
     if plan not in PLANS:
         return None
 
-    # Verify signature
-    payload = f"{plan}:{hw}:{rand}"
-    expected_sig = _sign(payload).upper()
-    if not hmac.compare_digest(sig, expected_sig):
-        return None
-
+    # Removed client-side HMAC secret checking. Verification is now server-enforced.
     return {"plan": plan, "hw_prefix": hw, "random": rand, "signature": sig, "raw_key": key.strip().upper()}
 
 
@@ -401,7 +387,7 @@ def _read_license_file() -> dict | None:
         # Verify integrity
         stored_sig = data.get("integrity")
         check_str = f"{data.get('key')}:{data.get('hardware_id')}:{data.get('plan')}:{data.get('activated_at')}:{data.get('expires_at')}"
-        if _sign(check_str) != stored_sig:
+        if _sign_local(check_str) != stored_sig:
             return None
         return data
     except Exception:
@@ -411,7 +397,7 @@ def _read_license_file() -> dict | None:
 def _write_license_file(data: dict):
     """Write the local license file with integrity signature."""
     check_str = f"{data['key']}:{data['hardware_id']}:{data['plan']}:{data['activated_at']}:{data['expires_at']}"
-    data["integrity"] = _sign(check_str)
+    data["integrity"] = _sign_local(check_str)
     with open(LICENSE_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f)
 
@@ -477,45 +463,55 @@ def activate_license(key: str) -> tuple[bool, str]:
     # Fetch branch info from backend (if available)
     # Use _safe_urlopen for reliable SSL handling in PyInstaller bundles.
     server_url = (Config.LICENSE_SERVER_URL or Config.BACKEND_URL or "").rstrip("/")
-    if server_url:
-        # First verify license isn't revoked
-        for _attempt in range(2):
-            try:
-                payload = json.dumps({"license_key": key.strip().upper(), "hardware_id": hw_id}).encode()
-                _vreq = urllib.request.Request(
-                    f"{server_url}/api/monitoring/license/verify",
-                    data=payload,
-                    headers={"Content-Type": "application/json"},
-                    method="POST"
-                )
-                with _safe_urlopen(_vreq, timeout=5) as _vresp:
-                    vdata = json.loads(_vresp.read())
-                    if vdata.get("found") and not vdata.get("is_active", True):
-                        return False, "This license has been deactivated or revoked."
-                break
-            except Exception as exc:
-                logger.warning(f"[LICENSE] Activation verification check failed: {exc}")
-                if _attempt < 1:
-                    time.sleep(1)
+    if not server_url:
+        return False, "Server URL not configured. Cannot verify license."
 
-        # Now fetch branch
-        for _attempt in range(3):
-            try:
-                _url = (f"{server_url}/api/payments/license-branch"
-                        f"?license_key={key.strip().upper()}")
-                _req = urllib.request.Request(_url, headers={"Accept": "application/json"}, method="GET")
-                with _safe_urlopen(_req, timeout=10) as _resp:
-                    branch_data = json.loads(_resp.read())
-                if branch_data.get("branch_name"):
-                    license_data["branch_name"] = branch_data["branch_name"]
-                    license_data["branch_url"] = branch_data["branch_url"]
-                    license_data["service_type"] = branch_data["service_type"]
-                    logger.info(f"[LICENSE] Branch fetched: {branch_data['branch_name']}")
-                break  # success
-            except Exception as exc:
-                logger.warning(f"[LICENSE] Branch fetch attempt {_attempt+1}/3 failed: {exc}")
-                if _attempt < 2:
-                    time.sleep(1)
+    # First verify license isn't revoked
+    verified = False
+    for _attempt in range(2):
+        try:
+            payload = json.dumps({"license_key": key.strip().upper(), "hardware_id": hw_id}).encode()
+            _vreq = urllib.request.Request(
+                f"{server_url}/api/monitoring/license/verify",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            with _safe_urlopen(_vreq, timeout=5) as _vresp:
+                vdata = json.loads(_vresp.read())
+                if vdata.get("found"):
+                    if not vdata.get("is_active", True):
+                        return False, "This license has been deactivated or revoked."
+                    verified = True
+                    break
+                else:
+                    return False, "Invalid or unrecognized license key."
+        except Exception as exc:
+            logger.warning(f"[LICENSE] Activation verification check failed: {exc}")
+            if _attempt < 1:
+                time.sleep(1)
+    
+    if not verified:
+        return False, "Could not contact server to verify license. Please check your internet connection."
+
+    # Now fetch branch
+    for _attempt in range(3):
+        try:
+            _url = (f"{server_url}/api/payments/license-branch"
+                    f"?license_key={key.strip().upper()}")
+            _req = urllib.request.Request(_url, headers={"Accept": "application/json"}, method="GET")
+            with _safe_urlopen(_req, timeout=10) as _resp:
+                branch_data = json.loads(_resp.read())
+            if branch_data.get("branch_name"):
+                license_data["branch_name"] = branch_data["branch_name"]
+                license_data["branch_url"] = branch_data["branch_url"]
+                license_data["service_type"] = branch_data["service_type"]
+                logger.info(f"[LICENSE] Branch fetched: {branch_data['branch_name']}")
+            break  # success
+        except Exception as exc:
+            logger.warning(f"[LICENSE] Branch fetch attempt {_attempt+1}/3 failed: {exc}")
+            if _attempt < 2:
+                time.sleep(1)
 
     _write_license_file(license_data)
     return True, f"License activated! Type: {plan_info['name']}"
@@ -683,17 +679,25 @@ def get_license_status(force_network: bool = False) -> dict | None:
                     )
                     with _safe_urlopen(req, timeout=3) as resp:
                         result = json.loads(resp.read())
-                        if result.get("found") and not result.get("is_active", True):
-                            revoked = True
+                        if result.get("found"):
+                            if not result.get("is_active", True):
+                                revoked = True
                         else:
-                            logger.debug(f"[LICENSE] Server verify OK: is_active={result.get('is_active')}")
+                            # Not found in database -> Revoked
+                            revoked = True
+                        
+                        logger.debug(f"[LICENSE] Server verify OK: is_active={result.get('is_active')}")
                     check_done = True
                     break
                 except Exception as exc:
                     logger.warning(f"[LICENSE] Revocation check failed ({try_url}): {exc}")
 
+            if not check_done:
+                logger.warning("[LICENSE] Could not verify license with server. Failing closed.")
+                return None
+
             _revoke_cache["time"] = now_ts
-            _revoke_cache["not_revoked"] = (not revoked) if check_done else True
+            _revoke_cache["not_revoked"] = not revoked
 
             if revoked:
                 logger.info("[LICENSE] Revoked by server — removing local license")

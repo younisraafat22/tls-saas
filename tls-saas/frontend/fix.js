@@ -1,6 +1,0 @@
-﻿const fs = require('fs');
-const p = 'src/app/page.tsx';
-let txt = fs.readFileSync(p, 'utf8');
-txt = txt.replace('suffix: "/7"', 'suffix: (t.stats as any).suffix2 || "/7"');
-txt = txt.replace('suffix: "min"', 'suffix: (t.stats as any).suffix3 || "min"');
-fs.writeFileSync(p, txt, 'utf8');

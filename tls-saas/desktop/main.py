@@ -40,7 +40,39 @@ import queue
 import json
 import urllib.request
 import urllib.error
+
+
+
+def set_autostart(enable=True):
+    try:
+        key = reg.OpenKey(reg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, reg.KEY_ALL_ACCESS)
+        if enable:
+            reg.SetValueEx(key, "TLSAppointmentChecker", 0, reg.REG_SZ, sys.executable + " --startup")
+        else:
+            try:
+                reg.DeleteValue(key, "TLSAppointmentChecker")
+            except FileNotFoundError:
+                pass
+        reg.CloseKey(key)
+    except Exception as e:
+        print(f"Failed to set autostart: {e}")
+
+def check_autostart():
+    try:
+        key = reg.OpenKey(reg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, reg.KEY_READ)
+        value, _ = reg.QueryValueEx(key, "TLSAppointmentChecker")
+        reg.CloseKey(key)
+        # Check if the prefix matches our executable
+        return value.startswith(sys.executable)
+    except FileNotFoundError:
+        return False
+    except Exception:
+        return False
+
 import threading
+import pystray
+from PIL import Image
+import winreg as reg
 import webbrowser
 import pyperclip
 
@@ -112,7 +144,25 @@ def check_for_updates(callback):
 
 class TLSApp:
     def __init__(self, page: ft.Page):
+        import threading
+        self.page = page
+        
         # Check for single instance
+        self.is_startup = "--startup" in sys.argv
+        if self.is_startup:
+            self.page.window.visible = False
+            self.page.update()
+            
+            # Spawn tray icon immediately if starting in background
+            def start_tray_on_boot():
+                try:
+                    tray = self.setup_tray()
+                    tray.run()
+                except Exception as ex:
+                    pass
+            threading.Thread(target=start_tray_on_boot, daemon=True).start()
+
+        # Original startup
         self.mutex = None
         self.lock_file = None
         if not self.ensure_single_instance(page):
@@ -124,7 +174,6 @@ class TLSApp:
         print(f"[STARTUP] frozen={_frozen} BACKEND_URL={Config.BACKEND_URL} "
               f"LICENSE_SERVER_URL={Config.LICENSE_SERVER_URL} BASE_DIR={Config.BASE_DIR}")
 
-        self.page = page
         self.checker = None
         self.status_text = None
         self.countdown_text = None
@@ -158,7 +207,7 @@ class TLSApp:
         self.page.window.full_screen = False
         self.page.padding = 0
         self.page.window.always_on_top = False
-        self.page.window.prevent_close = False
+        self.page.window.prevent_close = True
         self.page.bgcolor = "#0A0E27"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.vertical_alignment = ft.MainAxisAlignment.START
@@ -219,6 +268,7 @@ class TLSApp:
 
         # Register window event handler for cleanup
         self.page.window.on_event = self.on_window_event
+        self.page.on_window_event = self.on_window_event
 
         # Register keyboard event handler for developer mode (Ctrl+Shift+D)
         self.page.on_keyboard_event = self.on_keyboard_event
@@ -408,7 +458,76 @@ class TLSApp:
         
         return True
 
+    def setup_tray(self):
+        def show_window(icon, item):
+            icon.stop()
+            self.page.window.visible = True
+            try:
+                self.page.window.restore()
+            except Exception: pass
+            self.page.update()
+
+        def quit_app(icon, item):
+            icon.stop()
+            if sys.platform == "win32" and hasattr(self, "mutex") and self.mutex:
+                try:
+                    import win32api
+                    win32api.CloseHandle(self.mutex)
+                except Exception:
+                    pass
+            self.page.window.destroy()
+            os._exit(0)
+
+        icon_path = os.path.join("Logos", "icon_WHITE.ico")
+        try:
+            # When PyInstaller frozen, use _MEIPASS
+            if getattr(sys, 'frozen', False):
+                base_path = sys._MEIPASS
+            else:
+                base_path = os.path.dirname(os.path.abspath(__file__))
+                
+            icon_path = os.path.join(base_path, "Logos", "icon_WHITE.ico")
+            
+            # Fallback to white png if ico is rejected by pystray/PIL
+            if not os.path.exists(icon_path):
+                icon_path = os.path.join(base_path, "Logos", "icon_WHITE.png")
+                
+            image = Image.open(icon_path)
+            # Ensure proper format for SysTray
+            if image.mode != "RGBA" and image.mode != "RGB":
+                image = image.convert("RGBA")
+        except Exception as e:
+            print(f"Failed to load pystray icon: {e}")
+            image = Image.new("RGB", (64, 64), color=(0, 217, 255))
+
+        menu = pystray.Menu(
+            pystray.MenuItem("Show App", show_window, default=True),
+            pystray.MenuItem("Quit", quit_app)
+        )
+        return pystray.Icon("TLS Checker", image, "TLS Appointment Checker", menu)
+
     def on_window_event(self, e):
+        import threading
+        """Handle window events - minimize to tray on close."""
+        
+        # Flet 0.80+ stores the specific event type enum string in e.type 
+        event_val = getattr(e, 'type', None) or getattr(e, 'data', None)
+        
+        # event_val could be an enum, a string, or an object, let's treat it robustly
+        event_str = str(event_val).lower()
+        if "close" in event_str:
+            self.page.window.visible = False
+            self.page.update()
+            
+            def run_tray():
+                try:
+                    tray = self.setup_tray()
+                    tray.run()
+                except Exception as ex:
+                    print(f"Tray error: {ex}")
+            threading.Thread(target=run_tray, daemon=True).start()
+
+    def __old_on_window_event(self, e):
         """Handle window events - cleanup mutex/lock on close."""
         if e.data == "close":
             # Clean up single instance lock
@@ -1944,6 +2063,16 @@ class TLSApp:
                 import traceback; traceback.print_exc()
 
         # Build config card children dynamically
+        # Startup Configuration
+        startup_switch = ft.Switch(value=check_autostart(), active_color="#00D9FF", on_change=lambda e: set_autostart(e.control.value))
+        startup_row = ft.Row(
+            [
+                ft.Row([ft.Icon(ft.Icons.ROCKET_LAUNCH, size=24, color="#00D9FF"), ft.Text("Launch App on PC Startup", size=15)]),
+                startup_switch
+            ],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN, spacing=10
+        )
+        
         config_children = [
             ft.Row(
                 [
@@ -1958,6 +2087,7 @@ class TLSApp:
             config_service_dropdown,
             config_branch_dropdown,
             config_notification_field,
+            startup_row,
         ]
         
         # Developer mode only: Show headless toggle and interval dropdown
@@ -2173,7 +2303,9 @@ class TLSApp:
                         requests.post(url, json={"rating": rating_var[0], "comment": comment_field.value, "source": "desktop"}, timeout=10)
                     except Exception:
                         pass
-                import threading
+                
+
+
                 threading.Thread(target=_send, daemon=True).start()
                 close_rating(e)
                 self._show_info_snack("Thank you for your feedback!", "#1A3A2A")
@@ -2544,7 +2676,7 @@ class TLSApp:
                                         ],
                                         spacing=8,
                                     ),
-                                    padding=10, height=650,
+                                    padding=10, height=682,
                                 ),
                                 expand=True,
                             ),

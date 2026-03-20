@@ -32,6 +32,9 @@ LWA_ALPHA         = 0x00000002
 SWP_NOMOVE        = 0x0002
 SWP_NOSIZE        = 0x0001
 SWP_NOACTIVATE    = 0x0010
+SWP_FRAMECHANGED  = 0x0020
+SW_HIDE = 0
+SW_SHOW = 5
 HWND_BOTTOM       = 1
 HWND_TOPMOST      = -1
 HWND_NOTOPMOST    = -2
@@ -57,7 +60,7 @@ def _set_z_order(hwnd: int, insert_after: int):
     user32.SetWindowPos(
         hwnd, insert_after,
         0, 0, 0, 0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
     )
 
 
@@ -125,12 +128,18 @@ class ChromeWindowHider:
             ex = _get_ex_style(self._hwnd)
             ex |= WS_EX_LAYERED | WS_EX_TOOLWINDOW
             ex &= ~WS_EX_APPWINDOW
+            
+            # Temporary hide/show to force taskbar icon removal on Windows 10/11
+            user32.ShowWindow(self._hwnd, SW_HIDE)
             _set_ex_style(self._hwnd, ex)
-
+            
             # Set alpha to 1 (practically invisible — 1/255 ≈ 0.4% opacity)
             _set_alpha(self._hwnd, 1)
 
-            # Push window behind everything
+            # Bring it back
+            user32.ShowWindow(self._hwnd, SW_SHOW)
+
+            # Push window behind everything and apply frame changes
             _set_z_order(self._hwnd, HWND_BOTTOM)
 
             self._hidden = True
@@ -145,6 +154,7 @@ class ChromeWindowHider:
             return
         try:
             # Restore original extended style (or sensible default)
+            user32.ShowWindow(self._hwnd, SW_HIDE)
             if self._original_ex_style is not None:
                 _set_ex_style(self._hwnd, self._original_ex_style)
             else:
@@ -152,12 +162,13 @@ class ChromeWindowHider:
                 ex &= ~(WS_EX_TOOLWINDOW | WS_EX_LAYERED)
                 ex |= WS_EX_APPWINDOW
                 _set_ex_style(self._hwnd, ex)
+            user32.ShowWindow(self._hwnd, SW_SHOW)
 
             # Fully opaque
             _set_alpha(self._hwnd, 255)
 
             # Bring to top but not topmost
-            _set_z_order(self._hwnd, HWND_NOTOPMOST)
+            user32.SetWindowPos(self._hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED)
 
             self._hidden = False
         except Exception as e:

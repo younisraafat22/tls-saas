@@ -3,7 +3,7 @@ Database Models
 SQLAlchemy models for user management, licenses, and settings
 """
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text, Float
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text, text, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from config import Config
@@ -127,6 +127,7 @@ class UserSettings(Base):
     notification_email = Column(String(255), nullable=True)
     enable_email_notifications = Column(Boolean, default=True)
     enable_windows_notifications = Column(Boolean, default=True)
+    has_appointment = Column(Boolean, default=False)
     enable_mobile_notifications = Column(Boolean, default=False)
     
     # Credential Options
@@ -198,6 +199,13 @@ SessionLocal = sessionmaker(bind=engine)
 def init_db():
     """Initialize database"""
     Base.metadata.create_all(bind=engine)
+    
+    # Apply migrations
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE user_settings ADD COLUMN has_appointment BOOLEAN DEFAULT 0"))
+    except Exception:
+        pass
     migrate_database()
     print("[OK] Database initialized successfully")
 
