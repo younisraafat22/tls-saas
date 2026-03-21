@@ -95,7 +95,7 @@ export default function AdminReviews() {
               <div className="flex justify-between items-end border-t border-white/10 pt-4 mt-auto">
                 <div className="text-xs text-gray-500 space-y-1">
                   <div className="truncate max-w-[150px]">
-                    {review.user_email || "Anonymous"}
+                    {review.user_name || review.user_email || "Anonymous"}
                   </div>
                   <div>
                     {new Date(review.created_at).toLocaleDateString()}

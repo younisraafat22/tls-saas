@@ -225,6 +225,15 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass  # Column already exists
 
+    # Add user_name to app_ratings for named review attribution
+    async with async_session() as db:
+        try:
+            await db.execute(text("ALTER TABLE app_ratings ADD COLUMN user_name VARCHAR(255)"))
+            await db.commit()
+            logger.info("Migration: added user_name to app_ratings")
+        except Exception:
+            pass  # Column already exists
+
     # Create user_credentials table if not exists (handled by create_tables, but add migration safety)
     async with async_session() as db:
         try:

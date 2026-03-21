@@ -293,6 +293,7 @@ class AppRating(Base):
     __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True)
+    user_name = Column(String, nullable=True)
     user_email = Column(String, index=True, nullable=True)
     rating = Column(Integer, nullable=False) # 1 to 5
     comment = Column(Text, nullable=True)

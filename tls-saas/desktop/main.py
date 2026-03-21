@@ -2680,10 +2680,14 @@ class TLSApp:
             def submit_rating(e):
                 if rating_var[0] == 0:
                     return
+                lic = get_license_status() or {}
                 payload = {
                     "rating": rating_var[0],
                     "comment": comment_field.value,
                     "source": "desktop",
+                    "user_email": (settings.notification_email or "").strip() if settings else "",
+                    "license_key": (lic.get("key") or "").strip(),
+                    "hardware_id": get_hardware_id(),
                 }
                 self._enqueue_feedback(payload)
                 self._flush_pending_feedback_async()
