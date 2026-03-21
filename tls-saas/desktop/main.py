@@ -150,6 +150,7 @@ class TLSApp:
         import threading
         self.page = page
         self._tray_running = False
+        self._active_view = ""
         
         # Check for single instance
         self.is_startup = "--startup" in sys.argv
@@ -333,6 +334,7 @@ class TLSApp:
             try:
                 self.page.window.maximized = not bool(self.page.window.maximized)
                 self._apply_window_shell_style()
+                self._refresh_shell_sensitive_view()
                 self.page.update()
             except Exception:
                 pass
@@ -654,6 +656,7 @@ class TLSApp:
         # Keep shell style synced with maximize/restore transitions.
         if any(k in event_str for k in ["maximize", "unmaximize", "restore", "resized"]):
             self._apply_window_shell_style()
+            self._refresh_shell_sensitive_view()
 
     def _current_shell_radius(self) -> int:
         """Rounded corners in normal mode, full-bleed rectangle when maximized."""
@@ -666,6 +669,14 @@ class TLSApp:
         """Apply host window border radius according to maximize state."""
         try:
             self.page.window.border_radius = self._current_shell_radius()
+        except Exception:
+            pass
+
+    def _refresh_shell_sensitive_view(self):
+        """Rebuild pages whose clipping depends on maximize/restore shell radius."""
+        try:
+            if self._active_view == "activation":
+                self.show_activation_page()
         except Exception:
             pass
 
@@ -1419,6 +1430,7 @@ class TLSApp:
 
     def show_activation_page(self, message=None):
         """Build and display the license activation page."""
+        self._active_view = "activation"
         self.page.controls.clear()
         self.page.scroll = None
 
@@ -1664,6 +1676,7 @@ class TLSApp:
             width=600,
         )
 
+        shell_radius = self._current_shell_radius()
         self.page.add(
             ft.Container(
                 content=ft.Stack(
@@ -1693,6 +1706,8 @@ class TLSApp:
                     expand=True,
                 ),
                 expand=True,
+                border_radius=shell_radius,
+                clip_behavior=ft.ClipBehavior.ANTI_ALIAS if shell_radius else ft.ClipBehavior.NONE,
             )
         )
         self.page.update()
@@ -1762,6 +1777,7 @@ class TLSApp:
             traceback.print_exc()
 
     def _show_monitoring_page_internal(self, auto_start=False):
+        self._active_view = "monitoring"
         self.page.controls.clear()
         self.page.scroll = None
 
