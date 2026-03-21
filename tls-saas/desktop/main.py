@@ -186,6 +186,8 @@ class TLSApp:
         self._developer_mode = False  # Hidden developer mode (Ctrl+Shift+D)
         self._cloud_monitoring = False   # True when using cloud/server-based monitoring
         self._cloud_poll_active = False  # Polling flag for cloud status
+        self._feedback_queue_path = os.path.join(str(Config.BASE_DIR), "pending_feedback.jsonl")
+        self._feedback_log_path = os.path.join(str(Config.BASE_DIR), "feedback_delivery.log")
 
         # Config data used when saving settings
         self.flow_data = {
@@ -211,13 +213,20 @@ class TLSApp:
         self.page.padding = 0
         self.page.window.always_on_top = False
         self.page.window.prevent_close = True
-        self.page.bgcolor = "#0A0E27"
+        self.page.bgcolor = ft.Colors.TRANSPARENT
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.vertical_alignment = ft.MainAxisAlignment.START
         
-        # Keep title bar and controls visible - no custom window background
-        self.page.window.title_bar_hidden = False
-        self.page.window.title_bar_buttons_hidden = False
+        # Use integrated in-app window controls.
+        self.page.window.title_bar_hidden = True
+        self.page.window.title_bar_buttons_hidden = True
+        try:
+            self.page.window.frameless = True
+            self.page.window.border_radius = 84
+            # Transparent host + rounded shell gives actual visible rounded corners.
+            self.page.window.bgcolor = ft.Colors.TRANSPARENT
+        except Exception:
+            pass
 
         # Set custom window icon (taskbar / title bar)
         try:
@@ -286,6 +295,9 @@ class TLSApp:
         # Check for updates in background
         check_for_updates(self._on_update_available)
 
+        # Flush any feedback saved while offline or during transient backend failures.
+        self._flush_pending_feedback_async()
+
         # Show a loading screen immediately, then route in background
         self._show_loading_screen()
         threading.Thread(target=self.check_license_and_route, daemon=True).start()
@@ -305,6 +317,77 @@ class TLSApp:
             tooltip="Visit Website",
             on_click=open_website,
         )
+
+    def create_window_controls(self):
+        """Create integrated window controls for custom title/header bars."""
+        def do_minimize(e):
+            try:
+                self.page.window.minimized = True
+                self.page.update()
+            except Exception:
+                pass
+
+        def do_max_restore(e):
+            try:
+                self.page.window.maximized = not bool(self.page.window.maximized)
+                self.page.update()
+            except Exception:
+                pass
+
+        def do_close(e):
+            self._minimize_to_tray()
+
+        return ft.Row(
+            [
+                ft.IconButton(
+                    icon=ft.Icons.MINIMIZE,
+                    tooltip="Minimize",
+                    on_click=do_minimize,
+                    icon_color=ft.Colors.GREY_300,
+                    style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.CROP_SQUARE,
+                    tooltip="Maximize / Restore",
+                    on_click=do_max_restore,
+                    icon_color=ft.Colors.GREY_300,
+                    style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.CLOSE,
+                    tooltip="Close",
+                    on_click=do_close,
+                    icon_color="#FF7A7A",
+                    style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
+                ),
+            ],
+            spacing=2,
+            alignment=ft.MainAxisAlignment.END,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+
+    def _minimize_to_tray(self):
+        """Hide window and show system tray icon (same behavior as native close)."""
+        try:
+            self.page.window.visible = False
+            self.page.update()
+        except Exception:
+            pass
+
+        if self._tray_running:
+            return
+        self._tray_running = True
+
+        def run_tray():
+            try:
+                tray = self.setup_tray()
+                tray.run()
+            except Exception as ex:
+                print(f"Tray error: {ex}")
+            finally:
+                self._tray_running = False
+
+        threading.Thread(target=run_tray, daemon=True).start()
     
     def ensure_single_instance(self, page: ft.Page):
         """
@@ -538,7 +621,6 @@ class TLSApp:
         return pystray.Icon("TLS Checker", image, "TLS Appointment Checker", menu)
 
     def on_window_event(self, e):
-        import threading
         """Handle window events - minimize to tray on close."""
         
         # Flet 0.80+ stores the specific event type enum string in e.type 
@@ -547,22 +629,7 @@ class TLSApp:
         # event_val could be an enum, a string, or an object, let's treat it robustly
         event_str = str(event_val).lower()
         if "close" in event_str:
-            self.page.window.visible = False
-            self.page.update()
-
-            if self._tray_running:
-                return
-            self._tray_running = True
-            
-            def run_tray():
-                try:
-                    tray = self.setup_tray()
-                    tray.run()
-                except Exception as ex:
-                    print(f"Tray error: {ex}")
-                finally:
-                    self._tray_running = False
-            threading.Thread(target=run_tray, daemon=True).start()
+            self._minimize_to_tray()
 
     def __old_on_window_event(self, e):
         """Handle window events - cleanup mutex/lock on close."""
@@ -891,7 +958,7 @@ class TLSApp:
                 width=width,
                 height=height,
                 padding=padding,
-                border_radius=24,
+                border_radius=30,
                 gradient=ft.LinearGradient(
                     begin=ft.Alignment(-1, -1),
                     end=ft.Alignment(1, 1),
@@ -911,7 +978,7 @@ class TLSApp:
                 width=width,
                 height=height,
                 padding=padding,
-                border_radius=24,
+                border_radius=30,
                 bgcolor="#1A1F3A",
                 border=ft.Border.all(1, ft.Colors.with_opacity(0.3, "#00D9FF")),
                 shadow=ft.BoxShadow(
@@ -974,6 +1041,185 @@ class TLSApp:
                 self.page.show_dialog(ft.SnackBar(content=ft.Text(msg, size=14, color=ft.Colors.WHITE), bgcolor=color, duration=4000))
         except Exception:
             pass
+
+    def _append_feedback_log(self, message: str):
+        """Append a timestamped feedback delivery event to local log file."""
+        try:
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_dir = os.path.dirname(self._feedback_log_path)
+            if log_dir:
+                os.makedirs(log_dir, exist_ok=True)
+            with open(self._feedback_log_path, "a", encoding="utf-8") as f:
+                f.write(f"[{ts}] {message}\n")
+        except Exception:
+            pass
+
+    def _enqueue_feedback(self, payload: dict):
+        """Persist feedback so it can be retried if immediate delivery fails."""
+        try:
+            queue_dir = os.path.dirname(self._feedback_queue_path)
+            if queue_dir:
+                os.makedirs(queue_dir, exist_ok=True)
+            with open(self._feedback_queue_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        except Exception as ex:
+            self._append_feedback_log(f"enqueue_failed error={ex}")
+
+    def _read_pending_feedback(self) -> list[dict]:
+        items: list[dict] = []
+        try:
+            if not os.path.exists(self._feedback_queue_path):
+                return items
+            with open(self._feedback_queue_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                        if isinstance(obj, dict):
+                            items.append(obj)
+                    except Exception:
+                        continue
+        except Exception as ex:
+            self._append_feedback_log(f"queue_read_failed error={ex}")
+        return items
+
+    def _write_pending_feedback(self, items: list[dict]):
+        try:
+            if not items:
+                if os.path.exists(self._feedback_queue_path):
+                    os.remove(self._feedback_queue_path)
+                return
+            queue_dir = os.path.dirname(self._feedback_queue_path)
+            if queue_dir:
+                os.makedirs(queue_dir, exist_ok=True)
+            with open(self._feedback_queue_path, "w", encoding="utf-8") as f:
+                for item in items:
+                    f.write(json.dumps(item, ensure_ascii=False) + "\n")
+        except Exception as ex:
+            self._append_feedback_log(f"queue_write_failed error={ex}")
+
+    def _discover_backend_url(self) -> str:
+        try:
+            import ssl
+
+            def _ctx():
+                try:
+                    import certifi
+                    return ssl.create_default_context(cafile=certifi.where())
+                except Exception:
+                    return ssl.create_default_context()
+
+            discover_req = urllib.request.Request(
+                "https://tls-saas.vercel.app/api/backend-url",
+                headers={"Accept": "application/json"},
+                method="GET",
+            )
+            with urllib.request.urlopen(discover_req, timeout=8, context=_ctx()) as dresp:
+                ddata = json.loads(dresp.read())
+            return str((ddata.get("url") or "").rstrip("/"))
+        except Exception as ex:
+            self._append_feedback_log(f"backend_discovery_failed error={ex}")
+            return ""
+
+    def _post_feedback(self, base_url: str, payload: dict) -> tuple[bool, str]:
+        base_url = (base_url or "").rstrip("/")
+        if not base_url:
+            return False, "empty_base_url"
+
+        endpoint = f"{base_url}/metrics/rate"
+        body = json.dumps(payload).encode("utf-8")
+
+        # First attempt: urllib + explicit SSL context.
+        try:
+            import ssl
+
+            def _ctx():
+                try:
+                    import certifi
+                    return ssl.create_default_context(cafile=certifi.where())
+                except Exception:
+                    return ssl.create_default_context()
+
+            req = urllib.request.Request(
+                endpoint,
+                data=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "User-Agent": "TLSAppointmentChecker/1.0",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=12, context=_ctx()) as resp:
+                code = int(getattr(resp, "status", 200))
+                if code < 400:
+                    return True, "ok"
+                return False, f"http_{code}"
+        except Exception as ex1:
+            # Second attempt: requests fallback (some frozen TLS stacks behave differently).
+            try:
+                import requests
+                resp = requests.post(
+                    endpoint,
+                    json=payload,
+                    timeout=12,
+                    headers={"User-Agent": "TLSAppointmentChecker/1.0"},
+                )
+                if int(resp.status_code) < 400:
+                    return True, "ok"
+                return False, f"requests_http_{resp.status_code}"
+            except Exception as ex2:
+                return False, f"urllib={ex1}; requests={ex2}"
+
+    def _deliver_feedback_payload(self, payload: dict) -> tuple[bool, str]:
+        urls = []
+        backend_url = (Config.BACKEND_URL or "").rstrip("/")
+        if backend_url:
+            urls.append(backend_url)
+        license_server_url = (Config.LICENSE_SERVER_URL or "").rstrip("/")
+        if license_server_url and license_server_url not in urls:
+            urls.append(license_server_url)
+        discovered_url = self._discover_backend_url()
+        if discovered_url and discovered_url not in urls:
+            urls.append(discovered_url)
+
+        if not urls:
+            return False, "no_backend_candidates"
+
+        last_error = "unknown"
+        for url in urls:
+            ok, reason = self._post_feedback(url, payload)
+            if ok:
+                self._append_feedback_log(f"feedback_delivered url={url}")
+                return True, "ok"
+            last_error = f"url={url} reason={reason}"
+
+        return False, last_error
+
+    def _flush_pending_feedback_async(self):
+        """Try delivering all queued feedback in the background, keeping failed items queued."""
+        def _worker():
+            pending = self._read_pending_feedback()
+            if not pending:
+                return
+
+            remaining = []
+            delivered = 0
+            for item in pending:
+                ok, reason = self._deliver_feedback_payload(item)
+                if ok:
+                    delivered += 1
+                else:
+                    remaining.append(item)
+                    self._append_feedback_log(f"feedback_delivery_failed reason={reason}")
+
+            self._write_pending_feedback(remaining)
+            if delivered:
+                self._append_feedback_log(f"feedback_flush_done delivered={delivered} remaining={len(remaining)}")
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _is_premium_plan(self) -> bool:
         """Check if the current license is a premium plan (server monitoring eligible)."""
@@ -1246,6 +1492,7 @@ class TLSApp:
                 ),
                 ft.Container(expand=True),
                 self.create_website_icon_button(),
+                self.create_window_controls(),
             ]),
             padding=ft.Padding(left=20, right=20, top=15, bottom=0),
         )
@@ -2331,21 +2578,15 @@ class TLSApp:
             def submit_rating(e):
                 if rating_var[0] == 0:
                     return
-                # Make simple POST
-                def _send():
-                    try:
-                        import requests
-                        from config import Config
-                        url = f"{Config.API_URL}/metrics/rate"
-                        requests.post(url, json={"rating": rating_var[0], "comment": comment_field.value, "source": "desktop"}, timeout=10)
-                    except Exception:
-                        pass
-                
-
-
-                threading.Thread(target=_send, daemon=True).start()
+                payload = {
+                    "rating": rating_var[0],
+                    "comment": comment_field.value,
+                    "source": "desktop",
+                }
+                self._enqueue_feedback(payload)
+                self._flush_pending_feedback_async()
                 close_rating(e)
-                self._show_info_snack("Thank you for your feedback!", "#1A3A2A")
+                self._show_info_snack("Thank you! Your feedback was saved and is being delivered.", "#1A3A2A")
 
             def close_rating(e):
                 self.page.pop_dialog()
@@ -2510,6 +2751,7 @@ class TLSApp:
                     on_click=change_plan,
                     icon_color="#00D9FF",
                 ),
+                self.create_window_controls(),
             ],
             spacing=10,
             alignment=ft.MainAxisAlignment.END,
@@ -2733,7 +2975,17 @@ class TLSApp:
             expand=True,
         )
 
-        self.page.add(content)
+        outer_shell = ft.Container(
+            content=content,
+            bgcolor="#0A0E27",
+            border_radius=64,
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+            padding=ft.Padding(left=6, right=6, top=6, bottom=6),
+            margin=ft.Margin(left=14, right=14, top=14, bottom=14),
+            expand=True,
+        )
+
+        self.page.add(outer_shell)
 
         # Force window size
         self.page.window.width = 1100
@@ -2857,9 +3109,13 @@ class TLSApp:
             content=ft.Row(
                 [
                     ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=back_to_monitor),
+                    ft.Container(expand=True),
                     ft.Text("Screenshots Gallery", size=28, weight=ft.FontWeight.BOLD),
+                    ft.Container(expand=True),
+                    self.create_window_controls(),
                 ],
                 spacing=10,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             padding=20,
         )

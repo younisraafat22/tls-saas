@@ -16,6 +16,14 @@ Write-Host "[1/2] Running PyInstaller..." -ForegroundColor Yellow
 $distPath  = Join-Path $root "dist"
 $buildPath = Join-Path $root "build"
 
+# Remove stale artifacts so frozen builds never reuse old files.
+if (Test-Path $distPath) {
+    Remove-Item -Recurse -Force $distPath
+}
+if (Test-Path $buildPath) {
+    Remove-Item -Recurse -Force $buildPath
+}
+
 $oldErrorAction = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
 
