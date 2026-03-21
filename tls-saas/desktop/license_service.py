@@ -622,6 +622,11 @@ def activate_license(key: str) -> tuple[bool, str]:
         except Exception as exc:
             logger.warning(f"[LICENSE] Branch fetch failed ({try_url}): {exc}")
 
+    # Reset revocation cache to this key after a successful activation flow.
+    _revoke_cache["time"] = time.time()
+    _revoke_cache["key"] = key.strip().upper()
+    _revoke_cache["not_revoked"] = True
+
     _write_license_file(license_data)
     return True, f"License activated! Type: {plan_info['name']}"
 
@@ -676,8 +681,8 @@ def activate_trial() -> tuple[bool, str]:
 
 # ── Revocation check cache (in-memory, per session) ──────────────────────────
 # Avoids blocking the UI on every get_license_status() call.
-# Format: {"time": float | None, "not_revoked": bool}
-_revoke_cache: dict = {"time": None, "not_revoked": True}
+# Format: {"time": float | None, "not_revoked": bool, "key": str | None}
+_revoke_cache: dict = {"time": None, "not_revoked": True, "key": None}
 _REVOKE_CACHE_TTL = 300  # 5 minutes
 
 # Stable URL to discover the current backend URL (survives tunnel restarts)
@@ -761,10 +766,12 @@ def get_license_status(force_network: bool = False) -> dict | None:
     # Only check for non-trial licenses to reduce server load.
     if data["plan"] != "trial" and data.get("key"):
         now_ts = time.time()
+        current_key = str(data.get("key") or "").upper()
         cache_valid = (
             not force_network
             and _revoke_cache["time"] is not None
             and now_ts - _revoke_cache["time"] < _REVOKE_CACHE_TTL
+            and str(_revoke_cache.get("key") or "").upper() == current_key
         )
         if cache_valid and not _revoke_cache["not_revoked"]:
             # Cached as revoked — enforce it
@@ -813,6 +820,7 @@ def get_license_status(force_network: bool = False) -> dict | None:
                 return None
 
             _revoke_cache["time"] = now_ts
+            _revoke_cache["key"] = current_key
             _revoke_cache["not_revoked"] = not revoked
 
             if revoked:
