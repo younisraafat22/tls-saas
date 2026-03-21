@@ -1651,6 +1651,7 @@ class TLSApp:
                         # does not show the desktop behind this page.
                         ft.Container(
                             expand=True,
+                            border_radius=84,
                             gradient=ft.LinearGradient(
                                 begin=ft.Alignment(-1, -1),
                                 end=ft.Alignment(1, 1),
@@ -1672,6 +1673,8 @@ class TLSApp:
                     expand=True,
                 ),
                 expand=True,
+                border_radius=84,
+                clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
             )
         )
         self.page.update()
