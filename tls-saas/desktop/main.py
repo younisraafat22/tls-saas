@@ -2875,7 +2875,7 @@ class TLSApp:
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 )
             ),
-            padding=ft.Padding(left=0, right=0, top=15, bottom=10),
+            padding=ft.Padding(left=0, right=0, top=6, bottom=8),
         )
 
         # ---- App Info card ----
@@ -3006,7 +3006,7 @@ class TLSApp:
         content = ft.Container(
             content=ft.Column(
                 [
-                    self.top_drag_strip(22),
+                    self.top_drag_strip(10),
                     header,
                     ft.Divider(height=1, color=ft.Colors.with_opacity(0.2, ft.Colors.WHITE)),
                     ft.Container(height=15),
