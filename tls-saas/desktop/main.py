@@ -95,6 +95,8 @@ UPDATE_CHECK_URL = f"{Config.BACKEND_URL}/api/app/version"
 # Fixed single-user ID for all DB operations (desktop app, no auth)
 USER_ID = 1
 
+SHELL_RADIUS = 84
+
 
 def _load_image_data_url(relative_path: str) -> str | None:
     """Load a local image and return a data-URL for ft.Image(src=...)."""
@@ -222,9 +224,9 @@ class TLSApp:
         self.page.window.title_bar_buttons_hidden = True
         try:
             self.page.window.frameless = True
-            self.page.window.border_radius = 84
             # Transparent host + rounded shell gives actual visible rounded corners.
             self.page.window.bgcolor = ft.Colors.TRANSPARENT
+            self._apply_window_shell_style()
         except Exception:
             pass
 
@@ -330,6 +332,7 @@ class TLSApp:
         def do_max_restore(e):
             try:
                 self.page.window.maximized = not bool(self.page.window.maximized)
+                self._apply_window_shell_style()
                 self.page.update()
             except Exception:
                 pass
@@ -647,6 +650,24 @@ class TLSApp:
         event_str = str(event_val).lower()
         if "close" in event_str:
             self._minimize_to_tray()
+            return
+        # Keep shell style synced with maximize/restore transitions.
+        if any(k in event_str for k in ["maximize", "unmaximize", "restore", "resized"]):
+            self._apply_window_shell_style()
+
+    def _current_shell_radius(self) -> int:
+        """Rounded corners in normal mode, full-bleed rectangle when maximized."""
+        try:
+            return 0 if bool(self.page.window.maximized) else SHELL_RADIUS
+        except Exception:
+            return SHELL_RADIUS
+
+    def _apply_window_shell_style(self):
+        """Apply host window border radius according to maximize state."""
+        try:
+            self.page.window.border_radius = self._current_shell_radius()
+        except Exception:
+            pass
 
     def __old_on_window_event(self, e):
         """Handle window events - cleanup mutex/lock on close."""
@@ -1643,6 +1664,7 @@ class TLSApp:
             width=600,
         )
 
+        shell_radius = self._current_shell_radius()
         self.page.add(
             ft.Container(
                 content=ft.Stack(
@@ -1651,7 +1673,7 @@ class TLSApp:
                         # does not show the desktop behind this page.
                         ft.Container(
                             expand=True,
-                            border_radius=84,
+                            border_radius=shell_radius,
                             gradient=ft.LinearGradient(
                                 begin=ft.Alignment(-1, -1),
                                 end=ft.Alignment(1, 1),
@@ -1673,8 +1695,8 @@ class TLSApp:
                     expand=True,
                 ),
                 expand=True,
-                border_radius=84,
-                clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+                border_radius=shell_radius,
+                clip_behavior=ft.ClipBehavior.ANTI_ALIAS if shell_radius else ft.ClipBehavior.NONE,
             )
         )
         self.page.update()
@@ -3022,13 +3044,15 @@ class TLSApp:
             expand=True,
         )
 
+        shell_radius = self._current_shell_radius()
+        is_maximized = shell_radius == 0
         outer_shell = ft.Container(
             content=content,
             bgcolor="#0A0E27",
-            border_radius=64,
-            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-            padding=ft.Padding(left=6, right=6, top=6, bottom=6),
-            margin=ft.Margin(left=14, right=14, top=14, bottom=14),
+            border_radius=shell_radius,
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS if shell_radius else ft.ClipBehavior.NONE,
+            padding=ft.Padding(left=6, right=6, top=6, bottom=6) if not is_maximized else 0,
+            margin=ft.Margin(left=14, right=14, top=14, bottom=14) if not is_maximized else 0,
             expand=True,
         )
 
@@ -3038,7 +3062,6 @@ class TLSApp:
         self.page.window.width = 1100
         self.page.window.height = 950
         self.page.window.maximizable = True
-        self.page.window.maximized = False
         self.page.window.full_screen = False
         try:
             import ctypes
