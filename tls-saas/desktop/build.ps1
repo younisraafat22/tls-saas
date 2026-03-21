@@ -4,6 +4,7 @@
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
+Set-Location $root
 
 Write-Host ""
 Write-Host "=== TLS Appointment Checker Build ===" -ForegroundColor Cyan
@@ -27,7 +28,8 @@ if (Test-Path $buildPath) {
 $oldErrorAction = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
 
-cmd.exe /c "python -m PyInstaller TLSAppointmentChecker.spec --clean --distpath ""$distPath"" --workpath ""$buildPath"" --noconfirm"
+$specPath = Join-Path $root "TLSAppointmentChecker.spec"
+cmd.exe /c "python -m PyInstaller ""$specPath"" --clean --distpath ""$distPath"" --workpath ""$buildPath"" --noconfirm"
 
 $ErrorActionPreference = $oldErrorAction
 

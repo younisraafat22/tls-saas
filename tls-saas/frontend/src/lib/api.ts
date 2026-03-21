@@ -321,7 +321,8 @@ export const adminApi = {
     api.post(`/api/admin/licenses/${paymentId}/regenerate`),
   generateTestLicense: (hardware_id: string) =>
     api.post("/api/admin/generate-test-license", { hardware_id }),
-  recoverLicense: (email: string) =>
+  // Admin-only lookup for support/recovery workflows
+  recoverLicensesByEmail: (email: string) =>
     api.post("/api/app/license/recover", { email }),
   resendLicenseEmail: (paymentId: number) =>
     api.post(`/api/admin/payments/${paymentId}/resend-email`),

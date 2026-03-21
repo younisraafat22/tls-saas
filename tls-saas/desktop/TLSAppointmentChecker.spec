@@ -2,7 +2,6 @@
 from PyInstaller.utils.hooks import collect_all, collect_data_files
 
 datas = [
-    ('.env', '.'),
     ('.env.example', '.'),
     ('Logos', 'Logos'),
     ('version.json', '.'),

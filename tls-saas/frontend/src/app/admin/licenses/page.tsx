@@ -577,7 +577,7 @@ function RecoverModal({ onClose }: { onClose: () => void }) {
     setError("");
     setLoading(true);
     try {
-      const res = await adminApi.recoverLicense(email.trim());
+      const res = await adminApi.recoverLicensesByEmail(email.trim());
       setResults(res.licenses || []);
     } catch (err: any) {
       setError(err?.detail || err?.message || "Lookup failed");

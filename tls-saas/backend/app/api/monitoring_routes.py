@@ -45,6 +45,17 @@ class LicenseDeactivateRequest(BaseModel):
     hardware_id: str
 
 
+def _hardware_matches(stored_hardware_id: str | None, provided_hardware_id: str | None) -> bool:
+    """Allow exact matches for full IDs and prefix matches for legacy imported licenses."""
+    stored = (stored_hardware_id or "").strip()
+    provided = (provided_hardware_id or "").strip()
+    if not stored or not provided:
+        return True
+    if len(stored) == 8:
+        return provided.upper().startswith(stored.upper())
+    return stored.lower() == provided.lower()
+
+
 def _validate_license_signature(plan: str, hw_short: str, rand: str, sig: str) -> bool:
     """Verify HMAC-SHA256 signature of a license key."""
     import hashlib, hmac as _hmac
@@ -108,8 +119,16 @@ async def license_verify(
                         return {"found": True, "is_active": False, "plan": parsed["plan"]}
                 except Exception:
                     pass
-            # Key is valid (HMAC checks out) but not in DB — allow it.
-            return {"found": True, "is_active": True, "plan": parsed["plan"]}
+            # A valid signature alone is not enough — the key must exist in the database.
+            return {"found": False, "error": "License key is not registered"}
+
+        if not _hardware_matches(payment.hardware_id, body.hardware_id):
+            return {
+                "found": True,
+                "is_active": False,
+                "plan": payment.plan_key or parsed["plan"],
+                "error": "Hardware ID mismatch",
+            }
 
         is_active = payment.status == PaymentStatus.APPROVED
         return {
@@ -168,7 +187,7 @@ async def license_deactivate(
         return {"success": True, "message": "License not found in database (already inactive)"}
 
     # Verify hardware_id matches
-    if payment.hardware_id and payment.hardware_id != body.hardware_id:
+    if not _hardware_matches(payment.hardware_id, body.hardware_id):
         return {"success": False, "error": "Hardware ID mismatch"}
 
     payment.status = PaymentStatus.REJECTED

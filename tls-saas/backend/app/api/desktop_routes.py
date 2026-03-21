@@ -8,6 +8,7 @@ from app.schemas import AppVersionResponse, DesktopPaymentSubmit
 from app.config import settings
 from app.database import get_db
 from app.models import Payment, User, PaymentMethod, PaymentStatus
+from app.auth import get_current_admin
 
 router = APIRouter(prefix="/api/app", tags=["desktop-app"])
 
@@ -69,11 +70,12 @@ async def download_info():
 @router.post("/license/recover")
 async def recover_license(
     body: dict,
+    admin=Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Return the license key(s) for a given email address.
-    Used by the desktop app when a user accidentally deletes their .license file.
+    Admin-only lookup of license key(s) for a given email address.
+    This is intentionally protected so license keys are never disclosed publicly.
     """
     from sqlalchemy import select, or_
     email = (body.get("email") or "").strip().lower()

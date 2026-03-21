@@ -7,6 +7,8 @@ from cryptography.fernet import Fernet
 from config import Config
 import base64
 import hashlib
+import platform
+import uuid
 
 
 class AuthService:
@@ -15,8 +17,30 @@ class AuthService:
     def __init__(self):
         self._cipher = self._get_cipher()
 
+    def _derive_local_secret(self) -> str:
+        configured = (Config.SECRET_KEY or "").strip()
+        if configured:
+            return configured
+
+        parts = [f"mac:{uuid.getnode()}", f"host:{platform.node()}"]
+        if platform.system() == "Windows":
+            try:
+                import winreg
+                reg = winreg.OpenKey(
+                    winreg.HKEY_LOCAL_MACHINE,
+                    r"SOFTWARE\Microsoft\Cryptography",
+                    0,
+                    winreg.KEY_READ | winreg.KEY_WOW64_64KEY,
+                )
+                val, _ = winreg.QueryValueEx(reg, "MachineGuid")
+                winreg.CloseKey(reg)
+                parts.append(f"wguid:{val}")
+            except Exception:
+                pass
+        return "|".join(parts)
+
     def _get_cipher(self):
-        key = hashlib.sha256(Config.SECRET_KEY.encode()).digest()
+        key = hashlib.sha256(self._derive_local_secret().encode()).digest()
         key_b64 = base64.urlsafe_b64encode(key)
         return Fernet(key_b64)
 

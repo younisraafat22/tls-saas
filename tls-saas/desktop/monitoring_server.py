@@ -52,14 +52,13 @@ from functools import wraps
 
 from flask import Flask, jsonify, request, abort
 from flask_cors import CORS
+from dotenv import load_dotenv
 
 # ── Ensure sibling imports work ────────────────────────────────────
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Set SMTP credentials before importing config / notification_service
-# (notification_service reads Config.ADMIN_EMAIL at import time)
-os.environ.setdefault("ADMIN_EMAIL", "tlsappointmentchecker@gmail.com")
-os.environ.setdefault("ADMIN_EMAIL_PASSWORD", "zylc etmv kuic uluq")
+# Load desktop .env so production secrets can live outside source code.
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"), override=False)
 
 # ── Fernet for encrypting user TLS passwords at rest ──────────────
 from cryptography.fernet import Fernet
@@ -68,8 +67,7 @@ def _make_fernet(passphrase: str) -> Fernet:
     key = hashlib.sha256(passphrase.encode()).digest()
     return Fernet(base64.urlsafe_b64encode(key))
 
-_fernet = _make_fernet(os.environ.get("CREDENTIAL_SECRET",
-                                       "tls-monitor-2026-credential-secret"))
+_fernet = _make_fernet(os.environ.get("CREDENTIAL_SECRET", ""))
 
 # ══════════════════════════════════════════════════════════════════════
 #  FLASK APP
@@ -82,15 +80,28 @@ def log_request():
     """Log all incoming requests for debugging."""
     print(f"[Request] {request.method} {request.path} from {request.remote_addr}")
 
-LICENSE_SECRET = "TLS-CHECKER-2026-HMAC-SECRET-KEY-DONT-SHARE"
+LICENSE_SECRET = os.environ.get("LICENSE_HMAC_SECRET", "")
 ADMIN_API_KEY  = os.environ.get("ADMIN_API_KEY", secrets.token_hex(16))
 MAX_BROWSERS   = int(os.environ.get("MAX_BROWSERS", "2"))
 
 # SMTP config (for sending license keys & notifications from server)
 SMTP_SERVER  = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT    = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USER    = os.environ.get("ADMIN_EMAIL", "tlsappointmentchecker@gmail.com")
-SMTP_PASS    = os.environ.get("ADMIN_EMAIL_PASSWORD", "zylc etmv kuic uluq")
+SMTP_USER    = os.environ.get("ADMIN_EMAIL", "")
+SMTP_PASS    = os.environ.get("ADMIN_EMAIL_PASSWORD", "")
+
+
+def _ensure_secure_config():
+    missing = []
+    if not os.environ.get("CREDENTIAL_SECRET", ""):
+        missing.append("CREDENTIAL_SECRET")
+    if not LICENSE_SECRET:
+        missing.append("LICENSE_HMAC_SECRET")
+    if missing:
+        raise RuntimeError(
+            "Missing required security settings for monitoring_server.py: "
+            + ", ".join(missing)
+        )
 
 # ══════════════════════════════════════════════════════════════════════
 #  DATABASE  (SQLite — single file for everything)
@@ -381,6 +392,7 @@ def deactivate_license():
     return jsonify({"success": False, "error": "Not found or already deactivated"}), 404
 
 @app.route("/api/license/retrieve", methods=["POST"])
+@require_admin
 def retrieve_license():
     data = request.get_json() or {}
     email = data.get("email", "").strip().lower()
@@ -449,8 +461,9 @@ def monitoring_start():
     # Validate license is active
     conn = get_db()
     lic = conn.execute("SELECT is_active FROM licenses WHERE license_key=? AND hardware_id=?", (lk, hw)).fetchone()
-    # If license not in server DB, accept it anyway (offline-generated key)
-    # The key format validation is done client-side
+    if not lic or not bool(lic["is_active"]):
+        conn.close()
+        return jsonify({"error": "License is not registered or is inactive"}), 403
 
     # Encrypt TLS password
     enc_pass = _fernet.encrypt(data["tls_password"].encode()).decode()
@@ -923,6 +936,7 @@ def main():
                         help="ngrok auth token")
     args = parser.parse_args()
 
+    _ensure_secure_config()
     init_db()
 
     print("=" * 60)

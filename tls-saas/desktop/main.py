@@ -203,9 +203,9 @@ class TLSApp:
         # ---- Page chrome ----
         self.page.title = Config.APP_NAME
         self.page.window.width = 1100
-        self.page.window.height = 950
+        self.page.window.height = 1020
         self.page.window.min_width = 990
-        self.page.window.min_height = 850
+        self.page.window.min_height = 920
         self.page.window.resizable = True
         self.page.window.maximizable = True
         self.page.window.maximized = False
@@ -364,6 +364,23 @@ class TLSApp:
             spacing=2,
             alignment=ft.MainAxisAlignment.END,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+
+    def make_draggable(self, control: ft.Control) -> ft.Control:
+        """Wrap a control in a draggable area when running with a custom frameless window."""
+        try:
+            return ft.WindowDragArea(content=control)
+        except Exception:
+            return control
+
+    def top_drag_strip(self, height: int = 18) -> ft.Control:
+        """Create an invisible draggable strip at the very top of the app window."""
+        return self.make_draggable(
+            ft.Container(
+                height=height,
+                bgcolor=ft.Colors.TRANSPARENT,
+                content=ft.Row([], spacing=0),
+            )
         )
 
     def _minimize_to_tray(self):
@@ -650,11 +667,14 @@ class TLSApp:
                     except Exception:
                         pass
 
-    _DEV_PASSWORD = "tls2026dev"
+    _DEV_PASSWORD = (Config.DEVELOPER_PASSWORD or "").strip()
 
     def on_keyboard_event(self, e: ft.KeyboardEvent):
         """Handle keyboard events — Ctrl+Shift+F12 opens developer mode password dialog."""
         if e.key == "F12" and e.ctrl and e.shift:
+            if not self._DEV_PASSWORD:
+                self._show_info_snack("Developer mode is disabled in this build.", color=ft.Colors.ORANGE_400)
+                return
             if self._developer_mode:
                 # Already in dev mode — just toggle off
                 self._developer_mode = False
@@ -1484,16 +1504,24 @@ class TLSApp:
 
         # Add website icon button at top
         top_bar = ft.Container(
-            content=ft.Row([
-                ft.TextButton(
-                    "🌐 Get a License on Website",
-                    on_click=open_website,
-                    style=ft.ButtonStyle(color="#00D9FF"),
-                ),
-                ft.Container(expand=True),
-                self.create_website_icon_button(),
-                self.create_window_controls(),
-            ]),
+            content=ft.Column(
+                [
+                    self.top_drag_strip(20),
+                    self.make_draggable(
+                        ft.Row([
+                            ft.TextButton(
+                                "🌐 Get a License on Website",
+                                on_click=open_website,
+                                style=ft.ButtonStyle(color="#00D9FF"),
+                            ),
+                            ft.Container(expand=True),
+                            self.create_website_icon_button(),
+                            self.create_window_controls(),
+                        ])
+                    ),
+                ],
+                spacing=0,
+            ),
             padding=ft.Padding(left=20, right=20, top=15, bottom=0),
         )
 
@@ -2650,8 +2678,8 @@ class TLSApp:
                 subj = (support_subject.value or "").strip()
                 msg = (support_message.value or "").strip()
                 reply_email = (support_email_field.value or "").strip()
-                if not subj or not msg:
-                    support_status.value = "Please fill in subject and message."
+                if not subj or not msg or not reply_email:
+                    support_status.value = "Please fill in email, subject, and message."
                     support_status.color = ft.Colors.RED_400
                     self.page.update()
                     return
@@ -2662,31 +2690,29 @@ class TLSApp:
 
                 def _send():
                     try:
-                        import smtplib
-                        from email.mime.text import MIMEText
-                        from email.mime.multipart import MIMEMultipart
                         hw_id = get_hardware_id()
                         plan_name = license_status.get('plan', 'unknown') if license_status else 'none'
-                        body = (
-                            f"From: {reply_email or 'N/A'}\n"
-                            f"Hardware ID: {hw_id}\n"
-                            f"Plan: {plan_name}\n"
-                            f"App Version: {VERSION}\n"
-                            f"{'='*40}\n\n"
-                            f"{msg}"
+                        payload = {
+                            "name": "Desktop App User",
+                            "email": reply_email,
+                            "subject": f"[Desktop Support] {subj}",
+                            "message": (
+                                f"Hardware ID: {hw_id}\n"
+                                f"Plan: {plan_name}\n"
+                                f"App Version: {VERSION}\n"
+                                f"{'='*40}\n\n"
+                                f"{msg}"
+                            ),
+                        }
+                        req = urllib.request.Request(
+                            f"{Config.BACKEND_URL.rstrip('/')}/api/contact",
+                            data=json.dumps(payload).encode("utf-8"),
+                            headers={"Content-Type": "application/json", "Accept": "application/json"},
+                            method="POST",
                         )
-                        email_msg = MIMEMultipart()
-                        email_msg['From'] = "tlsappointmentchecker@gmail.com"
-                        email_msg['To'] = "tlsappointmentchecker@gmail.com"
-                        email_msg['Subject'] = f"[Support] {subj}"
-                        if reply_email:
-                            email_msg['Reply-To'] = reply_email
-                        email_msg.attach(MIMEText(body, 'plain'))
-
-                        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-                            server.starttls()
-                            server.login("tlsappointmentchecker@gmail.com", "zylc etmv kuic uluq")
-                            server.send_message(email_msg)
+                        with urllib.request.urlopen(req, timeout=15) as response:
+                            if getattr(response, "status", 200) >= 400:
+                                raise RuntimeError("Support request failed")
 
                         support_status.value = "… Message sent! We'll get back to you soon."
                         support_status.color = ft.Colors.GREEN_400
@@ -2758,16 +2784,18 @@ class TLSApp:
         )
 
         header = ft.Container(
-            content=ft.Row(
-                [
-                    ft.Image(
-                        src=self._logo_src or "Logos/LOGO_H_W.png",
-                        width=220, height=50,
-                    ),
-                    header_actions,
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            content=self.make_draggable(
+                ft.Row(
+                    [
+                        ft.Image(
+                            src=self._logo_src or "Logos/LOGO_H_W.png",
+                            width=220, height=50,
+                        ),
+                        header_actions,
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                )
             ),
             padding=ft.Padding(left=0, right=0, top=15, bottom=10),
         )
@@ -2900,6 +2928,7 @@ class TLSApp:
         content = ft.Container(
             content=ft.Column(
                 [
+                    self.top_drag_strip(22),
                     header,
                     ft.Divider(height=1, color=ft.Colors.with_opacity(0.2, ft.Colors.WHITE)),
                     ft.Container(height=15),
@@ -2989,7 +3018,7 @@ class TLSApp:
 
         # Force window size
         self.page.window.width = 1100
-        self.page.window.height = 850
+        self.page.window.height = 950
         self.page.window.maximizable = True
         self.page.window.maximized = False
         self.page.window.full_screen = False
@@ -3000,7 +3029,7 @@ class TLSApp:
             screen_width = user32.GetSystemMetrics(0)
             screen_height = user32.GetSystemMetrics(1)
             self.page.window.left = (screen_width - 1100) // 2
-            self.page.window.top = max(0, (screen_height - 850) // 2)
+            self.page.window.top = max(0, (screen_height - 950) // 2)
         except Exception:
             pass
 
@@ -3106,16 +3135,18 @@ class TLSApp:
             )
 
         header = ft.Container(
-            content=ft.Row(
-                [
-                    ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=back_to_monitor),
-                    ft.Container(expand=True),
-                    ft.Text("Screenshots Gallery", size=28, weight=ft.FontWeight.BOLD),
-                    ft.Container(expand=True),
-                    self.create_window_controls(),
-                ],
-                spacing=10,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            content=self.make_draggable(
+                ft.Row(
+                    [
+                        ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=back_to_monitor),
+                        ft.Container(expand=True),
+                        ft.Text("Screenshots Gallery", size=28, weight=ft.FontWeight.BOLD),
+                        ft.Container(expand=True),
+                        self.create_window_controls(),
+                    ],
+                    spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                )
             ),
             padding=20,
         )
@@ -3123,6 +3154,7 @@ class TLSApp:
         content = ft.Container(
             content=ft.Column(
                 [
+                    self.top_drag_strip(22),
                     header,
                     ft.Divider(height=1, color=ft.Colors.with_opacity(0.2, ft.Colors.WHITE)),
                     ft.Container(height=20),

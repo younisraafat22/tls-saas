@@ -23,18 +23,29 @@ import threading
 import time
 import socket
 from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv
 
 # Ensure sibling imports work
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"), override=False)
 from license_service import PLANS, get_hardware_id, parse_license_key
 import hmac
 import hashlib
 import secrets
 
-SECRET = "TLS-CHECKER-2026-HMAC-SECRET-KEY-DONT-SHARE"
+SECRET = os.environ.get("LICENSE_HMAC_SECRET", "")
+
+
+def _ensure_license_secret() -> None:
+    if not SECRET:
+        raise RuntimeError(
+            "LICENSE_HMAC_SECRET is required for license generation. "
+            "Set it in the environment before running the license manager."
+        )
 
 def _sign(payload: str) -> str:
     """HMAC-SHA256 signature of payload."""
+    _ensure_license_secret()
     return hmac.new(SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
 
 def generate_license_key(plan: str, hardware_id: str) -> str:

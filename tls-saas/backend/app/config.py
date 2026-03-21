@@ -13,7 +13,8 @@ class Settings(BaseSettings):
     APP_NAME: str = "TLS Appointment Checker"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
-    SECRET_KEY: str = "CHANGE-THIS-TO-A-RANDOM-64-CHAR-STRING-IN-PRODUCTION"
+    ALLOW_INSECURE_DEFAULTS: bool = False
+    SECRET_KEY: str = ""
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
     BACKEND_URL: str = "http://localhost:8000"
     FRONTEND_URL: str = "https://tls-saas.vercel.app"
@@ -24,14 +25,14 @@ class Settings(BaseSettings):
     # PostgreSQL example: "postgresql+asyncpg://user:pass@localhost:5432/tls_saas"
 
     # ── JWT Auth ─────────────────────────────────────────
-    JWT_SECRET: str = "jwt-secret-change-in-production-make-it-long"
+    JWT_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # ── Admin ────────────────────────────────────────────
     ADMIN_EMAIL: str = "admin@tlschecker.com"
-    ADMIN_PASSWORD: str = "admin123"  # Changed on first login
+    ADMIN_PASSWORD: str = ""
 
     # ── Email (SMTP) ─────────────────────────────────────
     SMTP_SERVER: str = "smtp.gmail.com"
@@ -53,7 +54,7 @@ class Settings(BaseSettings):
     MAX_CONCURRENT_BROWSERS: int = 6
 
     # ── Encryption key for stored TLS credentials ────────
-    CREDENTIAL_ENCRYPTION_KEY: str = "credential-encryption-key-change-this"
+    CREDENTIAL_ENCRYPTION_KEY: str = ""
 
     # ── Pricing (EGP) ───────────────────────────────────
     PRICE_LEGALIZATION_MONTHLY: float = 300.0
@@ -63,12 +64,12 @@ class Settings(BaseSettings):
     CURRENCY: str = "EGP"
 
     # ── License Generation ───────────────────────────────
-    LICENSE_HMAC_SECRET: str = "TLS-CHECKER-2026-HMAC-SECRET-KEY-DONT-SHARE"
+    LICENSE_HMAC_SECRET: str = ""
 
     # ── Worker (laptop → Fly.io) ─────────────────────────
     # Shared secret between the laptop worker and the Fly.io API.
     # Set via environment variable on both sides.
-    WORKER_SECRET: str = "worker-secret-change-this-in-production"
+    WORKER_SECRET: str = ""
 
     # ── Desktop App Release ──────────────────────────────
     DESKTOP_APP_VERSION: str = "1.0.0"
@@ -85,5 +86,29 @@ class Settings(BaseSettings):
         extra = "ignore"
         env_file_encoding = "utf-8"
 
+    def validate_security(self) -> None:
+        if self.ALLOW_INSECURE_DEFAULTS:
+            return
+
+        missing = []
+        for key in [
+            "SECRET_KEY",
+            "JWT_SECRET",
+            "ADMIN_PASSWORD",
+            "CREDENTIAL_ENCRYPTION_KEY",
+            "LICENSE_HMAC_SECRET",
+            "WORKER_SECRET",
+        ]:
+            if not getattr(self, key, ""):
+                missing.append(key)
+
+        if missing:
+            joined = ", ".join(missing)
+            raise RuntimeError(
+                f"Missing required secure configuration values: {joined}. "
+                "Set them in environment/.env, or set ALLOW_INSECURE_DEFAULTS=true only for local development."
+            )
+
 
 settings = Settings()
+settings.validate_security()

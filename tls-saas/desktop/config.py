@@ -56,10 +56,11 @@ class Config:
     DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR}/tls_app.db")
     
     # Security
-    SECRET_KEY = os.getenv("SECRET_KEY", "change-this-secret-key-in-production")
+    SECRET_KEY = os.getenv("SECRET_KEY", "")
+    DEVELOPER_PASSWORD = os.getenv("DEVELOPER_PASSWORD", "")
     
     # Backend API URL (for authentication, subscriptions, result reporting)
-    BACKEND_URL = os.getenv("BACKEND_URL", "https://stephanie-centres-chart-whole.trycloudflare.com")
+    BACKEND_URL = os.getenv("BACKEND_URL", "https://backend-cold-sound-6496.fly.dev")
     
     # Website URL (for links in the app)
     WEBSITE_URL = os.getenv("WEBSITE_URL", "https://tls-saas.vercel.app")
@@ -70,7 +71,7 @@ class Config:
         "https://api.github.com/repos/YOUR_USERNAME/tls-appointment-checker/releases/latest"
     )
     
-    # Admin Email (Hidden from users - used for local email sending fallback)
+    # Admin Email (optional - only used by legacy local email helpers)
     ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
     ADMIN_EMAIL_PASSWORD = os.getenv("ADMIN_EMAIL_PASSWORD")
     SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
@@ -116,7 +117,5 @@ class Config:
     
     @classmethod
     def validate(cls):
-        """Validate required configuration"""
-        if not cls.ADMIN_EMAIL or not cls.ADMIN_EMAIL_PASSWORD:
-            raise ValueError("Admin email credentials not configured in .env file")
+        """Validate optional desktop configuration."""
         return True

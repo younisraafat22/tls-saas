@@ -2,6 +2,8 @@
 .env
 .env.local
 .env.*.local
+backend/.env.worker
+backend/.env.worker.local
 
 # Python
 __pycache__/
@@ -31,6 +33,10 @@ desktop.ini
 
 # Logs
 *.log
+desktop/.license
+desktop/.device_id
+desktop/tls_app.db
+desktop/checker_debug.log
 
 *.tunnel
 .env.tunnel
