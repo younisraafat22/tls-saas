@@ -123,6 +123,19 @@ async def license_verify(
             # A valid signature alone is not enough — the key must exist in the database.
             return {"found": False, "error": "License key is not registered"}
 
+        # Backward compatibility: some already-installed desktop builds did not send
+        # hardware_id during periodic status/revocation checks. Keep them functional
+        # while newer clients enforce full hardware-bound verification.
+        if payment.hardware_id and not (body.hardware_id or "").strip():
+            is_active = payment.status == PaymentStatus.APPROVED
+            return {
+                "found": True,
+                "is_active": is_active,
+                "plan": payment.plan_key or parsed["plan"],
+                "license_key": payment.license_key,
+                "legacy_client": True,
+            }
+
         if not _hardware_matches(payment.hardware_id, body.hardware_id):
             return {
                 "found": True,

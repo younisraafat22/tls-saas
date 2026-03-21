@@ -559,44 +559,56 @@ def activate_license(key: str) -> tuple[bool, str]:
         "checks_reset_date": now.date().isoformat(),
     }
 
-    # Fetch branch info from backend (if available)
-    # Use _safe_urlopen for reliable SSL handling in PyInstaller bundles.
-    server_url = (Config.LICENSE_SERVER_URL or Config.BACKEND_URL or "").rstrip("/")
-    if not server_url:
+    # Resolve candidate backend URLs (stable Vercel-discovered URL first).
+    urls_to_try = _build_backend_urls()
+    if not urls_to_try:
         return False, "Server URL not configured. Cannot verify license."
 
     # First verify license isn't revoked
     verified = False
-    for _attempt in range(2):
-        try:
-            payload = json.dumps({"license_key": key.strip().upper(), "hardware_id": hw_id}).encode()
-            _vreq = urllib.request.Request(
-                f"{server_url}/api/monitoring/license/verify",
-                data=payload,
-                headers={"Content-Type": "application/json"},
-                method="POST"
-            )
-            with _safe_urlopen(_vreq, timeout=5) as _vresp:
-                vdata = json.loads(_vresp.read())
-                if vdata.get("found"):
-                    if not vdata.get("is_active", True):
-                        return False, "This license has been deactivated or revoked."
-                    verified = True
-                    break
-                else:
-                    return False, "Invalid or unrecognized license key."
-        except Exception as exc:
-            logger.warning(f"[LICENSE] Activation verification check failed: {exc}")
-            if _attempt < 1:
-                time.sleep(1)
+    verified_url = ""
+    for try_url in urls_to_try:
+        for _attempt in range(2):
+            try:
+                payload = json.dumps({"license_key": key.strip().upper(), "hardware_id": hw_id}).encode()
+                _vreq = urllib.request.Request(
+                    f"{try_url}/api/monitoring/license/verify",
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                with _safe_urlopen(_vreq, timeout=5) as _vresp:
+                    vdata = json.loads(_vresp.read())
+                    if vdata.get("found"):
+                        if not vdata.get("is_active", True):
+                            detail = (vdata.get("error") or "").strip()
+                            if detail:
+                                return False, detail
+                            return False, "This license has been deactivated or revoked."
+                        verified = True
+                        verified_url = try_url
+                        break
+                    else:
+                        return False, "Invalid or unrecognized license key."
+            except Exception as exc:
+                logger.warning(f"[LICENSE] Activation verification check failed ({try_url}): {exc}")
+                if _attempt < 1:
+                    time.sleep(1)
+        if verified:
+            break
     
     if not verified:
         return False, "Could not contact server to verify license. Please check your internet connection."
 
-    # Now fetch branch
-    for _attempt in range(3):
+    # Now fetch branch (prefer the URL that passed verification).
+    branch_urls = [verified_url] if verified_url else []
+    for _url in urls_to_try:
+        if _url and _url not in branch_urls:
+            branch_urls.append(_url)
+
+    for try_url in branch_urls:
         try:
-            _url = (f"{server_url}/api/payments/license-branch"
+            _url = (f"{try_url}/api/payments/license-branch"
                     f"?license_key={key.strip().upper()}")
             _req = urllib.request.Request(_url, headers={"Accept": "application/json"}, method="GET")
             with _safe_urlopen(_req, timeout=10) as _resp:
@@ -606,11 +618,9 @@ def activate_license(key: str) -> tuple[bool, str]:
                 license_data["branch_url"] = branch_data["branch_url"]
                 license_data["service_type"] = branch_data["service_type"]
                 logger.info(f"[LICENSE] Branch fetched: {branch_data['branch_name']}")
-            break  # success
+            break
         except Exception as exc:
-            logger.warning(f"[LICENSE] Branch fetch attempt {_attempt+1}/3 failed: {exc}")
-            if _attempt < 2:
-                time.sleep(1)
+            logger.warning(f"[LICENSE] Branch fetch failed ({try_url}): {exc}")
 
     _write_license_file(license_data)
     return True, f"License activated! Type: {plan_info['name']}"
@@ -705,6 +715,19 @@ def _fetch_current_backend_url() -> str | None:
     return None
 
 
+def _build_backend_urls() -> list[str]:
+    """Return unique backend base URLs in preferred order."""
+    urls: list[str] = []
+    discovered = _fetch_current_backend_url()
+    if discovered:
+        urls.append(discovered)
+    for candidate in [Config.LICENSE_SERVER_URL, Config.BACKEND_URL]:
+        url = (candidate or "").rstrip("/")
+        if url and url not in urls:
+            urls.append(url)
+    return urls
+
+
 def get_license_status(force_network: bool = False) -> dict | None:
     """
     Get current license status.
@@ -751,17 +774,8 @@ def get_license_status(force_network: bool = False) -> dict | None:
             return None
 
         if not cache_valid:
-            # Build list of URLs to try: Vercel-discovered URL first, then hardcoded fallbacks
-            urls_to_try = []
-            discovered = _fetch_current_backend_url()
-            if discovered:
-                urls_to_try.append(discovered)
-            server_url = (Config.LICENSE_SERVER_URL or "").rstrip("/")
-            if server_url and server_url not in urls_to_try:
-                urls_to_try.append(server_url)
-            backend_url = (Config.BACKEND_URL or "").rstrip("/")
-            if backend_url and backend_url not in urls_to_try:
-                urls_to_try.append(backend_url)
+            # Build list of URLs to try: Vercel-discovered URL first, then configured fallbacks.
+            urls_to_try = _build_backend_urls()
 
             revoked = False
             check_done = False
