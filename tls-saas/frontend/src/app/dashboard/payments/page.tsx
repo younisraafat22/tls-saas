@@ -297,9 +297,9 @@ export default function PaymentsPage() {
           {selectedPlan && isPremium && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 space-y-3">
               <h3 className="font-semibold flex items-center gap-2 text-sm">
-                <AlertCircle className="w-4 h-4 text-primary-400" /> Select Service Type
+                <AlertCircle className="w-4 h-4 text-primary-400" /> {t.payment.premiumServiceTypeTitle || "Select Service Type"}
               </h3>
-              <p className="text-xs text-gray-400">Choose whether you want to monitor Visa or Legalization appointments.</p>
+              <p className="text-xs text-gray-400">{t.payment.premiumServiceTypeDesc || "Choose whether you want to monitor Visa or Legalization appointments."}</p>
               <div className="flex gap-3">
                 {(["legalization", "visa"] as const).map((st) => (
                   <button
@@ -311,7 +311,7 @@ export default function PaymentsPage() {
                         : "border-white/10 text-gray-400 hover:border-white/20"
                     }`}
                   >
-                    {st}
+                    {(t.payment.serviceTypes as Record<string, string>)[st] ?? st}
                   </button>
                 ))}
               </div>
@@ -363,27 +363,27 @@ export default function PaymentsPage() {
               {isPremium && (
                 <div className="space-y-3 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
                   <div className="flex items-center gap-2 text-amber-400 text-sm font-semibold">
-                    <KeyRound className="w-4 h-4" /> Your TLS Account Credentials
+                    <KeyRound className="w-4 h-4" /> {t.payment.premiumTlsCredTitle || "Your TLS Account Credentials"}
                   </div>
-                  <p className="text-xs text-gray-400">Required so our server can monitor appointments on your behalf. Stored encrypted.</p>
+                  <p className="text-xs text-gray-400">{t.payment.premiumTlsCredDesc || "Required so our server can monitor appointments on your behalf. Stored encrypted."}</p>
                   <div>
-                    <label className="text-xs text-gray-500 mb-1.5 block">TLS Email</label>
+                    <label className="text-xs text-gray-500 mb-1.5 block">{t.payment.tlsEmailLabel}</label>
                     <input
                       type="email"
                       value={tlsEmail}
                       onChange={(e) => setTlsEmail(e.target.value)}
-                      placeholder="your@email.com"
+                      placeholder={t.payment.premiumTlsEmailPlaceholder || "your@email.com"}
                       className="input-field"
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-gray-500 mb-1.5 block">TLS Password</label>
+                    <label className="text-xs text-gray-500 mb-1.5 block">{t.payment.tlsPasswordLabel}</label>
                     <div className="relative">
                       <input
                         type={showTlsPassword ? "text" : "password"}
                         value={tlsPassword}
                         onChange={(e) => setTlsPassword(e.target.value)}
-                        placeholder="••••••••"
+                        placeholder={t.payment.premiumTlsPasswordPlaceholder || "********"}
                         className="input-field !pr-10"
                       />
                       <button
@@ -596,3 +596,4 @@ export default function PaymentsPage() {
     </div>
   );
 }
+
