@@ -195,7 +195,7 @@ export default function AdminDashboard() {
                       className="flex items-center gap-1 px-2 py-1 text-xs bg-accent-green/10 text-accent-green rounded-lg hover:bg-accent-green/20 transition-colors disabled:opacity-50"
                     >
                       {approving === p.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
-                      Approve
+                      Approve or Renew
                     </button>
                     <Link
                       href="/admin/payments"

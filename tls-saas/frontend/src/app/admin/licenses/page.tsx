@@ -714,14 +714,18 @@ export default function AdminLicensesPage() {
     navigator.clipboard.writeText(text).then(() => { setCopied(id); setTimeout(() => setCopied(null), 2000); });
   };
 
-  const handleGenerate = async (id: number) => {
+  const handleGenerate = async (id: number, mode: "approve" | "renew" = "approve") => {
     setProcessing(id);
     try {
       const res = await adminApi.generateLicense(id);
-      showToast("success", `Key generated! Send to: ${res.submitter_email || "buyer"}`);
+      if (mode === "renew") {
+        showToast("success", `License renewed. Key kept: ${res.license_key}`);
+      } else {
+        showToast("success", `Key generated! Send to: ${res.submitter_email || "buyer"}`);
+      }
       loadLicenses();
     } catch (err: any) {
-      showToast("error", err?.message || err?.detail || "Failed to generate");
+      showToast("error", err?.message || err?.detail || (mode === "renew" ? "Failed to renew" : "Failed to generate"));
     } finally { setProcessing(null); }
   };
 
@@ -1113,7 +1117,7 @@ export default function AdminLicensesPage() {
                               onClick={() => handleGenerate(lic.id)}
                               className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-500/10 text-primary-400 border border-primary-500/30 rounded-xl text-xs font-medium hover:bg-primary-500/20 transition-colors"
                             >
-                              <KeyRound className="w-3.5 h-3.5" /> Generate Key
+                              <KeyRound className="w-3.5 h-3.5" /> Approve
                             </button>
                           )}
                           {lic.status === "approved" && lic.license_key && (
@@ -1139,6 +1143,12 @@ export default function AdminLicensesPage() {
                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/30 rounded-xl text-xs font-medium hover:bg-blue-500/20 transition-colors"
                               >
                                 <RotateCcw className="w-3.5 h-3.5" /> Regenerate
+                              </button>
+                              <button
+                                onClick={() => handleGenerate(lic.id, "renew")}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-medium hover:bg-emerald-500/20 transition-colors"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" /> Renew
                               </button>
                               <button
                                 onClick={() => setConfirm({ id: lic.id, action: "revoke" })}

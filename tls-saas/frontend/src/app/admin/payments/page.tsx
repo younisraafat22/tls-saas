@@ -623,7 +623,7 @@ export default function AdminPaymentsPage() {
                             ) : (
                               <CheckCircle2 className="w-3 h-3" />
                             )}
-                            Approve
+                            Approve or Renew
                           </button>
                           <button
                             onClick={() => setRejectPayment(p)}
