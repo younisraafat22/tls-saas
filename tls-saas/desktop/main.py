@@ -2875,7 +2875,7 @@ class TLSApp:
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 )
             ),
-            padding=ft.Padding(left=0, right=0, top=6, bottom=8),
+            padding=ft.Padding(left=0, right=0, top=0, bottom=8),
         )
 
         # ---- App Info card ----
