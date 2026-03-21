@@ -151,6 +151,8 @@ class TLSApp:
         self.page = page
         self._tray_running = False
         self._active_view = ""
+        self._activation_shell = None
+        self._monitoring_shell = None
         
         # Check for single instance
         self.is_startup = "--startup" in sys.argv
@@ -673,10 +675,28 @@ class TLSApp:
             pass
 
     def _refresh_shell_sensitive_view(self):
-        """Rebuild pages whose clipping depends on maximize/restore shell radius."""
+        """Update current page shell clipping/radius on maximize/restore."""
         try:
-            if self._active_view == "activation":
-                self.show_activation_page()
+            shell_radius = self._current_shell_radius()
+            is_maximized = shell_radius == 0
+            if self._active_view == "activation" and self._activation_shell:
+                self._activation_shell.border_radius = shell_radius
+                self._activation_shell.clip_behavior = (
+                    ft.ClipBehavior.ANTI_ALIAS if shell_radius else ft.ClipBehavior.NONE
+                )
+                self.page.update()
+            elif self._active_view == "monitoring" and self._monitoring_shell:
+                self._monitoring_shell.border_radius = shell_radius
+                self._monitoring_shell.clip_behavior = (
+                    ft.ClipBehavior.ANTI_ALIAS if shell_radius else ft.ClipBehavior.NONE
+                )
+                self._monitoring_shell.padding = (
+                    ft.Padding(left=6, right=6, top=6, bottom=6) if not is_maximized else 0
+                )
+                self._monitoring_shell.margin = (
+                    ft.Margin(left=14, right=14, top=14, bottom=14) if not is_maximized else 0
+                )
+                self.page.update()
         except Exception:
             pass
 
@@ -1431,6 +1451,7 @@ class TLSApp:
     def show_activation_page(self, message=None):
         """Build and display the license activation page."""
         self._active_view = "activation"
+        self._monitoring_shell = None
         self.page.controls.clear()
         self.page.scroll = None
 
@@ -1677,8 +1698,7 @@ class TLSApp:
         )
 
         shell_radius = self._current_shell_radius()
-        self.page.add(
-            ft.Container(
+        shell_container = ft.Container(
                 content=ft.Stack(
                     [
                         # Explicit full-window background so transparent frameless window
@@ -1709,7 +1729,8 @@ class TLSApp:
                 border_radius=shell_radius,
                 clip_behavior=ft.ClipBehavior.ANTI_ALIAS if shell_radius else ft.ClipBehavior.NONE,
             )
-        )
+        self._activation_shell = shell_container
+        self.page.add(shell_container)
         self.page.update()
 
     # ==================================================================
@@ -1778,6 +1799,7 @@ class TLSApp:
 
     def _show_monitoring_page_internal(self, auto_start=False):
         self._active_view = "monitoring"
+        self._activation_shell = None
         self.page.controls.clear()
         self.page.scroll = None
 
@@ -3067,6 +3089,7 @@ class TLSApp:
             margin=ft.Margin(left=14, right=14, top=14, bottom=14) if not is_maximized else 0,
             expand=True,
         )
+        self._monitoring_shell = outer_shell
 
         self.page.add(outer_shell)
 
