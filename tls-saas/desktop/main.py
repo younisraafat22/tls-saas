@@ -3006,9 +3006,14 @@ class TLSApp:
         content = ft.Container(
             content=ft.Column(
                 [
-                    self.top_drag_strip(10),
-                    header,
-                    ft.Divider(height=1, color=ft.Colors.with_opacity(0.2, ft.Colors.WHITE)),
+                    ft.Column(
+                        [
+                            self.top_drag_strip(10),
+                            header,
+                            ft.Divider(height=1, color=ft.Colors.with_opacity(0.2, ft.Colors.WHITE)),
+                        ],
+                        spacing=0,
+                    ),
                     ft.Container(height=15),
 
                     # Two-column: left controls + right activity log
