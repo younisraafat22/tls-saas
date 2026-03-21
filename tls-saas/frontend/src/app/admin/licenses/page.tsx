@@ -907,7 +907,8 @@ export default function AdminLicensesPage() {
         <Info className="w-4 h-4 shrink-0 mt-0.5" />
         <div>
           <strong>Full license control:</strong> Create licenses instantly for any hardware ID.
-          Approve pending submissions. Revoke, regenerate, or delete any license record.
+          Renew approvals keep the same key when available. Regenerate creates a new key and invalidates the old one.
+          Approve pending submissions, revoke, regenerate, or delete any license record.
         </div>
       </div>
 

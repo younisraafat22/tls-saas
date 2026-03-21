@@ -22,12 +22,16 @@ logger = logging.getLogger("license")
 
 # ---------- constants ----------
 LICENSE_FILE = os.path.join(str(BASE_DIR), ".license")
+DEVICE_ID_FILE = os.path.join(str(BASE_DIR), ".device_id")
 
 # Persistent trial marker (to prevent trial bypass by uninstall/reinstall)
 TRIAL_REGISTRY_KEY = r"SOFTWARE\TLSAppointmentChecker"
 
 TRIAL_REGISTRY_VALUE = "TrialActivated"
 CHECKS_TODAY_REGISTRY_VALUE = "ChecksToday"  # "YYYY-MM-DD|count"
+STABLE_HWID_REGISTRY_VALUE = "StableHardwareId"
+
+_CACHED_HARDWARE_ID: str | None = None
 
 
 # ---------- SSL-safe URL helper (PyInstaller compat) ----------
@@ -243,9 +247,104 @@ def _get_machine_id() -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
+def _is_valid_hardware_id(value: str) -> bool:
+    if not isinstance(value, str):
+        return False
+    value = value.strip().lower()
+    if len(value) != 32:
+        return False
+    return all(ch in "0123456789abcdef" for ch in value)
+
+
+def _read_license_hardware_id_raw() -> str | None:
+    """Read only hardware_id from local license JSON without integrity checks."""
+    if not os.path.exists(LICENSE_FILE):
+        return None
+    try:
+        with open(LICENSE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        hw_id = (data.get("hardware_id") or "").strip().lower()
+        if _is_valid_hardware_id(hw_id):
+            return hw_id
+    except Exception:
+        return None
+    return None
+
+
+def _read_persisted_hardware_id() -> str | None:
+    """Read stable hardware id from registry (Windows) or local file."""
+    if platform.system() == "Windows":
+        try:
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, TRIAL_REGISTRY_KEY, 0, winreg.KEY_READ)
+            try:
+                value, _ = winreg.QueryValueEx(key, STABLE_HWID_REGISTRY_VALUE)
+                winreg.CloseKey(key)
+                value = (value or "").strip().lower()
+                if _is_valid_hardware_id(value):
+                    return value
+            except FileNotFoundError:
+                winreg.CloseKey(key)
+            except Exception:
+                winreg.CloseKey(key)
+        except Exception:
+            pass
+
+    if os.path.exists(DEVICE_ID_FILE):
+        try:
+            with open(DEVICE_ID_FILE, "r", encoding="utf-8") as f:
+                value = f.read().strip().lower()
+            if _is_valid_hardware_id(value):
+                return value
+        except Exception:
+            pass
+
+    return None
+
+
+def _persist_hardware_id(hw_id: str):
+    """Persist stable hardware id best-effort to registry/file for future runs."""
+    if not _is_valid_hardware_id(hw_id):
+        return
+
+    if platform.system() == "Windows":
+        try:
+            import winreg
+            key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, TRIAL_REGISTRY_KEY, 0, winreg.KEY_WRITE)
+            winreg.SetValueEx(key, STABLE_HWID_REGISTRY_VALUE, 0, winreg.REG_SZ, hw_id)
+            winreg.CloseKey(key)
+        except Exception:
+            pass
+
+    try:
+        with open(DEVICE_ID_FILE, "w", encoding="utf-8") as f:
+            f.write(hw_id)
+    except Exception:
+        pass
+
+
 def get_hardware_id() -> str:
-    """Public accessor — cached."""
-    return _get_machine_id()
+    """Return a stable device id that survives adapter/order changes and reboots."""
+    global _CACHED_HARDWARE_ID
+    if _CACHED_HARDWARE_ID:
+        return _CACHED_HARDWARE_ID
+
+    persisted = _read_persisted_hardware_id()
+    if persisted:
+        _CACHED_HARDWARE_ID = persisted
+        return persisted
+
+    # Backward compatibility: keep the id from an already-activated local license.
+    existing = _read_license_hardware_id_raw()
+    if existing:
+        _persist_hardware_id(existing)
+        _CACHED_HARDWARE_ID = existing
+        return existing
+
+    computed = _get_machine_id().lower()
+    _persist_hardware_id(computed)
+    _CACHED_HARDWARE_ID = computed
+    return computed
 
 
 # ---------- persistent trial tracking (prevent reinstall bypass) ----------

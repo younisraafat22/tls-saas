@@ -464,10 +464,12 @@ async def approve_payment(
         details={"payment_id": payment_id, "months": body.months, "branch_id": payment.branch_id},
     ))
 
-    # Auto-generate desktop license key if hardware_id is present
+    # Reuse existing key on renewals; only generate on first issue.
     license_key = None
     if payment.hardware_id and payment.plan_key:
-        license_key = _generate_license_key(payment.plan_key, payment.hardware_id)
+        license_key = await _find_existing_license_key_for_renewal(db, payment)
+        if not license_key:
+            license_key = _generate_license_key(payment.plan_key, payment.hardware_id)
         payment.license_key = license_key
     elif payment.hardware_id and not payment.plan_key:
         # Fallback: use plan_type from subscription
@@ -477,9 +479,11 @@ async def approve_payment(
             plan_obj = plan_result.scalar_one_or_none()
             if plan_obj:
                 plan_key = plan_obj.plan_type.value
-        license_key = _generate_license_key(plan_key, payment.hardware_id)
-        payment.license_key = license_key
         payment.plan_key = plan_key
+        license_key = await _find_existing_license_key_for_renewal(db, payment)
+        if not license_key:
+            license_key = _generate_license_key(plan_key, payment.hardware_id)
+        payment.license_key = license_key
 
     await db.commit()
 
@@ -576,6 +580,35 @@ def _generate_license_key(plan: str, hardware_id: str) -> str:
     payload = f"{plan}:{hw_short}:{rand}"
     sig = _hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16].upper()
     return f"{plan.upper()}-{hw_short}-{rand}-{sig}"
+
+
+async def _find_existing_license_key_for_renewal(db: AsyncSession, payment: Payment) -> str | None:
+    """Return an existing approved key for the same user/device/plan when renewing."""
+    if payment.license_key:
+        return payment.license_key
+
+    if not payment.hardware_id:
+        return None
+
+    filters = [
+        Payment.id != payment.id,
+        Payment.user_id == payment.user_id,
+        Payment.hardware_id == payment.hardware_id,
+        Payment.license_key.isnot(None),
+        Payment.license_key != "",
+        Payment.status == PaymentStatus.APPROVED,
+    ]
+    if payment.plan_key:
+        filters.append(Payment.plan_key == payment.plan_key)
+
+    existing_result = await db.execute(
+        select(Payment.license_key)
+        .where(*filters)
+        .order_by(Payment.processed_at.desc(), Payment.created_at.desc())
+        .limit(1)
+    )
+    row = existing_result.first()
+    return row[0] if row and row[0] else None
 
 
 @router.post("/generate-test-license")
@@ -680,8 +713,10 @@ async def generate_license(
     if not payment.plan_key:
         raise HTTPException(400, "This payment has no plan_key — cannot generate license")
 
-    # Generate the key
-    license_key = _generate_license_key(payment.plan_key, payment.hardware_id)
+    # Renewal behavior: keep the same key if one already exists for this device.
+    license_key = await _find_existing_license_key_for_renewal(db, payment)
+    if not license_key:
+        license_key = _generate_license_key(payment.plan_key, payment.hardware_id)
 
     # Save the key and mark as approved
     payment.license_key = license_key

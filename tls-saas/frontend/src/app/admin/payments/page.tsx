@@ -152,8 +152,8 @@ export default function AdminPaymentsPage() {
         showToast(
           "success",
           result.email_sent
-            ? `License generated and emailed to ${result.submitter_email}`
-            : `License: ${result.license_key} — send manually to ${result.submitter_email || "customer"}`
+            ? `License approved and emailed to ${result.submitter_email}. Renewal keeps the same key when available.`
+            : `License: ${result.license_key} — send manually to ${result.submitter_email || "customer"}. Renewal keeps the same key when available.`
         );
       } else {
         await adminApi.approvePayment(payment.id);

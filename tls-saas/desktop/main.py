@@ -40,6 +40,7 @@ import queue
 import json
 import urllib.request
 import urllib.error
+import subprocess
 
 
 
@@ -146,6 +147,7 @@ class TLSApp:
     def __init__(self, page: ft.Page):
         import threading
         self.page = page
+        self._tray_running = False
         
         # Check for single instance
         self.is_startup = "--startup" in sys.argv
@@ -156,10 +158,11 @@ class TLSApp:
             # Spawn tray icon immediately if starting in background
             def start_tray_on_boot():
                 try:
+                    self._tray_running = True
                     tray = self.setup_tray()
                     tray.run()
                 except Exception as ex:
-                    pass
+                    self._tray_running = False
             threading.Thread(target=start_tray_on_boot, daemon=True).start()
 
         # Original startup
@@ -458,9 +461,40 @@ class TLSApp:
         
         return True
 
+    def _force_quit_application(self):
+        """Terminate app and child processes (including Flet host) so reinstall can proceed."""
+        try:
+            if sys.platform == "win32" and hasattr(self, "mutex") and self.mutex:
+                try:
+                    import win32api
+                    win32api.CloseHandle(self.mutex)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        try:
+            self.page.window.destroy()
+        except Exception:
+            pass
+
+        if sys.platform == "win32":
+            try:
+                creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(os.getpid())],
+                    check=False,
+                    creationflags=creationflags,
+                )
+            except Exception:
+                pass
+
+        os._exit(0)
+
     def setup_tray(self):
         def show_window(icon, item):
             icon.stop()
+            self._tray_running = False
             self.page.window.visible = True
             try:
                 self.page.window.restore()
@@ -468,15 +502,12 @@ class TLSApp:
             self.page.update()
 
         def quit_app(icon, item):
-            icon.stop()
-            if sys.platform == "win32" and hasattr(self, "mutex") and self.mutex:
-                try:
-                    import win32api
-                    win32api.CloseHandle(self.mutex)
-                except Exception:
-                    pass
-            self.page.window.destroy()
-            os._exit(0)
+            try:
+                icon.stop()
+            except Exception:
+                pass
+            self._tray_running = False
+            self._force_quit_application()
 
         icon_path = os.path.join("Logos", "icon_WHITE.ico")
         try:
@@ -518,6 +549,10 @@ class TLSApp:
         if "close" in event_str:
             self.page.window.visible = False
             self.page.update()
+
+            if self._tray_running:
+                return
+            self._tray_running = True
             
             def run_tray():
                 try:
@@ -525,6 +560,8 @@ class TLSApp:
                     tray.run()
                 except Exception as ex:
                     print(f"Tray error: {ex}")
+                finally:
+                    self._tray_running = False
             threading.Thread(target=run_tray, daemon=True).start()
 
     def __old_on_window_event(self, e):
