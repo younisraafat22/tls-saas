@@ -86,9 +86,10 @@ async def dashboard_stats(
         select(func.count(AppDownload.id))
     )).scalar() or 0
 
+    rating_filter = and_(AppRating.comment.is_not(None), AppRating.comment != "")
     avg_rating = (await db.execute(
-        select(func.avg(AppRating.rating))
-    )).scalar() or 0.0
+        select(func.avg(AppRating.rating)).where(rating_filter)
+    )).scalar()
 
     total_appointments_found = (await db.execute(
         select(func.count(FoundAppointment.id))
@@ -146,7 +147,7 @@ async def dashboard_stats(
         active_licenses=active_licenses,
         pending_licenses=pending_licenses,
         total_downloads=total_downloads,
-        average_rating=float(avg_rating) if avg_rating else 0.0,
+        average_rating=float(avg_rating) if avg_rating is not None else 0.0,
         total_appointments_found=total_appointments_found,
         service_accounts=service_accounts_count,
         scheduler_running=True,
@@ -170,6 +171,10 @@ async def list_users(
         .options(
             selectinload(User.subscriptions).selectinload(Subscription.plan),
         )
+        .where(
+            User.is_admin == False,
+            User.email.not_like(r"deleted\_%@deleted.invalid"),
+        )
         .order_by(User.created_at.desc())
     )
     if search:
@@ -178,7 +183,13 @@ async def list_users(
         )
 
     # Count total
-    count_query = select(func.count(User.id))
+    count_query = (
+        select(func.count(User.id))
+        .where(
+            User.is_admin == False,
+            User.email.not_like(r"deleted\_%@deleted.invalid"),
+        )
+    )
     if search:
         count_query = count_query.where(
             User.email.ilike(f"%{search}%") | User.full_name.ilike(f"%{search}%")
