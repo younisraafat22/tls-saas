@@ -3097,21 +3097,41 @@ class TLSApp:
 
         self.page.add(outer_shell)
 
-        # Force window size
-        self.page.window.width = 1100
-        self.page.window.height = 950
+        # Preserve maximize state across page rebuilds (dialogs/restore),
+        # and only force normal geometry when the window is not maximized.
+        was_maximized = False
+        try:
+            was_maximized = bool(self.page.window.maximized)
+        except Exception:
+            was_maximized = False
+
         self.page.window.maximizable = True
         self.page.window.full_screen = False
-        try:
-            import ctypes
-            user32 = ctypes.windll.user32
-            user32.SetProcessDPIAware()
-            screen_width = user32.GetSystemMetrics(0)
-            screen_height = user32.GetSystemMetrics(1)
-            self.page.window.left = (screen_width - 1100) // 2
-            self.page.window.top = max(0, (screen_height - 950) // 2)
-        except Exception:
-            pass
+        if was_maximized:
+            try:
+                self.page.window.maximized = True
+            except Exception:
+                pass
+        else:
+            try:
+                self.page.window.maximized = False
+            except Exception:
+                pass
+            self.page.window.width = 1100
+            self.page.window.height = 950
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                user32.SetProcessDPIAware()
+                screen_width = user32.GetSystemMetrics(0)
+                screen_height = user32.GetSystemMetrics(1)
+                self.page.window.left = (screen_width - 1100) // 2
+                self.page.window.top = max(0, (screen_height - 950) // 2)
+            except Exception:
+                pass
+
+        self._apply_window_shell_style()
+        self._refresh_shell_sensitive_view()
 
         self.page.update()
 
