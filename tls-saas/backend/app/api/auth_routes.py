@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse
 from jose import JWTError, jwt
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from sqlalchemy.orm import selectinload
@@ -34,6 +34,10 @@ import asyncio
 _email_executor = ThreadPoolExecutor(max_workers=2)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+def _normalize_email(email: str) -> str:
+    return email.strip().lower()
 
 
 def _user_to_public(user: User) -> UserPublic:
@@ -69,17 +73,19 @@ def _user_to_public(user: User) -> UserPublic:
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    normalized_email = _normalize_email(str(body.email))
+
     # Check if email exists
     existing = await db.execute(
         select(User)
         .options(selectinload(User.subscriptions).selectinload(Subscription.plan))
-        .where(User.email == body.email.lower())
+        .where(func.lower(User.email) == normalized_email)
     )
     if existing.scalar_one_or_none():
         raise HTTPException(400, "Email already registered")
 
     user = User(
-        email=body.email.lower().strip(),
+        email=normalized_email,
         password_hash=hash_password(body.password),
         full_name=body.full_name.strip(),
         phone=body.phone.strip() if body.phone else "",
@@ -129,10 +135,12 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
+    normalized_email = _normalize_email(str(body.email))
+
     result = await db.execute(
         select(User)
         .options(selectinload(User.subscriptions).selectinload(Subscription.plan))
-        .where(User.email == body.email.lower())
+        .where(func.lower(User.email) == normalized_email)
     )
     user = result.scalar_one_or_none()
     if not user or not verify_password(body.password, user.password_hash):
@@ -269,8 +277,8 @@ async def unsubscribe_email(token: str, db: AsyncSession = Depends(get_db)):
 @router.post("/forgot-password", response_model=MessageResponse)
 async def forgot_password(body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
     """Request a password reset email. Always returns 200 to prevent email enumeration."""
-    email = body.email.strip().lower()
-    result = await db.execute(select(User).where(User.email == email))
+    email = _normalize_email(body.email)
+    result = await db.execute(select(User).where(func.lower(User.email) == email))
     user = result.scalar_one_or_none()
 
     if user and user.is_active:

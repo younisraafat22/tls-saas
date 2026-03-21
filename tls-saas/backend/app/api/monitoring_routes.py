@@ -9,10 +9,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-limiter = Limiter(key_func=get_remote_address), Request
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-
 limiter = Limiter(key_func=get_remote_address)
 from pydantic import BaseModel
 from sqlalchemy import select, func, and_
@@ -46,11 +42,16 @@ class LicenseDeactivateRequest(BaseModel):
 
 
 def _hardware_matches(stored_hardware_id: str | None, provided_hardware_id: str | None) -> bool:
-    """Allow exact matches for full IDs and prefix matches for legacy imported licenses."""
+    """
+    Require a provided hardware ID whenever a stored one exists.
+    Allow exact matches for full IDs and prefix matches for legacy imported licenses.
+    """
     stored = (stored_hardware_id or "").strip()
     provided = (provided_hardware_id or "").strip()
-    if not stored or not provided:
+    if not stored:
         return True
+    if not provided:
+        return False
     if len(stored) == 8:
         return provided.upper().startswith(stored.upper())
     return stored.lower() == provided.lower()
@@ -90,7 +91,7 @@ async def license_verify(
     """
     Verify a license key and/or check if a hardware_id has a license.
     Used by the desktop app for:
-      1. Revocation check (sends license_key) — returns is_active status
+      1. Revocation check (sends license_key + hardware_id) — returns is_active status
       2. Payment polling (sends hardware_id) — returns found + license_key
     """
     # ── Case 1: Verify a specific license key ───────────────────────

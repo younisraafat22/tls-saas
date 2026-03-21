@@ -86,12 +86,35 @@ export default function DashboardPage() {
   }, [lastMessage]);
 
   useEffect(() => {
-    // Fetch download URL from backend
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-    fetch(`${apiUrl}/api/app/download-info`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.download_url) setDownloadUrl(d.download_url); })
-      .catch(() => {});
+    let cancelled = false;
+
+    (async () => {
+      try {
+        let apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+        if (!apiUrl) {
+          const backendRes = await fetch("/api/backend-url");
+          if (backendRes.ok) {
+            const backendData = await backendRes.json();
+            apiUrl = backendData?.url || "";
+          }
+        }
+        if (!apiUrl) return;
+
+        const response = await fetch(`${apiUrl}/api/app/download-info`);
+        if (!response.ok) return;
+
+        const data = await response.json();
+        if (!cancelled && data?.download_url) {
+          setDownloadUrl(data.download_url);
+        }
+      } catch {
+        // Leave the dashboard fallback link in place.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const copyLicenseKey = async () => {

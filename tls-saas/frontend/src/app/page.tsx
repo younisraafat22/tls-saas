@@ -664,18 +664,40 @@ function DownloadApp() {
   }>({ version: "1.0.0", download_url: "", size_mb: "~260", requirements: "Windows 10/11" });
 
   useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.108:8000";
-    fetch(`${apiUrl}/api/app/download-info`)
-      .then((r) => r.json())
-      .then((data) =>
+    let cancelled = false;
+
+    (async () => {
+      try {
+        let apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+        if (!apiUrl) {
+          const backendRes = await fetch("/api/backend-url");
+          if (backendRes.ok) {
+            const backendData = await backendRes.json();
+            apiUrl = backendData?.url || "";
+          }
+        }
+        if (!apiUrl) return;
+
+        const response = await fetch(`${apiUrl}/api/app/download-info`);
+        if (!response.ok) return;
+
+        const data = await response.json();
+        if (cancelled) return;
+
         setDownloadInfo({
           version: data.version ?? "2.0.0",
           download_url: data.download_url ?? "",
           size_mb: data.size_mb ?? "~80",
           requirements: data.requirements ?? "Windows 10/11",
-        })
-      )
-      .catch(() => {/* keep defaults on network error */});
+        });
+      } catch {
+        // Keep defaults on network or config error.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (

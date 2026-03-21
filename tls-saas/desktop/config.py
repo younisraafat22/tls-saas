@@ -82,10 +82,6 @@ class Config:
     # License server URL — defaults to BACKEND_URL (unified server)
     LICENSE_SERVER_URL = os.getenv("LICENSE_SERVER_URL", BACKEND_URL)
     
-    # AI Vision CAPTCHA Solver
-    OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")  # Primary (free vision models)
-    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")          # Fallback (Gemini 2.0 Flash)
-    
     # TLS Website – Legalization
     TLS_URL = "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home"
     LOGIN_URL = "https://legalization-de.tlscontact.com/login"

@@ -769,7 +769,10 @@ def get_license_status(force_network: bool = False) -> dict | None:
             # If network is flaky, we fail open briefly and retry on next cache window.
             for try_url in urls_to_try:
                 try:
-                    payload = json.dumps({"license_key": data["key"]}).encode()
+                    payload = json.dumps({
+                        "license_key": data["key"],
+                        "hardware_id": hw_id,
+                    }).encode()
                     req = urllib.request.Request(
                         f"{try_url}/api/monitoring/license/verify",
                         data=payload,
