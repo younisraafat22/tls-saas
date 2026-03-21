@@ -17,6 +17,13 @@ export default function SettingsPage() {
   const { t } = useLanguage();
   const ts = t.settings;
   const [activeTab, setActiveTab] = useState("profile");
+  const planKeys = [
+    user?.active_plan || "",
+    ...((user?.active_plans || []) as string[]),
+  ]
+    .map((p) => String(p || "").toLowerCase())
+    .filter(Boolean);
+  const hasPremiumPlan = planKeys.some((p) => p.includes("premium"));
 
   // Profile form
   const [fullName, setFullName] = useState("");
@@ -46,6 +53,12 @@ export default function SettingsPage() {
       setPhone(user.phone || "");
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!hasPremiumPlan && activeTab === "credentials") {
+      setActiveTab("profile");
+    }
+  }, [activeTab, hasPremiumPlan]);
 
   const showToast = (type: "success" | "error", msg: string) => {
     setToast({ type, msg });
@@ -111,7 +124,9 @@ export default function SettingsPage() {
 
   const tabs = [
     { id: "profile", label: ts.tabProfile, icon: <User className="w-4 h-4" /> },
-    { id: "credentials", label: (ts as any).tlsTab || "TLS Credentials", icon: <Key className="w-4 h-4" /> },
+    ...(hasPremiumPlan
+      ? [{ id: "credentials", label: (ts as any).tlsTab || "TLS Credentials", icon: <Key className="w-4 h-4" /> }]
+      : []),
     { id: "password", label: ts.tabPassword, icon: <Lock className="w-4 h-4" /> },
     { id: "notifications", label: ts.tabNotifications, icon: <Bell className="w-4 h-4" /> },
   ];
@@ -255,7 +270,7 @@ export default function SettingsPage() {
       )}
 
       {/* TLS Credentials tab */}
-      {activeTab === "credentials" && (
+      {hasPremiumPlan && activeTab === "credentials" && (
         <TLSCredentialsTab showToast={showToast} />
       )}
 
@@ -495,19 +510,19 @@ function TLSCredentialsTab({ showToast }: { showToast: (type: "success" | "error
 
   const handleSave = async () => {
     if (!tlsEmail || !tlsPassword) {
-      showToast("error", "Please fill in both email and password");
+      showToast("error", (ts as any).credFillRequired || "Please fill in both email and password");
       return;
     }
     setSaving(true);
     try {
       await credentialApi.save({ service_type: serviceType, tls_email: tlsEmail, tls_password: tlsPassword });
-      showToast("success", "TLS credentials saved successfully");
+      showToast("success", (ts as any).credSavedSuccess || "TLS credentials saved successfully");
       setTlsEmail("");
       setTlsPassword("");
       setShowForm(false);
       await fetchCredentials();
     } catch (err: any) {
-      showToast("error", err?.detail || "Failed to save credentials");
+      showToast("error", err?.detail || (ts as any).credSaveFailed || "Failed to save credentials");
     } finally {
       setSaving(false);
     }
@@ -516,10 +531,10 @@ function TLSCredentialsTab({ showToast }: { showToast: (type: "success" | "error
   const handleRemove = async (serviceType: string) => {
     try {
       await credentialApi.remove(serviceType);
-      showToast("success", "Credentials removed");
+      showToast("success", (ts as any).credRemovedSuccess || "Credentials removed");
       await fetchCredentials();
     } catch (err: any) {
-      showToast("error", err?.detail || "Failed to remove credentials");
+      showToast("error", err?.detail || (ts as any).credRemoveFailed || "Failed to remove credentials");
     }
   };
 
@@ -562,34 +577,34 @@ function TLSCredentialsTab({ showToast }: { showToast: (type: "success" | "error
           {showForm ? (
             <div className="space-y-4 p-4 bg-dark-800 rounded-xl">
               <div>
-                <label className="text-sm text-gray-400 mb-1.5 block">Service Type</label>
+                <label className="text-sm text-gray-400 mb-1.5 block">{(ts as any).credServiceType || "Service Type"}</label>
                 <select
                   value={serviceType}
                   onChange={(e) => setServiceType(e.target.value)}
                   className="input-field"
                 >
-                  <option value="legalization">Legalization</option>
-                  <option value="visa">Visa</option>
+                  <option value="legalization">{(ts as any).serviceTypeLegalization || "Legalization"}</option>
+                  <option value="visa">{(ts as any).serviceTypeVisa || "Visa"}</option>
                 </select>
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1.5 block">TLS Email</label>
+                <label className="text-sm text-gray-400 mb-1.5 block">{(ts as any).credTlsEmail || "TLS Email"}</label>
                 <input
                   type="email"
                   value={tlsEmail}
                   onChange={(e) => setTlsEmail(e.target.value)}
-                  placeholder="your-tls-email@example.com"
+                  placeholder={(ts as any).credEmailPlaceholder || "your-tls-email@example.com"}
                   className="input-field"
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1.5 block">TLS Password</label>
+                <label className="text-sm text-gray-400 mb-1.5 block">{(ts as any).credTlsPassword || "TLS Password"}</label>
                 <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
                     value={tlsPassword}
                     onChange={(e) => setTlsPassword(e.target.value)}
-                    placeholder="Your TLS website password"
+                    placeholder={(ts as any).credPasswordPlaceholder || "Your TLS website password"}
                     className="input-field pr-10"
                   />
                   <button
@@ -607,13 +622,13 @@ function TLSCredentialsTab({ showToast }: { showToast: (type: "success" | "error
                   className="btn-gradient flex items-center gap-2 disabled:opacity-50"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  Save Credentials
+                  {(ts as any).credSave || "Save Credentials"}
                 </button>
                 <button
                   onClick={() => setShowForm(false)}
                   className="px-4 py-2 text-sm text-gray-400 hover:text-white rounded-lg border border-white/10 hover:border-white/20 transition"
                 >
-                  Cancel
+                  {(ts as any).cancel || "Cancel"}
                 </button>
               </div>
             </div>
