@@ -3008,7 +3008,7 @@ class TLSApp:
                 [
                     ft.Column(
                         [
-                            self.top_drag_strip(10),
+                            self.top_drag_strip(6),
                             header,
                             ft.Divider(height=1, color=ft.Colors.with_opacity(0.2, ft.Colors.WHITE)),
                         ],
