@@ -1645,15 +1645,30 @@ class TLSApp:
 
         self.page.add(
             ft.Container(
-                content=ft.Column(
+                content=ft.Stack(
                     [
-                        top_bar,
-                        ft.Container(height=10),
-                        activation_card,
+                        # Explicit full-window background so transparent frameless window
+                        # does not show the desktop behind this page.
+                        ft.Container(
+                            expand=True,
+                            gradient=ft.LinearGradient(
+                                begin=ft.Alignment(-1, -1),
+                                end=ft.Alignment(1, 1),
+                                colors=["#070B1E", "#0A0E27", "#111A3A"],
+                            ),
+                        ),
+                        ft.Column(
+                            [
+                                top_bar,
+                                ft.Container(height=10),
+                                activation_card,
+                            ],
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            alignment=ft.MainAxisAlignment.CENTER,
+                            scroll=ft.ScrollMode.AUTO,
+                            expand=True,
+                        ),
                     ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    scroll=ft.ScrollMode.AUTO,
                     expand=True,
                 ),
                 expand=True,
