@@ -1664,7 +1664,6 @@ class TLSApp:
             width=600,
         )
 
-        shell_radius = self._current_shell_radius()
         self.page.add(
             ft.Container(
                 content=ft.Stack(
@@ -1673,7 +1672,6 @@ class TLSApp:
                         # does not show the desktop behind this page.
                         ft.Container(
                             expand=True,
-                            border_radius=shell_radius,
                             gradient=ft.LinearGradient(
                                 begin=ft.Alignment(-1, -1),
                                 end=ft.Alignment(1, 1),
@@ -1695,8 +1693,6 @@ class TLSApp:
                     expand=True,
                 ),
                 expand=True,
-                border_radius=shell_radius,
-                clip_behavior=ft.ClipBehavior.ANTI_ALIAS if shell_radius else ft.ClipBehavior.NONE,
             )
         )
         self.page.update()
