@@ -53,11 +53,24 @@ export default function DashboardPage() {
   const [licensePlan, setLicensePlan] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [resultsPage, setResultsPage] = useState(0);
+  const [apiBase, setApiBase] = useState("");
   const [downloadUrl, setDownloadUrl] = useState<string>("");
   const [screenshotModal, setScreenshotModal] = useState<string | null>(null);
   const PAGE_SIZE = 10;
 
   const countdown = useCountdown(status?.worker_next_run);
+
+  const resolveApiUrl = async () => {
+    let apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+    if (!apiUrl) {
+      const backendRes = await fetch("/api/backend-url");
+      if (backendRes.ok) {
+        const backendData = await backendRes.json();
+        apiUrl = backendData?.url || "";
+      }
+    }
+    return apiUrl;
+  };
 
   useEffect(() => {
     loadAll();
@@ -90,15 +103,9 @@ export default function DashboardPage() {
 
     (async () => {
       try {
-        let apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-        if (!apiUrl) {
-          const backendRes = await fetch("/api/backend-url");
-          if (backendRes.ok) {
-            const backendData = await backendRes.json();
-            apiUrl = backendData?.url || "";
-          }
-        }
+        const apiUrl = await resolveApiUrl();
         if (!apiUrl) return;
+        setApiBase(apiUrl);
 
         const response = await fetch(`${apiUrl}/api/app/download-info`);
         if (!response.ok) return;
@@ -294,7 +301,7 @@ export default function DashboardPage() {
           </div>
           {downloadUrl ? (
             <a
-              href={downloadUrl}
+              href={apiBase ? `${apiBase}/api/app/download` : downloadUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-accent-green/10 border border-accent-green/30 text-accent-green text-sm font-medium hover:bg-accent-green/20 transition-colors"

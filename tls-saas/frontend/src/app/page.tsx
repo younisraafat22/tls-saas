@@ -656,6 +656,7 @@ function Pricing() {
 function DownloadApp() {
   const { t, locale } = useLanguage();
   const dl = t.downloadSection;
+  const [apiBase, setApiBase] = useState("");
   const [downloadInfo, setDownloadInfo] = useState<{
     version: string;
     download_url: string;
@@ -663,20 +664,26 @@ function DownloadApp() {
     requirements: string;
   }>({ version: "1.0.0", download_url: "", size_mb: "~260", requirements: "Windows 10/11" });
 
+  const resolveApiUrl = async () => {
+    let apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+    if (!apiUrl) {
+      const backendRes = await fetch("/api/backend-url");
+      if (backendRes.ok) {
+        const backendData = await backendRes.json();
+        apiUrl = backendData?.url || "";
+      }
+    }
+    return apiUrl;
+  };
+
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
       try {
-        let apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-        if (!apiUrl) {
-          const backendRes = await fetch("/api/backend-url");
-          if (backendRes.ok) {
-            const backendData = await backendRes.json();
-            apiUrl = backendData?.url || "";
-          }
-        }
+        const apiUrl = await resolveApiUrl();
         if (!apiUrl) return;
+        setApiBase(apiUrl);
 
         const response = await fetch(`${apiUrl}/api/app/download-info`);
         if (!response.ok) return;
@@ -746,7 +753,7 @@ function DownloadApp() {
 
               {downloadInfo.download_url ? (
                 <a
-                  href={downloadInfo.download_url}
+                  href={apiBase ? `${apiBase}/api/app/download` : downloadInfo.download_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn-gradient text-lg !px-8 !py-3 inline-flex items-center gap-2 w-full justify-center"

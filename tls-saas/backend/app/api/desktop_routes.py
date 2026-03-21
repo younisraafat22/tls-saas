@@ -2,12 +2,13 @@
 Desktop App Routes — Version check, download info, payment submission
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas import AppVersionResponse, DesktopPaymentSubmit
 from app.config import settings
 from app.database import get_db
-from app.models import Payment, User, PaymentMethod, PaymentStatus
+from app.models import Payment, User, PaymentMethod, PaymentStatus, AppDownload
 from app.auth import get_current_admin
 
 router = APIRouter(prefix="/api/app", tags=["desktop-app"])
@@ -53,6 +54,7 @@ async def download_info():
     return {
         "version": settings.DESKTOP_APP_VERSION,
         "download_url": settings.DESKTOP_DOWNLOAD_URL,
+        "tracked_download_url": "/api/app/download",
         "platforms": ["windows"],
         "size_mb": "~260",
         "requirements": "Windows 10/11, Chrome browser installed",
@@ -65,6 +67,29 @@ async def download_info():
             "Encrypted credential storage",
         ],
     }
+
+
+@router.get("/download")
+async def tracked_download(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Count a desktop download click, then redirect to the actual installer URL.
+    This counts every click (including repeated clicks from the same device).
+    """
+    if not settings.DESKTOP_DOWNLOAD_URL:
+        raise HTTPException(status_code=404, detail="Download link is not configured")
+
+    ip_addr = request.client.host if request.client else "unknown"
+    db.add(AppDownload(
+        ip_address=ip_addr,
+        version=settings.DESKTOP_APP_VERSION,
+        platform="windows",
+    ))
+    await db.commit()
+
+    return RedirectResponse(url=settings.DESKTOP_DOWNLOAD_URL, status_code=302)
 
 
 @router.post("/license/recover")

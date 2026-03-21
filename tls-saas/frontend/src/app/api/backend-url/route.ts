@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
  * monitoring requests.
  */
 export async function GET() {
-  const url = process.env.NEXT_PUBLIC_API_URL || "";
+  const raw = process.env.NEXT_PUBLIC_API_URL || "";
+  const url = raw.replace(/\uFEFF/g, "").trim();
   return NextResponse.json({ url });
 }

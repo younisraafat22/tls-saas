@@ -4,7 +4,7 @@ Admin Dashboard API — Full control over users, payments, monitoring, settings.
 
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
-from sqlalchemy import select, func, and_, update, text
+from sqlalchemy import select, func, and_, or_, update, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.database import get_db
@@ -39,15 +39,24 @@ async def dashboard_stats(
     db: AsyncSession = Depends(get_db),
 ):
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    now = datetime.now(timezone.utc)
 
     total_users = (await db.execute(
         select(func.count(User.id))
         .where(User.is_admin == False, User.email.not_like(r"deleted\_%@deleted.invalid"))
     )).scalar() or 0
     active_subs = (await db.execute(
-        select(func.count(Subscription.id))
-        .where(Subscription.status == SubscriptionStatus.ACTIVE)
+        select(func.count(func.distinct(Subscription.user_id)))
+        .join(User, Subscription.user_id == User.id)
+        .where(
+            Subscription.status == SubscriptionStatus.ACTIVE,
+            User.is_admin == False,
+            User.email.not_like(r"deleted\_%@deleted.invalid"),
+            or_(Subscription.expires_at.is_(None), Subscription.expires_at > now),
+        )
     )).scalar() or 0
+    # Defensive clamp: dashboard should never show more active subscribers than total users.
+    active_subs = min(active_subs, total_users)
     pending_payments = (await db.execute(
         select(func.count(Payment.id))
         .where(Payment.status == PaymentStatus.PENDING)
