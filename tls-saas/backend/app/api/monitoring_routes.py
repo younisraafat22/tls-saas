@@ -352,6 +352,7 @@ async def monitoring_status(
         .where(
             CheckResult.user_id == user.id,
             CheckResult.user_id.isnot(None),
+            CheckResult.checked_at >= user.created_at,
         )
     )
     total_checks = total_checks_result.scalar() or 0
