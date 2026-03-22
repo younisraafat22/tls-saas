@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import Link from "next/link";
 import {
   LayoutDashboard, Bell, Settings, CreditCard,
-  LogOut, Monitor, Shield, ChevronDown
+  LogOut, Shield, ChevronDown
 } from "lucide-react";
 import { useLanguage, localeLabels, type Locale } from "@/lib/i18n";
 
@@ -109,9 +109,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-dark-800/95 backdrop-blur-xl border-b border-white/5 ">
         <div className="flex items-center justify-between px-4 h-14">
           <Link href="/" className="flex items-center gap-2 min-w-0 max-w-[70%]">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-500 to-blue-600 flex items-center justify-center">
-              <Monitor className="w-4 h-4 text-white" />
-            </div>
+            <img src="/icons/icon-192-white.png" alt="TLS Appointment Checker" className="w-7 h-7 rounded-lg object-cover" />
             <span className="font-display font-bold text-sm truncate">TLS Appointment Checker</span>
           </Link>
           <div className="flex items-center gap-3">
