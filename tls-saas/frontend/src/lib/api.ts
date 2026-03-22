@@ -338,10 +338,21 @@ export const adminApi = {
     api.post(`/api/admin/notifications/${id}/read`),
   markAllNotificationsRead: (category?: string) =>
     api.post(`/api/admin/notifications/read-all${category ? `?category=${category}` : ""}`),
+  deleteNotification: (id: number) =>
+    api.delete(`/api/admin/notifications/${id}`),
+  deleteNotifications: (category?: string, onlyRead?: boolean) =>
+    api.delete(`/api/admin/notifications${category || onlyRead ? `?${[
+      category ? `category=${encodeURIComponent(category)}` : "",
+      onlyRead ? "only_read=true" : "",
+    ].filter(Boolean).join("&")}` : ""}`),
   getInquiries: (page?: number, status?: string, search?: string) =>
     api.get(`/api/admin/inquiries?page=${page || 1}${status ? `&status=${status}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`),
   replyInquiry: (id: number, data: { subject: string; message: string; close_after_reply?: boolean }) =>
     api.post(`/api/admin/inquiries/${id}/reply`, data),
   closeInquiry: (id: number) =>
     api.post(`/api/admin/inquiries/${id}/mark-closed`),
+  updateInquiryStatus: (id: number, status: "new" | "replied" | "closed") =>
+    api.patch(`/api/admin/inquiries/${id}/status`, { status }),
+  deleteInquiry: (id: number) =>
+    api.delete(`/api/admin/inquiries/${id}`),
 };

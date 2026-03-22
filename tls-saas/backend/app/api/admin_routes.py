@@ -25,7 +25,7 @@ from app.schemas import (
     DashboardStats, PaymentPublic, PaymentApproveRequest,
     PaymentRejectRequest, PlanUpdate, ServiceAccountCreate,
     ServiceAccountPublic, AdminUserUpdate, SystemSettingUpdate,
-    MessageResponse, AdminNotificationPublic, SupportInquiryPublic, ReplyInquiryRequest,
+    MessageResponse, AdminNotificationPublic, SupportInquiryPublic, ReplyInquiryRequest, UpdateInquiryStatusRequest,
 )
 from app.websocket import ws_manager
 
@@ -1960,6 +1960,41 @@ async def mark_all_admin_notifications_read(
     return MessageResponse(message="Notifications marked as read")
 
 
+@router.delete("/notifications/{notification_id}", response_model=MessageResponse)
+async def delete_admin_notification(
+    notification_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    row = (await db.execute(
+        select(AdminNotification).where(AdminNotification.id == notification_id)
+    )).scalar_one_or_none()
+    if not row:
+        raise HTTPException(404, "Notification not found")
+    await db.delete(row)
+    await db.commit()
+    return MessageResponse(message="Notification deleted")
+
+
+@router.delete("/notifications", response_model=MessageResponse)
+async def delete_admin_notifications(
+    category: str = "",
+    only_read: bool = False,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    q = text("DELETE FROM admin_notifications WHERE 1=1")
+    params: dict = {}
+    if category:
+        q = text("DELETE FROM admin_notifications WHERE category = :category" + (" AND is_read = 1" if only_read else ""))
+        params["category"] = category.strip().lower()
+    elif only_read:
+        q = text("DELETE FROM admin_notifications WHERE is_read = 1")
+    await db.execute(q, params)
+    await db.commit()
+    return MessageResponse(message="Notifications deleted")
+
+
 @router.get("/inquiries")
 async def list_support_inquiries(
     page: int = 1,
@@ -2076,6 +2111,42 @@ async def close_inquiry(
     row.status = "closed"
     await db.commit()
     return MessageResponse(message="Inquiry closed")
+
+
+@router.patch("/inquiries/{inquiry_id}/status", response_model=MessageResponse)
+async def update_inquiry_status(
+    inquiry_id: int,
+    body: UpdateInquiryStatusRequest,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    status = (body.status or "").strip().lower()
+    if status not in {"new", "replied", "closed"}:
+        raise HTTPException(400, "Invalid status")
+    row = (await db.execute(
+        select(SupportInquiry).where(SupportInquiry.id == inquiry_id)
+    )).scalar_one_or_none()
+    if not row:
+        raise HTTPException(404, "Inquiry not found")
+    row.status = status
+    await db.commit()
+    return MessageResponse(message=f"Inquiry status updated to {status}")
+
+
+@router.delete("/inquiries/{inquiry_id}", response_model=MessageResponse)
+async def delete_inquiry(
+    inquiry_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    row = (await db.execute(
+        select(SupportInquiry).where(SupportInquiry.id == inquiry_id)
+    )).scalar_one_or_none()
+    if not row:
+        raise HTTPException(404, "Inquiry not found")
+    await db.delete(row)
+    await db.commit()
+    return MessageResponse(message="Inquiry deleted")
 
 
 @router.websocket("/ws")

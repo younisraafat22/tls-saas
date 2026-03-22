@@ -396,5 +396,9 @@ class ReplyInquiryRequest(BaseModel):
     close_after_reply: bool = True
 
 
+class UpdateInquiryStatusRequest(BaseModel):
+    status: str = Field(min_length=1, max_length=20, description="new | replied | closed")
+
+
 # Fix forward reference for TokenResponse
 TokenResponse.model_rebuild()

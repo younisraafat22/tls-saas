@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Mail, Reply, Search, CheckCircle2, MessageSquare, Languages } from "lucide-react";
+import { Mail, Reply, Search, CheckCircle2, MessageSquare, Languages, Trash2 } from "lucide-react";
 import { adminApi } from "@/lib/api";
 import { useLanguage } from "@/lib/i18n";
 
@@ -124,6 +124,18 @@ export default function AdminInquiriesPage() {
     load();
   };
 
+  const setInquiryStatus = async (id: number, status: "new" | "replied" | "closed") => {
+    await adminApi.updateInquiryStatus(id, status);
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)));
+    if (selected?.id === id) setSelected((prev: any) => prev ? { ...prev, status } : prev);
+  };
+
+  const deleteInquiry = async (id: number) => {
+    await adminApi.deleteInquiry(id);
+    setItems((prev) => prev.filter((i) => i.id !== id));
+    if (selected?.id === id) setSelected(null);
+  };
+
   const counts = useMemo(() => ({
     all: items.length,
     new: items.filter((i) => i.status === "new").length,
@@ -202,9 +214,16 @@ export default function AdminInquiriesPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold">{selected.subject || "No subject"}</h2>
-                <button onClick={() => closeInquiry(selected.id)} className="text-xs px-3 py-1.5 rounded-lg bg-accent-green/15 text-accent-green hover:bg-accent-green/25 inline-flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> {L.close}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setInquiryStatus(selected.id, "new")} className="text-xs px-2.5 py-1.5 rounded-lg bg-amber-500/15 text-amber-300 hover:bg-amber-500/25">New</button>
+                  <button onClick={() => setInquiryStatus(selected.id, "replied")} className="text-xs px-2.5 py-1.5 rounded-lg bg-primary-500/15 text-primary-300 hover:bg-primary-500/25">Replied</button>
+                  <button onClick={() => closeInquiry(selected.id)} className="text-xs px-2.5 py-1.5 rounded-lg bg-accent-green/15 text-accent-green hover:bg-accent-green/25 inline-flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> {L.close}
+                  </button>
+                  <button onClick={() => deleteInquiry(selected.id)} className="text-xs px-2.5 py-1.5 rounded-lg bg-red-500/15 text-red-300 hover:bg-red-500/25 inline-flex items-center gap-1">
+                    <Trash2 className="w-3.5 h-3.5" /> Delete
+                  </button>
+                </div>
               </div>
               <div className="text-sm text-gray-300">{L.from}: {selected.name} ({selected.email})</div>
               <div className="text-xs text-gray-500 flex items-center gap-4">

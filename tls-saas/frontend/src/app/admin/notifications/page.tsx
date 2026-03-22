@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Bell, CheckCheck, Clock, CreditCard, Mail, RefreshCw } from "lucide-react";
+import { Bell, CheckCheck, Clock, CreditCard, Mail, RefreshCw, Trash2 } from "lucide-react";
 import { adminApi } from "@/lib/api";
 import { useWebSocket } from "@/hooks/useWebSocket";
 
@@ -50,6 +50,17 @@ export default function AdminNotificationsPage() {
     load();
   };
 
+  const deleteOne = async (id: number) => {
+    await adminApi.deleteNotification(id);
+    setItems((prev) => prev.filter((n) => n.id !== id));
+  };
+
+  const deleteRead = async () => {
+    const category = filter === "payment" || filter === "inquiry" ? filter : "";
+    await adminApi.deleteNotifications(category, true);
+    load();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -60,6 +71,7 @@ export default function AdminNotificationsPage() {
         <div className="flex items-center gap-2">
           <button onClick={load} className="btn-secondary px-3 py-2 text-sm inline-flex items-center gap-2"><RefreshCw className="w-4 h-4" /> Refresh</button>
           <button onClick={markAll} className="btn-gradient px-3 py-2 text-sm inline-flex items-center gap-2"><CheckCheck className="w-4 h-4" /> Mark all read</button>
+          <button onClick={deleteRead} className="btn-secondary px-3 py-2 text-sm inline-flex items-center gap-2 text-red-300"><Trash2 className="w-4 h-4" /> Delete read</button>
         </div>
       </div>
 
@@ -105,6 +117,9 @@ export default function AdminNotificationsPage() {
                       Mark read
                     </button>
                   )}
+                  <button onClick={() => deleteOne(n.id)} className="text-xs px-2.5 py-1.5 rounded-lg bg-red-500/15 text-red-300 hover:bg-red-500/25 inline-flex items-center gap-1">
+                    <Trash2 className="w-3.5 h-3.5" /> Delete
+                  </button>
                 </div>
               </div>
             ))}
