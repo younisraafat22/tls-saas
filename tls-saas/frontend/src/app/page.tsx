@@ -198,6 +198,10 @@ function Navbar() {
             <a href="#download" className="text-gray-400 hover:text-white transition-colors text-sm">{t.nav.download}</a>
             <a href="#guide" className="text-gray-400 hover:text-white transition-colors text-sm">{t.nav.guide}</a>
             <a href="#faq" className="text-gray-400 hover:text-white transition-colors text-sm">{t.nav.faq}</a>
+            <Link href="/contact" className="text-gray-400 hover:text-white transition-colors text-sm flex items-center gap-1.5">
+              <Mail className="w-4 h-4 shrink-0" aria-hidden />
+              {t.nav.contact}
+            </Link>
           </div>
 
           <div className="flex items-center gap-2">
@@ -238,6 +242,10 @@ function Navbar() {
               <a href="#download" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.download}</a>
               <a href="#guide" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.guide}</a>
               <a href="#faq" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.faq}</a>
+              <Link href="/contact" className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors flex items-center gap-2" onClick={() => setMobileOpen(false)}>
+                <Mail className="w-4 h-4 shrink-0" aria-hidden />
+                {t.nav.contact}
+              </Link>
               {user ? (
                 <>
                   <Link href={user.is_admin ? "/admin" : "/dashboard"} className="px-4 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(false)}>{t.nav.dashboard}</Link>

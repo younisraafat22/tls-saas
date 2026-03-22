@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 
@@ -14,6 +14,7 @@ export const translations = {
       download: "Download",
       guide: "Guide",
       faq: "FAQ",
+      contact: "Contact",
       logIn: "Log In",
       getStarted: "Get Started",
       dashboard: "Dashboard",
@@ -184,6 +185,7 @@ export const translations = {
       notifications: "Notifications",
       payments: "Payments",
       settings: "Settings",
+      contact: "Contact",
       logOut: "Log Out",
       adminPanel: "Admin Panel",
     },
@@ -500,6 +502,7 @@ export const translations = {
       download: "تحميل",
       guide: "الدليل",
       faq: "الأسئلة الشائعة",
+      contact: "تواصل",
       logIn: "تسجيل الدخول",
       getStarted: "ابدأ الآن",
       dashboard: "لوحة التحكم",
@@ -670,6 +673,7 @@ export const translations = {
       notifications: "الإشعارات",
       payments: "المدفوعات",
       settings: "الإعدادات",
+      contact: "تواصل",
       logOut: "تسجيل الخروج",
       adminPanel: "لوحة الإدارة",
     },
@@ -988,6 +992,7 @@ export const translations = {
       download: "Download",
       guide: "Anleitung",
       faq: "FAQ",
+      contact: "Kontakt",
       logIn: "Anmelden",
       getStarted: "Loslegen",
       dashboard: "Dashboard",
@@ -1158,6 +1163,7 @@ export const translations = {
       notifications: "Benachrichtigungen",
       payments: "Zahlungen",
       settings: "Einstellungen",
+      contact: "Kontakt",
       logOut: "Abmelden",
       adminPanel: "Admin-Panel",
     },

@@ -1,4 +1,4 @@
-﻿"""
+"""
 TLS Appointment Checker - Main Application
 License-based desktop app - enter license key to activate monitoring
 """
@@ -2735,104 +2735,8 @@ class TLSApp:
             )
             self.page.show_dialog(rating_dlg)
 
-        def show_support_dialog(e):
-            support_subject = ft.TextField(
-                label="Subject", width=400, border_radius=10,
-                prefix_icon=ft.Icons.SUBJECT,
-            )
-            support_message = ft.TextField(
-                label="Message", width=400, border_radius=10,
-                multiline=True, min_lines=4, max_lines=8,
-                prefix_icon=ft.Icons.MESSAGE,
-            )
-            support_email_field = ft.TextField(
-                label="Your Email (for reply)", width=400, border_radius=10,
-                prefix_icon=ft.Icons.EMAIL,
-                value=settings.notification_email if settings and settings.notification_email else "",
-            )
-            support_status = ft.Text("", size=13)
-
-            def send_support(e):
-                subj = (support_subject.value or "").strip()
-                msg = (support_message.value or "").strip()
-                reply_email = (support_email_field.value or "").strip()
-                if not subj or not msg or not reply_email:
-                    support_status.value = "Please fill in email, subject, and message."
-                    support_status.color = ft.Colors.RED_400
-                    self.page.update()
-                    return
-                # Send email in background
-                support_status.value = "Sending..."
-                support_status.color = ft.Colors.GREY_400
-                self.page.update()
-
-                def _send():
-                    try:
-                        hw_id = get_hardware_id()
-                        plan_name = license_status.get('plan', 'unknown') if license_status else 'none'
-                        payload = {
-                            "name": "Desktop App User",
-                            "email": reply_email,
-                            "subject": f"[Desktop Support] {subj}",
-                            "source": "desktop",
-                            "locale": "en",
-                            "message": (
-                                f"Hardware ID: {hw_id}\n"
-                                f"Plan: {plan_name}\n"
-                                f"App Version: {VERSION}\n"
-                                f"{'='*40}\n\n"
-                                f"{msg}"
-                            ),
-                        }
-                        req = urllib.request.Request(
-                            f"{Config.BACKEND_URL.rstrip('/')}/api/contact",
-                            data=json.dumps(payload).encode("utf-8"),
-                            headers={"Content-Type": "application/json", "Accept": "application/json"},
-                            method="POST",
-                        )
-                        with urllib.request.urlopen(req, timeout=15) as response:
-                            if getattr(response, "status", 200) >= 400:
-                                raise RuntimeError("Support request failed")
-
-                        support_status.value = "… Message sent! We'll get back to you soon."
-                        support_status.color = ft.Colors.GREEN_400
-                    except Exception as ex:
-                        support_status.value = f"Failed to send: {str(ex)[:60]}"
-                        support_status.color = ft.Colors.RED_400
-                    try:
-                        self.page.update()
-                    except Exception:
-                        pass
-
-                threading.Thread(target=_send, daemon=True).start()
-
-            def close_support(e):
-                self.page.pop_dialog()
-
-            support_dlg = ft.AlertDialog(
-                modal=True,
-                title=ft.Row([
-                    ft.Icon(ft.Icons.SUPPORT_AGENT, color="#00D9FF", size=28),
-                    ft.Text("Contact Support", size=20, weight=ft.FontWeight.BOLD),
-                ]),
-                content=ft.Column([
-                    ft.Text("Have a question or issue? Send us a message.", size=13, color=ft.Colors.GREY_400),
-                    ft.Container(height=10),
-                    support_email_field,
-                    support_subject,
-                    support_message,
-                    ft.Container(height=5),
-                    support_status,
-                ], tight=True, spacing=10),
-                actions=[
-                    ft.TextButton("Cancel", on_click=close_support),
-                    ft.FilledButton("Send", icon=ft.Icons.SEND, on_click=send_support,
-                                    style=ft.ButtonStyle(bgcolor="#00D9FF", color="#0A0E27")),
-                ],
-                actions_alignment=ft.MainAxisAlignment.END,
-                bgcolor="#1A1F3A",
-            )
-            self.page.show_dialog(support_dlg)
+        def open_contact_website(e):
+            webbrowser.open(f"{Config.WEBSITE_URL.rstrip('/')}/contact")
 
         # ---- Header ----
         header_actions = ft.Row(
@@ -2846,9 +2750,9 @@ class TLSApp:
                     icon_color="#00D9FF",
                 ),
                 ft.IconButton(
-                    icon=ft.Icons.SUPPORT_AGENT,
-                    tooltip="Contact Support",
-                    on_click=show_support_dialog,
+                    icon=ft.Icons.MAIL_OUTLINE,
+                    tooltip="Contact us (website)",
+                    on_click=open_contact_website,
                     icon_color="#00D9FF",
                 ),
                 ft.IconButton(
