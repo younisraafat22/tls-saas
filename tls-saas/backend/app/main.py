@@ -256,6 +256,51 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass
 
+    # Create admin notifications table
+    async with async_session() as db:
+        try:
+            await db.execute(text("""
+                CREATE TABLE IF NOT EXISTS admin_notifications (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    category VARCHAR(50) NOT NULL DEFAULT 'general',
+                    event_type VARCHAR(100) NOT NULL DEFAULT 'event',
+                    title VARCHAR(255) NOT NULL DEFAULT '',
+                    message TEXT NOT NULL DEFAULT '',
+                    payload JSON,
+                    is_read BOOLEAN NOT NULL DEFAULT 0,
+                    created_at DATETIME,
+                    read_at DATETIME
+                )
+            """))
+            await db.commit()
+            logger.info("Migration: ensured admin_notifications table exists")
+        except Exception:
+            pass
+
+    # Create support inquiries table
+    async with async_session() as db:
+        try:
+            await db.execute(text("""
+                CREATE TABLE IF NOT EXISTS support_inquiries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(255) NOT NULL DEFAULT '',
+                    email VARCHAR(255) NOT NULL DEFAULT '',
+                    subject VARCHAR(255) NOT NULL DEFAULT '',
+                    message TEXT NOT NULL DEFAULT '',
+                    source VARCHAR(20) NOT NULL DEFAULT 'website',
+                    locale VARCHAR(10) NOT NULL DEFAULT 'en',
+                    status VARCHAR(20) NOT NULL DEFAULT 'new',
+                    admin_reply TEXT,
+                    replied_at DATETIME,
+                    replied_by INTEGER REFERENCES users(id),
+                    created_at DATETIME
+                )
+            """))
+            await db.commit()
+            logger.info("Migration: ensured support_inquiries table exists")
+        except Exception:
+            pass
+
     # Rename legalization branches to include service label
     async with async_session() as db:
         try:

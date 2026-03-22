@@ -8,7 +8,7 @@ import { contactApi } from "@/lib/api";
 import { useLanguage } from "@/lib/i18n";
 
 export default function ContactPage() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const tr = t.contact;
   const [form, setForm] = useState({ name: "", email: "", subject: "", message: "" });
   const [loading, setLoading] = useState(false);
@@ -24,7 +24,7 @@ export default function ContactPage() {
     setError("");
     setLoading(true);
     try {
-      await contactApi.submit(form);
+      await contactApi.submit({ ...form, source: "website", locale });
       setSent(true);
     } catch (err: any) {
       setError(err?.detail || "Failed to send message. Please try again.");

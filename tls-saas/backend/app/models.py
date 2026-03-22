@@ -328,3 +328,38 @@ class HardwareUsage(Base):
     hardware_id = Column(String(255), unique=True, index=True, nullable=False)
     checks_today = Column(Integer, default=0)
     last_reset_date = Column(String(20), nullable=True) # YYYY-MM-DD
+
+
+class AdminNotification(Base):
+    __tablename__ = "admin_notifications"
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    category = Column(String(50), nullable=False, default="general")  # payment, inquiry, system
+    event_type = Column(String(100), nullable=False, default="event")  # new_payment, new_inquiry, etc.
+    title = Column(String(255), nullable=False, default="")
+    message = Column(Text, nullable=False, default="")
+    payload = Column(JSON, nullable=True)
+    is_read = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class SupportInquiry(Base):
+    __tablename__ = "support_inquiries"
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False, default="")
+    email = Column(String(255), nullable=False, index=True, default="")
+    subject = Column(String(255), nullable=False, default="")
+    message = Column(Text, nullable=False, default="")
+    source = Column(String(20), nullable=False, default="website")  # website | desktop
+    locale = Column(String(10), nullable=False, default="en")
+    status = Column(String(20), nullable=False, default="new")  # new | replied | closed
+    admin_reply = Column(Text, nullable=True)
+    replied_at = Column(DateTime(timezone=True), nullable=True)
+    replied_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
+
+    replier = relationship("User", foreign_keys=[replied_by])

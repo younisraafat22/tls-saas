@@ -5,11 +5,13 @@ Desktop App Routes — Version check, download info, payment submission
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.schemas import AppVersionResponse, DesktopPaymentSubmit
 from app.config import settings
 from app.database import get_db
-from app.models import Payment, User, PaymentMethod, PaymentStatus, AppDownload
+from app.models import Payment, User, PaymentMethod, PaymentStatus, AppDownload, AdminNotification
 from app.auth import get_current_admin
+from app.websocket import ws_manager
 
 router = APIRouter(prefix="/api/app", tags=["desktop-app"])
 
@@ -165,9 +167,8 @@ async def desktop_payment_submit(
 
     # Use a placeholder user_id=0 — admin will see submitter_name/email instead
     # (SQLite FK not enforced, Postgres would need a real user; use admin user as placeholder)
-    from sqlalchemy import select as sa_select
     admin_result = await db.execute(
-        sa_select(User).where(User.is_admin == True).limit(1)
+        select(User).where(User.is_admin == True).limit(1)
     )
     admin_user = admin_result.scalar_one_or_none()
     placeholder_user_id = admin_user.id if admin_user else 1
@@ -186,8 +187,35 @@ async def desktop_payment_submit(
         submitter_email=body.email,
     )
     db.add(payment)
+    await db.flush()
+    db.add(AdminNotification(
+        category="payment",
+        event_type="new_payment",
+        title="New desktop payment submitted",
+        message=f"{body.full_name} submitted a desktop payment ({amount} {settings.CURRENCY})",
+        payload={
+            "payment_id": payment.id,
+            "user_email": body.email,
+            "amount": amount,
+            "method": method.value if hasattr(method, "value") else str(method),
+            "reference": body.reference,
+            "plan": plan_key,
+            "source": "desktop",
+            "hardware_id": body.hardware_id,
+        },
+    ))
     await db.commit()
     await db.refresh(payment)
+
+    await ws_manager.broadcast_admin_event("new_payment", {
+        "payment_id": payment.id,
+        "user_email": body.email,
+        "amount": amount,
+        "method": method.value if hasattr(method, "value") else str(method),
+        "reference": body.reference,
+        "plan": plan_key,
+        "source": "desktop",
+    })
 
     return {
         "success": True,

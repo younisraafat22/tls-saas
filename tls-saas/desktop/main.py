@@ -2774,6 +2774,8 @@ class TLSApp:
                             "name": "Desktop App User",
                             "email": reply_email,
                             "subject": f"[Desktop Support] {subj}",
+                            "source": "desktop",
+                            "locale": "en",
                             "message": (
                                 f"Hardware ID: {hw_id}\n"
                                 f"Plan: {plan_name}\n"

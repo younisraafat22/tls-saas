@@ -14,6 +14,7 @@ from app.models import (
     FoundAppointment,
     User, Plan, Subscription, Branch, Payment, CheckResult,
     NotificationLog, ServiceAccount, SystemSetting, ActivityLog,
+    AdminNotification, SupportInquiry,
     UserBranchMonitor,
     PlanType, SubscriptionStatus, PaymentStatus, PaymentMethod, ServiceType,
     NotificationLogStatus,
@@ -24,7 +25,7 @@ from app.schemas import (
     DashboardStats, PaymentPublic, PaymentApproveRequest,
     PaymentRejectRequest, PlanUpdate, ServiceAccountCreate,
     ServiceAccountPublic, AdminUserUpdate, SystemSettingUpdate,
-    MessageResponse,
+    MessageResponse, AdminNotificationPublic, SupportInquiryPublic, ReplyInquiryRequest,
 )
 from app.websocket import ws_manager
 
@@ -1850,6 +1851,232 @@ async def system_logs(lines: int = 200, admin=Depends(get_current_admin)):
 
 
 # ── Admin WebSocket ──────────────────────────────────────────────────
+
+@router.get("/notifications")
+async def list_admin_notifications(
+    page: int = 1,
+    per_page: int = 30,
+    unread_only: bool = False,
+    category: str = "",
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    query = select(AdminNotification).order_by(AdminNotification.created_at.desc())
+    if unread_only:
+        query = query.where(AdminNotification.is_read == False)
+    if category:
+        query = query.where(AdminNotification.category == category.strip().lower())
+
+    count_q = select(func.count(AdminNotification.id))
+    if unread_only:
+        count_q = count_q.where(AdminNotification.is_read == False)
+    if category:
+        count_q = count_q.where(AdminNotification.category == category.strip().lower())
+    total = (await db.execute(count_q)).scalar() or 0
+
+    rows = (await db.execute(query.offset((page - 1) * per_page).limit(per_page))).scalars().all()
+    items = [
+        AdminNotificationPublic(
+            id=n.id,
+            category=n.category,
+            event_type=n.event_type,
+            title=n.title,
+            message=n.message,
+            payload=n.payload,
+            is_read=n.is_read,
+            created_at=n.created_at,
+            read_at=n.read_at,
+        ).model_dump()
+        for n in rows
+    ]
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": (total + per_page - 1) // per_page,
+    }
+
+
+@router.get("/notifications/counts")
+async def admin_notification_counts(
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    unread_total = (await db.execute(
+        select(func.count(AdminNotification.id)).where(AdminNotification.is_read == False)
+    )).scalar() or 0
+    unread_payments = (await db.execute(
+        select(func.count(AdminNotification.id)).where(
+            AdminNotification.is_read == False,
+            AdminNotification.category == "payment",
+        )
+    )).scalar() or 0
+    unread_inquiries = (await db.execute(
+        select(func.count(AdminNotification.id)).where(
+            AdminNotification.is_read == False,
+            AdminNotification.category == "inquiry",
+        )
+    )).scalar() or 0
+    return {
+        "unread_total": unread_total,
+        "unread_payments": unread_payments,
+        "unread_inquiries": unread_inquiries,
+    }
+
+
+@router.post("/notifications/{notification_id}/read", response_model=MessageResponse)
+async def mark_admin_notification_read(
+    notification_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    row = (await db.execute(
+        select(AdminNotification).where(AdminNotification.id == notification_id)
+    )).scalar_one_or_none()
+    if not row:
+        raise HTTPException(404, "Notification not found")
+    row.is_read = True
+    row.read_at = datetime.now(timezone.utc)
+    await db.commit()
+    return MessageResponse(message="Notification marked as read")
+
+
+@router.post("/notifications/read-all", response_model=MessageResponse)
+async def mark_all_admin_notifications_read(
+    category: str = "",
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    q = (
+        update(AdminNotification)
+        .where(AdminNotification.is_read == False)
+        .values(is_read=True, read_at=datetime.now(timezone.utc))
+    )
+    if category:
+        q = q.where(AdminNotification.category == category.strip().lower())
+    await db.execute(q)
+    await db.commit()
+    return MessageResponse(message="Notifications marked as read")
+
+
+@router.get("/inquiries")
+async def list_support_inquiries(
+    page: int = 1,
+    per_page: int = 30,
+    status: str = "",
+    search: str = "",
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    query = select(SupportInquiry).order_by(SupportInquiry.created_at.desc())
+    if status:
+        query = query.where(SupportInquiry.status == status.strip().lower())
+    if search:
+        s = f"%{search.strip()}%"
+        query = query.where(or_(
+            SupportInquiry.name.ilike(s),
+            SupportInquiry.email.ilike(s),
+            SupportInquiry.subject.ilike(s),
+            SupportInquiry.message.ilike(s),
+        ))
+
+    count_q = select(func.count(SupportInquiry.id))
+    if status:
+        count_q = count_q.where(SupportInquiry.status == status.strip().lower())
+    if search:
+        s = f"%{search.strip()}%"
+        count_q = count_q.where(or_(
+            SupportInquiry.name.ilike(s),
+            SupportInquiry.email.ilike(s),
+            SupportInquiry.subject.ilike(s),
+            SupportInquiry.message.ilike(s),
+        ))
+    total = (await db.execute(count_q)).scalar() or 0
+
+    rows = (await db.execute(query.offset((page - 1) * per_page).limit(per_page))).scalars().all()
+    return {
+        "items": [
+            SupportInquiryPublic(
+                id=i.id,
+                name=i.name,
+                email=i.email,
+                subject=i.subject,
+                message=i.message,
+                source=i.source,
+                locale=i.locale,
+                status=i.status,
+                admin_reply=i.admin_reply,
+                replied_at=i.replied_at,
+                replied_by=i.replied_by,
+                created_at=i.created_at,
+            ).model_dump()
+            for i in rows
+        ],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": (total + per_page - 1) // per_page,
+    }
+
+
+@router.post("/inquiries/{inquiry_id}/reply", response_model=MessageResponse)
+async def reply_to_inquiry(
+    inquiry_id: int,
+    body: ReplyInquiryRequest,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    row = (await db.execute(
+        select(SupportInquiry).where(SupportInquiry.id == inquiry_id)
+    )).scalar_one_or_none()
+    if not row:
+        raise HTTPException(404, "Inquiry not found")
+
+    from app.services.email_service import email_service
+    html = f"""
+    <div style='font-family:Arial,sans-serif;max-width:700px;margin:0 auto;color:#111827;'>
+      <h2 style='color:#0ea5e9;margin-bottom:12px;'>TLS Appointment Checker Support</h2>
+      <p style='margin:0 0 12px 0;'>Hello {row.name or "there"},</p>
+      <p style='margin:0 0 12px 0;'>We received your inquiry and here is our reply:</p>
+      <div style='white-space:pre-wrap;background:#f3f4f6;border-radius:8px;padding:14px;margin:8px 0 16px 0;'>{body.message}</div>
+      <p style='margin:0 0 8px 0;color:#6b7280;font-size:12px;'>Original subject: {row.subject or 'No subject'}</p>
+      <p style='margin:0;color:#6b7280;font-size:12px;'>Sent from admin panel on {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
+    </div>
+    """
+    ok = email_service.send(row.email, body.subject.strip(), html)
+    if not ok:
+        raise HTTPException(500, "Reply email failed to send. Check SMTP configuration.")
+
+    row.admin_reply = body.message.strip()
+    row.replied_at = datetime.now(timezone.utc)
+    row.replied_by = admin.id
+    row.status = "closed" if body.close_after_reply else "replied"
+
+    db.add(ActivityLog(
+        actor_id=admin.id,
+        action="inquiry_replied",
+        details={"inquiry_id": row.id, "email": row.email, "status": row.status},
+    ))
+    await db.commit()
+    return MessageResponse(message=f"Reply sent to {row.email}")
+
+
+@router.post("/inquiries/{inquiry_id}/mark-closed", response_model=MessageResponse)
+async def close_inquiry(
+    inquiry_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    row = (await db.execute(
+        select(SupportInquiry).where(SupportInquiry.id == inquiry_id)
+    )).scalar_one_or_none()
+    if not row:
+        raise HTTPException(404, "Inquiry not found")
+    row.status = "closed"
+    await db.commit()
+    return MessageResponse(message="Inquiry closed")
+
 
 @router.websocket("/ws")
 async def admin_websocket(websocket: WebSocket):

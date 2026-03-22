@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models import (
     User, Plan, Subscription, Payment, Branch,
-    SubscriptionStatus, PaymentStatus, UserCredential, ServiceType, PlanType,
+    SubscriptionStatus, PaymentStatus, UserCredential, ServiceType, PlanType, AdminNotification,
 )
 from app.services.checker import encrypt_credential
 from app.auth import get_current_user
@@ -85,6 +85,23 @@ async def submit_payment(
         submitter_email=user.email,
     )
     db.add(payment)
+    await db.flush()
+    db.add(AdminNotification(
+        category="payment",
+        event_type="new_payment",
+        title="New payment submitted",
+        message=f"{user.full_name or user.email} submitted a payment ({body.amount} {plan.currency})",
+        payload={
+            "payment_id": payment.id,
+            "user_email": user.email,
+            "amount": body.amount,
+            "method": body.method.value,
+            "reference": body.reference,
+            "plan": plan.display_name,
+            "branch": branch.name if branch else None,
+            "source": "website",
+        },
+    ))
 
     await db.commit()
 

@@ -231,7 +231,7 @@ export const monitoringApi = {
 // ── Contact API ───────────────────────────────────────
 
 export const contactApi = {
-  submit: (data: { name: string; email: string; subject: string; message: string }) =>
+  submit: (data: { name: string; email: string; subject: string; message: string; source?: string; locale?: string }) =>
     api.post("/api/contact", data, true),
 };
 
@@ -330,4 +330,18 @@ export const adminApi = {
     api.get(`/api/admin/users/${userId}/payments`),
   sendPasswordReset: (userId: number) =>
     api.post(`/api/admin/users/${userId}/send-password-reset`),
+  getNotificationCounts: () =>
+    api.get("/api/admin/notifications/counts"),
+  getNotifications: (page?: number, unreadOnly?: boolean, category?: string) =>
+    api.get(`/api/admin/notifications?page=${page || 1}${unreadOnly ? "&unread_only=true" : ""}${category ? `&category=${category}` : ""}`),
+  markNotificationRead: (id: number) =>
+    api.post(`/api/admin/notifications/${id}/read`),
+  markAllNotificationsRead: (category?: string) =>
+    api.post(`/api/admin/notifications/read-all${category ? `?category=${category}` : ""}`),
+  getInquiries: (page?: number, status?: string, search?: string) =>
+    api.get(`/api/admin/inquiries?page=${page || 1}${status ? `&status=${status}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`),
+  replyInquiry: (id: number, data: { subject: string; message: string; close_after_reply?: boolean }) =>
+    api.post(`/api/admin/inquiries/${id}/reply`, data),
+  closeInquiry: (id: number) =>
+    api.post(`/api/admin/inquiries/${id}/mark-closed`),
 };

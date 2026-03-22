@@ -357,5 +357,44 @@ class PaginatedResponse(BaseModel):
     pages: int
 
 
+class AdminNotificationPublic(BaseModel):
+    id: int
+    category: str
+    event_type: str
+    title: str
+    message: str
+    payload: Optional[Any] = None
+    is_read: bool
+    created_at: datetime
+    read_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SupportInquiryPublic(BaseModel):
+    id: int
+    name: str
+    email: str
+    subject: str
+    message: str
+    source: str
+    locale: str
+    status: str
+    admin_reply: Optional[str] = None
+    replied_at: Optional[datetime] = None
+    replied_by: Optional[int] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ReplyInquiryRequest(BaseModel):
+    subject: str = Field(min_length=1, max_length=255)
+    message: str = Field(min_length=1, max_length=10000)
+    close_after_reply: bool = True
+
+
 # Fix forward reference for TokenResponse
 TokenResponse.model_rebuild()
