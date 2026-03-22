@@ -4,6 +4,7 @@ and stores inquiries for admin inbox handling.
 """
 
 import logging
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,8 +25,8 @@ class ContactRequest(BaseModel):
     email: str
     subject: str
     message: str
-    source: str = "website"   # website | desktop
-    locale: str = "en"
+    source: Optional[str] = None   # website | desktop
+    locale: Optional[str] = None
 
 
 @router.post("/api/contact")
@@ -37,46 +38,64 @@ async def submit_contact(
     if not body.name or not body.email or not body.message:
         raise HTTPException(400, "Name, email, and message are required")
 
-    # Send to admin
-    html = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #00d9ff;">New Contact Form Submission</h2>
-        <table style="width: 100%; border-collapse: collapse;">
-            <tr><td style="padding: 8px; color: #888; width: 100px;">From</td><td style="padding: 8px;"><strong>{body.name}</strong></td></tr>
-            <tr><td style="padding: 8px; color: #888;">Email</td><td style="padding: 8px;">{body.email}</td></tr>
-            <tr><td style="padding: 8px; color: #888;">Source</td><td style="padding: 8px;">{body.source}</td></tr>
-            <tr><td style="padding: 8px; color: #888;">Language</td><td style="padding: 8px;">{body.locale}</td></tr>
-            <tr><td style="padding: 8px; color: #888;">Subject</td><td style="padding: 8px;">{body.subject or 'No subject'}</td></tr>
-        </table>
-        <div style="margin-top: 16px; padding: 16px; background: #f5f5f5; border-radius: 8px;">
-            <p style="white-space: pre-wrap;">{body.message}</p>
+    source = (body.source or "").strip().lower()
+    if source not in {"website", "desktop"}:
+        # Backward compatibility with old desktop builds that don't send `source`
+        if (body.subject or "").strip().lower().startswith("[desktop support]") or "hardware id:" in (body.message or "").lower():
+            source = "desktop"
+        else:
+            source = "website"
+    locale = (body.locale or "en").strip().lower()[:10] or "en"
+    subject = (body.subject or "").strip() or "No subject"
+
+    # Send to admin using branded styling (consistent with license/registration mails)
+    admin_html = f"""
+    <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:640px;margin:0 auto;background:#0a0e27;color:#fff;">
+      <div style="background:linear-gradient(135deg,#00d9ff 0%,#0066ff 100%);padding:26px;border-radius:16px 16px 0 0;text-align:center;">
+        <h2 style="margin:0;color:#fff;">New Support Inquiry</h2>
+      </div>
+      <div style="background:#141832;padding:24px;border-radius:0 0 16px 16px;">
+        <div style="display:grid;grid-template-columns:120px 1fr;gap:10px 14px;font-size:14px;">
+          <div style="color:#9ca3af;">From</div><div style="color:#fff;font-weight:600;">{body.name}</div>
+          <div style="color:#9ca3af;">Email</div><div style="color:#fff;">{body.email}</div>
+          <div style="color:#9ca3af;">Source</div><div style="color:#fff;">{source}</div>
+          <div style="color:#9ca3af;">Language</div><div style="color:#fff;">{locale}</div>
+          <div style="color:#9ca3af;">Subject</div><div style="color:#fff;">{subject}</div>
         </div>
-        <p style="margin-top: 16px; color: #888; font-size: 12px;">Reply directly to: {body.email}</p>
+        <div style="margin-top:16px;padding:14px;background:#0a0e27;border:1px solid #22305f;border-radius:10px;white-space:pre-wrap;color:#e5e7eb;">{body.message}</div>
+      </div>
+      <div style="text-align:center;padding:14px;color:#94a3b8;font-size:12px;">TLS Appointment Checker - Support Inbox</div>
     </div>
     """
-
     admin_email = settings.ADMIN_EMAIL
-    sent = email_service.send(admin_email, f"[Contact] {body.subject or 'New message'} - from {body.name}", html)
+    sent = email_service.send(admin_email, f"[Support] {subject} - {body.name}", admin_html)
 
-    # Also send a confirmation to the sender
-    confirmation_html = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #00d9ff;">Thank you for contacting us!</h2>
-        <p>Hi {body.name},</p>
-        <p>We've received your message and will get back to you as soon as possible.</p>
-        <p style="margin-top: 16px; padding: 16px; background: #f5f5f5; border-radius: 8px; white-space: pre-wrap;">{body.message}</p>
-        <p style="margin-top: 16px; color: #888; font-size: 12px;">- TLS Appointment Checker Team</p>
+    # Confirmation to sender with same brand styling
+    confirm_html = f"""
+    <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:640px;margin:0 auto;background:#0a0e27;color:#fff;">
+      <div style="background:linear-gradient(135deg,#00d9ff 0%,#0066ff 100%);padding:26px;border-radius:16px 16px 0 0;text-align:center;">
+        <h2 style="margin:0;color:#fff;">We Received Your Message</h2>
+      </div>
+      <div style="background:#141832;padding:24px;border-radius:0 0 16px 16px;">
+        <p style="margin:0 0 10px 0;color:#fff;">Hi {body.name},</p>
+        <p style="margin:0 0 14px 0;color:#d1d5db;">Thanks for contacting us. Our team will reply as soon as possible.</p>
+        <div style="color:#9ca3af;font-size:13px;margin-bottom:6px;">Subject</div>
+        <div style="color:#fff;margin-bottom:12px;">{subject}</div>
+        <div style="color:#9ca3af;font-size:13px;margin-bottom:6px;">Your message</div>
+        <div style="padding:14px;background:#0a0e27;border:1px solid #22305f;border-radius:10px;white-space:pre-wrap;color:#e5e7eb;">{body.message}</div>
+      </div>
+      <div style="text-align:center;padding:14px;color:#94a3b8;font-size:12px;">TLS Appointment Checker Support</div>
     </div>
     """
-    email_service.send(body.email, "We received your message - TLS Appointment Checker", confirmation_html)
+    email_service.send(body.email, "We received your message - TLS Appointment Checker", confirm_html)
 
     inquiry = SupportInquiry(
         name=body.name.strip(),
         email=body.email.strip(),
         subject=(body.subject or "").strip() or "No subject",
         message=body.message.strip(),
-        source=(body.source or "website").strip().lower(),
-        locale=(body.locale or "en").strip().lower(),
+        source=source,
+        locale=locale,
         status="new",
     )
     db.add(inquiry)
