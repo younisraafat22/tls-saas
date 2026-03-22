@@ -23,7 +23,13 @@ from app.models import (
     SystemSetting, ServiceType, HardwareUsage,
 )
 from app.auth import get_current_user
-from app.schemas import CheckResultPublic, NotificationLogPublic, DesktopCheckReport, DesktopEmailRelay
+from app.schemas import (
+    CheckResultPublic,
+    NotificationLogPublic,
+    DesktopCheckReport,
+    DesktopEmailRelay,
+    DesktopHardwareRegister,
+)
 
 logger = logging.getLogger("monitoring")
 
@@ -685,6 +691,36 @@ async def report_desktop_check_by_license(
     return {"status": "ok", "check_result_id": cr.id, "slots_available": body.slots_available}
 
 
+def _simple_email_ok(addr: str) -> bool:
+    a = (addr or "").strip()
+    if len(a) < 5 or len(a) > 254 or "@" not in a:
+        return False
+    local, _, domain = a.partition("@")
+    return bool(local and domain and "." in domain)
+
+
+@router.post("/register-desktop-hardware")
+async def register_desktop_hardware(
+    body: DesktopHardwareRegister,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Idempotent: ensure hardware_usage has a row for this device (trial email relay, metrics).
+    """
+    hw = (body.hardware_id or "").strip()
+    if len(hw) < 8:
+        raise HTTPException(400, "hardware_id is required")
+
+    result = await db.execute(select(HardwareUsage).where(HardwareUsage.hardware_id == hw))
+    if result.scalar_one_or_none():
+        return {"status": "ok", "registered": False}
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    db.add(HardwareUsage(hardware_id=hw, checks_today=0, last_reset_date=today))
+    await db.commit()
+    return {"status": "ok", "registered": True}
+
+
 @router.post("/desktop-email-relay")
 async def desktop_email_relay(
     body: DesktopEmailRelay,
@@ -693,14 +729,46 @@ async def desktop_email_relay(
     """
     Send an HTML email using server SMTP. Used by the installed desktop app when
     ADMIN_EMAIL / ADMIN_EMAIL_PASSWORD are not available locally (PyInstaller builds).
-    Authenticated by license key + hardware_id; recipient must match the account or payment email.
+    Paid licenses: license key + hardware must match Payment; recipient must match user/submitter email.
+    Trial: key TRIAL + hardware_id registered via /register-desktop-hardware; any valid recipient.
     """
     if not body.license_key or not body.to_email.strip():
         raise HTTPException(400, "license_key and to_email are required")
 
+    if not _simple_email_ok(body.to_email):
+        raise HTTPException(400, "Invalid recipient email")
+
+    from app.services.email_service import email_service
+
+    lk = body.license_key.strip()
+    # ── Trial (local license file key is literally "TRIAL" — no Payment row) ──
+    if lk.upper() == "TRIAL":
+        hw = (body.hardware_id or "").strip()
+        if len(hw) < 8:
+            raise HTTPException(400, "hardware_id is required for trial relay")
+
+        uq = await db.execute(select(HardwareUsage).where(HardwareUsage.hardware_id == hw))
+        if not uq.scalar_one_or_none():
+            raise HTTPException(
+                403,
+                "Device not registered for relay — open the app once after install or complete a check",
+            )
+
+        ok = email_service.send(
+            to_email=body.to_email.strip(),
+            subject=body.subject[:998] if body.subject else "TLS Appointment Checker",
+            html_body=body.html_body[:500_000] if body.html_body else "<p></p>",
+        )
+        if not ok:
+            raise HTTPException(503, "Email could not be sent (server SMTP unavailable)")
+        return {"status": "ok", "sent": True}
+
+    # ── Paid license (case-insensitive key match — Postgres/SQLite) ─────────
     pay_result = await db.execute(
         select(Payment).where(
-            Payment.license_key == body.license_key.strip(),
+            Payment.license_key.isnot(None),
+            Payment.license_key != "",
+            func.upper(Payment.license_key) == lk.upper(),
             Payment.status == PaymentStatus.APPROVED,
         ).limit(1)
     )
@@ -720,10 +788,12 @@ async def desktop_email_relay(
     allowed = {user.email.strip().lower()}
     if payment.submitter_email and payment.submitter_email.strip():
         allowed.add(payment.submitter_email.strip().lower())
-    if dest not in allowed:
-        raise HTTPException(400, "Recipient email must match your registered account email")
 
-    from app.services.email_service import email_service
+    if dest not in allowed:
+        raise HTTPException(
+            400,
+            "Recipient must be your account email or the email used when purchasing the desktop license",
+        )
 
     ok = email_service.send(
         to_email=body.to_email.strip(),

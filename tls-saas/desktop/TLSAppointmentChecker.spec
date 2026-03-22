@@ -129,7 +129,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='Logos\\icon_BLACK.ico',
+    icon='Logos\\icon_WHITE.ico',
     
 )
 

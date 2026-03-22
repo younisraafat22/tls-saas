@@ -303,6 +303,15 @@ class TLSApp:
         # Flush any feedback saved while offline or during transient backend failures.
         self._flush_pending_feedback_async()
 
+        # Register hardware on backend (idempotent) so trial email relay works before first check.
+        def _register_hw_once():
+            try:
+                from license_service import register_desktop_hardware_with_backend
+                register_desktop_hardware_with_backend()
+            except Exception:
+                pass
+        threading.Thread(target=_register_hw_once, daemon=True).start()
+
         # Show a loading screen immediately, then route in background
         self._show_loading_screen()
         threading.Thread(target=self.check_license_and_route, daemon=True).start()
@@ -1304,19 +1313,22 @@ class TLSApp:
             pass
         return False
 
-    def _try_cloud_start(self, settings) -> bool:
+    def _try_cloud_start(self, settings, *, quiet: bool = False) -> bool:
         """Try to start cloud monitoring on the server.
         Returns True if cloud monitoring was started, False to fall back to local.
-        Only premium plans are eligible for server-side monitoring."""
+        Only premium plans are eligible for server-side monitoring.
+        quiet: if True, do not show snack bars (e.g. resume-monitoring background thread)."""
 
         # Gate: only premium plans get server monitoring
         if not self._is_premium_plan():
-            self._show_info_snack("Local monitoring active \u2014 keep your PC on while checking.")
+            if not quiet:
+                self._show_info_snack("Local monitoring active \u2014 keep your PC on while checking.")
             return False
 
         server_url = Config.LICENSE_SERVER_URL
         if not server_url:
-            self._show_info_snack("Server URL not configured \u2014 starting local monitoring. Keep your PC on.")
+            if not quiet:
+                self._show_info_snack("Server URL not configured \u2014 starting local monitoring. Keep your PC on.")
             return False
         try:
             license_status = get_license_status()
@@ -1346,22 +1358,27 @@ class TLSApp:
                 result = json.loads(resp.read())
                 if result.get("success"):
                     self._cloud_monitoring = True
-                    self._show_info_snack("\u2601\ufe0f Cloud monitoring started! Your PC does NOT need to stay on.")
+                    if not quiet:
+                        self._show_info_snack("\u2601\ufe0f Cloud monitoring started! Your PC does NOT need to stay on.")
                     # Start polling for status
                     self._start_cloud_polling()
                     return True
                 else:
-                    self._show_info_snack(f"\u26a0\ufe0f Server: {result.get('error', 'Unknown error')} \u2014 starting local monitoring.")
+                    if not quiet:
+                        self._show_info_snack(f"\u26a0\ufe0f Server: {result.get('error', 'Unknown error')} \u2014 starting local monitoring.")
                     return False
         except urllib.error.HTTPError as e:
             body = e.read().decode(errors='ignore')[:200]
-            self._show_info_snack(f"\u26a0\ufe0f Server HTTP {e.code} \u2014 starting local monitoring. Keep your PC on.")
+            if not quiet:
+                self._show_info_snack(f"\u26a0\ufe0f Server HTTP {e.code} \u2014 starting local monitoring. Keep your PC on.")
             return False
         except urllib.error.URLError as e:
-            self._show_info_snack("Server unavailable \u2014 starting local monitoring. Keep your PC on.")
+            if not quiet:
+                self._show_info_snack("Server unavailable \u2014 starting local monitoring. Keep your PC on.")
             return False
         except Exception as e:
-            self._show_info_snack(f"Server unavailable ({type(e).__name__}) \u2014 starting local monitoring. Keep your PC on.")
+            if not quiet:
+                self._show_info_snack(f"Server unavailable ({type(e).__name__}) \u2014 starting local monitoring. Keep your PC on.")
             return False
 
     def _try_cloud_stop(self) -> bool:
@@ -3064,6 +3081,68 @@ class TLSApp:
                 update_toggle_button()
             else:
                 db.close()
+
+        # Resume monitoring after reboot, autostart (--startup), or if DB still says "on"
+        elif self.checker and not self.checker.is_running:
+            db_r = SessionLocal()
+            s_r = db_r.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
+            should_resume = bool(
+                s_r and s_r.is_monitoring and s_r.tls_email and s_r.tls_password
+            )
+            db_r.close()
+            if should_resume:
+
+                def _bg_resume_monitoring():
+                    try:
+                        allowed, reason = can_check()
+                        if not allowed:
+                            self._ui_queue.put(
+                                lambda: self._show_info_snack(
+                                    f"\u26a0\ufe0f Could not resume monitoring: {reason}",
+                                    color=ft.Colors.ORANGE_400,
+                                )
+                            )
+                            dbf = SessionLocal()
+                            sf = dbf.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
+                            if sf:
+                                sf.is_monitoring = False
+                                dbf.commit()
+                            dbf.close()
+                            self._ui_queue.put(update_toggle_button)
+                            return
+
+                        db2 = SessionLocal()
+                        s2 = db2.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
+                        if self._try_cloud_start(s2, quiet=True):
+                            s2.is_monitoring = True
+                            db2.commit()
+                            db2.close()
+                            self._ui_queue.put(update_toggle_button)
+                            return
+
+                        self.checker.start_monitoring()
+                        s2.is_monitoring = True
+                        db2.commit()
+                        db2.close()
+                        self._ui_queue.put(update_toggle_button)
+                    except Exception as exc:
+                        import traceback
+                        traceback.print_exc()
+                        db3 = SessionLocal()
+                        s3 = db3.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
+                        if s3:
+                            s3.is_monitoring = False
+                            db3.commit()
+                        db3.close()
+                        self._ui_queue.put(
+                            lambda: self._show_info_snack(
+                                f"\u274c Resume failed: {exc}",
+                                color=ft.Colors.RED_400,
+                            )
+                        )
+                        self._ui_queue.put(update_toggle_button)
+
+                threading.Thread(target=_bg_resume_monitoring, daemon=True).start()
 
     # ==================================================================
     #  SCREENSHOTS GALLERY

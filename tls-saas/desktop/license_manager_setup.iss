@@ -11,7 +11,7 @@ OutputDir=installer_output
 OutputBaseFilename=TLS_License_Manager_v1.0.0_Setup
 ArchitecturesInstallIn64BitMode=x64os
 PrivilegesRequired=admin
-SetupIconFile=Logos\icon_BLACK.ico
+SetupIconFile=Logos\icon_WHITE.ico
 
 [Files]
 Source: "dist\LicenseManager\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

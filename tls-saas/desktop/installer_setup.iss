@@ -27,7 +27,7 @@ DisableProgramGroupPage=yes
 ; Output Configuration
 OutputDir=installer_output
 OutputBaseFilename=TLS_Appointment_Checker_v{#MyAppVersion}_Setup
-SetupIconFile=Logos\icon_BLACK.ico
+SetupIconFile=Logos\icon_WHITE.ico
 Compression=lzma2/max
 SolidCompression=yes
 
@@ -62,12 +62,12 @@ Source: "Cloudflare_WARP.msi"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
 ; Start Menu
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\_internal\Logos\icon_BLACK.ico"; WorkingDir: "{app}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\_internal\Logos\icon_WHITE.ico"; WorkingDir: "{app}"
 Name: "{group}\License"; Filename: "{app}\LICENSE.txt"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 
 ; Desktop Icon
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\_internal\Logos\icon_BLACK.ico"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\_internal\Logos\icon_WHITE.ico"; WorkingDir: "{app}"; Tasks: desktopicon
 
 ; Quick Launch (for older Windows versions)
 Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: quicklaunchicon

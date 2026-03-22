@@ -628,6 +628,7 @@ def activate_license(key: str) -> tuple[bool, str]:
     _revoke_cache["not_revoked"] = True
 
     _write_license_file(license_data)
+    register_desktop_hardware_with_backend()
     return True, f"License activated! Type: {plan_info['name']}"
 
 
@@ -675,7 +676,9 @@ def activate_trial() -> tuple[bool, str]:
     
     # Mark trial as activated in persistent storage (Registry)
     _mark_trial_activated()
-    
+
+    register_desktop_hardware_with_backend()
+
     return True, f"Trial activated! Expires in {trial_info['duration_days']} day(s)."
 
 
@@ -872,6 +875,28 @@ def can_check() -> tuple[bool, str]:
     if status["checks_today"] >= status["checks_limit"]:
         return False, f"Daily check limit reached ({status['checks_limit']})."
     return True, ""
+
+
+def register_desktop_hardware_with_backend() -> None:
+    """Ensure backend has a hardware_usage row (trial email relay; idempotent)."""
+    try:
+        hw_id = get_hardware_id()
+        if not hw_id or len(str(hw_id).strip()) < 8:
+            return
+        backend_url = (getattr(Config, "BACKEND_URL", "") or "").rstrip("/")
+        if not backend_url:
+            return
+        payload = json.dumps({"hardware_id": str(hw_id).strip()}).encode("utf-8")
+        req = urllib.request.Request(
+            f"{backend_url}/api/monitoring/register-desktop-hardware",
+            data=payload,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            method="POST",
+        )
+        with _safe_urlopen(req, timeout=10):
+            pass
+    except Exception:
+        pass
 
 
 def increment_check_count():

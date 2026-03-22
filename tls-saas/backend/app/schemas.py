@@ -343,6 +343,11 @@ class DesktopEmailRelay(BaseModel):
     html_body: str
 
 
+class DesktopHardwareRegister(BaseModel):
+    """Register a desktop device id so trial builds can use email relay before the first check."""
+    hardware_id: str = ""
+
+
 class AppVersionResponse(BaseModel):
     """Version info for desktop app auto-update."""
     version: str
