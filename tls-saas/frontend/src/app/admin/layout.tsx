@@ -134,12 +134,17 @@ export default function AdminLayout({
 
       {/* Mobile top bar */}
       <div className="lg:hidden fixed top-0 left-0 right-0 bg-dark-800 border-b border-white/5 z-20 px-4 py-3 flex items-center justify-between overflow-x-hidden">
-        <div className="flex items-center gap-2 text-primary-400 font-display font-bold text-lg">
-          <Shield className="w-5 h-5" /> Admin
+        <div className="grid grid-cols-3 items-center w-full">
+          <div className="justify-self-start min-w-[20px]" />
+          <div className="justify-self-center flex items-center gap-2 text-primary-400 font-display font-bold text-lg">
+            <Shield className="w-5 h-5" /> Admin
+          </div>
+          <div className="justify-self-end">
+            <Link href="/dashboard" className="text-sm text-gray-400">
+              <ArrowLeft className="w-5 h-5" />
+            </Link>
+          </div>
         </div>
-        <Link href="/dashboard" className="text-sm text-gray-400">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
       </div>
 
       {/* Mobile bottom nav */}
