@@ -82,6 +82,13 @@ export default function AdminInquiriesPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    const id = setInterval(() => {
+      load();
+    }, 15000);
+    return () => clearInterval(id);
+  }, [load]);
+
   const statusColor = (status: string) => {
     if (status === "new") return "text-amber-300 bg-amber-500/10";
     if (status === "replied") return "text-primary-300 bg-primary-500/10";

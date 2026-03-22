@@ -62,6 +62,14 @@ export default function AdminLayout({
   }, [user?.is_admin, loadNotifCounts]);
 
   useEffect(() => {
+    if (!user?.is_admin) return;
+    const id = setInterval(() => {
+      loadNotifCounts();
+    }, 15000);
+    return () => clearInterval(id);
+  }, [user?.is_admin, loadNotifCounts]);
+
+  useEffect(() => {
     if (!lastMessage) return;
     if (["new_payment", "new_inquiry"].includes(lastMessage.type)) {
       loadNotifCounts();
@@ -109,7 +117,7 @@ export default function AdminLayout({
                 <item.icon className="w-4 h-4" />
                 <span className="flex-1">{item.label}</span>
                 {badgeCount > 0 && (
-                  <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-primary-500/20 text-primary-300 text-xs font-semibold inline-flex items-center justify-center">
+                  <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-xs font-semibold inline-flex items-center justify-center">
                     {badgeCount > 99 ? "99+" : badgeCount}
                   </span>
                 )}
@@ -157,7 +165,7 @@ export default function AdminLayout({
               <span className="relative">
                 <item.icon className="w-5 h-5" />
                 {badgeCount > 0 && (
-                  <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-primary-500 text-black text-[10px] font-bold inline-flex items-center justify-center">
+                  <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold inline-flex items-center justify-center">
                     {badgeCount > 9 ? "9+" : badgeCount}
                   </span>
                 )}

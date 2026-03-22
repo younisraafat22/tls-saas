@@ -26,6 +26,13 @@ export default function AdminNotificationsPage() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
+    const id = setInterval(() => {
+      load();
+    }, 15000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  useEffect(() => {
     if (!lastMessage) return;
     if (["new_payment", "new_inquiry"].includes(lastMessage.type)) {
       load();
