@@ -335,9 +335,24 @@ async def monitoring_status(
     next_run_setting = next_run_result.scalar_one_or_none()
     worker_next_run = next_run_setting.value if next_run_setting else None
 
-    # Total checks for this user
+    # Total checks for this user, scoped to their active monitors and monitor start time.
+    # This avoids counting orphan/legacy rows that can leak into newly created accounts.
     total_checks_result = await db.execute(
-        select(func.count(CheckResult.id)).where(CheckResult.user_id == user.id)
+        select(func.count(func.distinct(CheckResult.id)))
+        .select_from(CheckResult)
+        .join(
+            UserBranchMonitor,
+            and_(
+                UserBranchMonitor.user_id == user.id,
+                UserBranchMonitor.branch_id == CheckResult.branch_id,
+                UserBranchMonitor.is_active == True,
+                CheckResult.checked_at >= UserBranchMonitor.created_at,
+            ),
+        )
+        .where(
+            CheckResult.user_id == user.id,
+            CheckResult.user_id.isnot(None),
+        )
     )
     total_checks = total_checks_result.scalar() or 0
 

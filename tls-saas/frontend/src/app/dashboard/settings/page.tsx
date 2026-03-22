@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
-import { authApi, credentialApi } from "@/lib/api";
+import { authApi, credentialApi, monitoringApi } from "@/lib/api";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import {
   User, Lock, Bell, Save, Key,
@@ -17,13 +17,15 @@ export default function SettingsPage() {
   const { t } = useLanguage();
   const ts = t.settings;
   const [activeTab, setActiveTab] = useState("profile");
+  const [premiumByStatus, setPremiumByStatus] = useState<boolean | null>(null);
   const planKeys = [
     user?.active_plan || "",
     ...((user?.active_plans || []) as string[]),
   ]
     .map((p) => String(p || "").toLowerCase())
     .filter(Boolean);
-  const hasPremiumPlan = planKeys.some((p) => p.includes("premium"));
+  const hasPremiumFromProfile = planKeys.some((p) => p.includes("premium") || p.includes("بريميوم"));
+  const hasPremiumPlan = hasPremiumFromProfile || premiumByStatus === true;
 
   // Profile form
   const [fullName, setFullName] = useState("");
@@ -53,6 +55,23 @@ export default function SettingsPage() {
       setPhone(user.phone || "");
     }
   }, [user]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = await monitoringApi.getStatus();
+        const types: string[] = Array.isArray(status?.plan_types) ? status.plan_types : [];
+        const premium = types.some((p) => String(p || "").toUpperCase() === "PREMIUM");
+        if (!cancelled) setPremiumByStatus(premium);
+      } catch {
+        if (!cancelled) setPremiumByStatus(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!hasPremiumPlan && activeTab === "credentials") {
