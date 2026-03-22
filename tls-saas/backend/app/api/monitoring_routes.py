@@ -23,7 +23,7 @@ from app.models import (
     SystemSetting, ServiceType, HardwareUsage,
 )
 from app.auth import get_current_user
-from app.schemas import CheckResultPublic, NotificationLogPublic, DesktopCheckReport
+from app.schemas import CheckResultPublic, NotificationLogPublic, DesktopCheckReport, DesktopEmailRelay
 
 logger = logging.getLogger("monitoring")
 
@@ -651,15 +651,8 @@ async def report_desktop_check_by_license(
         db.add(nl)
         await db.commit()
 
-    # Check if desktop app experienced a critical error (no application, bad credentials) and alert user
-    if user and body.error:
-        error_lower = body.error.lower()
-        if('no application' in error_lower or 'invalid' in error_lower or 'incorrect' in error_lower or 'wrong' in error_lower):
-            try:
-                from app.services.scheduler import _notify_user_check_error
-                await _notify_user_check_error(user, branch.name if branch else "unknown", body.error)
-            except Exception as e:
-                logging.getLogger("monitoring").warning(f"Failed to send desktop error alert: {e}")
+    # Error emails are sent by the desktop app via /desktop-email-relay (or local SMTP when .env is present).
+    # Avoid duplicating the same alert here.
 
     # Broadcast to user's dashboard via WebSocket so it auto-refreshes
     try:
@@ -690,6 +683,56 @@ async def report_desktop_check_by_license(
             logger.warning(f"Failed to send desktop alert email: {e}")
 
     return {"status": "ok", "check_result_id": cr.id, "slots_available": body.slots_available}
+
+
+@router.post("/desktop-email-relay")
+async def desktop_email_relay(
+    body: DesktopEmailRelay,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Send an HTML email using server SMTP. Used by the installed desktop app when
+    ADMIN_EMAIL / ADMIN_EMAIL_PASSWORD are not available locally (PyInstaller builds).
+    Authenticated by license key + hardware_id; recipient must match the account or payment email.
+    """
+    if not body.license_key or not body.to_email.strip():
+        raise HTTPException(400, "license_key and to_email are required")
+
+    pay_result = await db.execute(
+        select(Payment).where(
+            Payment.license_key == body.license_key.strip(),
+            Payment.status == PaymentStatus.APPROVED,
+        ).limit(1)
+    )
+    payment = pay_result.scalar_one_or_none()
+    if not payment:
+        raise HTTPException(401, "Invalid or inactive license key")
+
+    if not _hardware_matches(payment.hardware_id, body.hardware_id):
+        raise HTTPException(403, "Hardware ID does not match this license")
+
+    user_result = await db.execute(select(User).where(User.id == payment.user_id))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    dest = body.to_email.strip().lower()
+    allowed = {user.email.strip().lower()}
+    if payment.submitter_email and payment.submitter_email.strip():
+        allowed.add(payment.submitter_email.strip().lower())
+    if dest not in allowed:
+        raise HTTPException(400, "Recipient email must match your registered account email")
+
+    from app.services.email_service import email_service
+
+    ok = email_service.send(
+        to_email=body.to_email.strip(),
+        subject=body.subject[:998] if body.subject else "TLS Appointment Checker",
+        html_body=body.html_body[:500_000] if body.html_body else "<p></p>",
+    )
+    if not ok:
+        raise HTTPException(503, "Email could not be sent (server SMTP unavailable)")
+    return {"status": "ok", "sent": True}
 
 
 # ── Laptop Worker API (WORKER_MODE architecture) ───────────────────────────────

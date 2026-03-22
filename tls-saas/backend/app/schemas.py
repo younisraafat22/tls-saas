@@ -334,6 +334,15 @@ class DesktopCheckReport(BaseModel):
     error: str = ""
 
 
+class DesktopEmailRelay(BaseModel):
+    """Ask the backend to send an HTML email when the desktop app has no local SMTP (.env)."""
+    license_key: str
+    hardware_id: str = ""
+    to_email: str
+    subject: str
+    html_body: str
+
+
 class AppVersionResponse(BaseModel):
     """Version info for desktop app auto-update."""
     version: str

@@ -3,12 +3,17 @@ Notification Service
 Handles email and Windows toast notifications
 """
 import smtplib
+import json
+import urllib.request
+import urllib.error
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 from datetime import datetime
+from typing import Optional
 import os
+from pathlib import Path
 from config import Config
 
 # Cross-platform notifications
@@ -24,6 +29,69 @@ class NotificationService:
     
     def __init__(self):
         pass
+
+    def _log_relay(self, message: str) -> None:
+        """Persist relay diagnostics (frozen apps have no console)."""
+        try:
+            log_path = Path(str(Config.BASE_DIR)) / "email_relay.log"
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(f"[{ts}] {message}\n")
+        except Exception:
+            pass
+
+    def _send_email_via_backend_relay(
+        self, to_email: str, subject: str, html_body: str, screenshot_path: Optional[str]
+    ) -> bool:
+        """
+        Use server SMTP on BACKEND_URL when local ADMIN_EMAIL is not bundled (installed .exe).
+        Screenshot attachments are skipped in relay mode.
+        """
+        if screenshot_path and os.path.exists(screenshot_path):
+            self._log_relay("relay: screenshot attachment skipped (use local .env SMTP for attachments)")
+        try:
+            from license_service import _read_license_file, _safe_urlopen, get_hardware_id
+
+            lic = _read_license_file()
+            if not lic or not lic.get("key"):
+                self._log_relay("relay skipped: no license key on disk")
+                return False
+
+            hw = get_hardware_id() or ""
+            payload = json.dumps(
+                {
+                    "license_key": lic["key"],
+                    "hardware_id": hw,
+                    "to_email": to_email.strip(),
+                    "subject": subject,
+                    "html_body": html_body,
+                },
+                ensure_ascii=False,
+            ).encode("utf-8")
+
+            url = f"{Config.BACKEND_URL.rstrip('/')}/api/monitoring/desktop-email-relay"
+            req = urllib.request.Request(
+                url,
+                data=payload,
+                headers={"Content-Type": "application/json", "Accept": "application/json"},
+                method="POST",
+            )
+            try:
+                with _safe_urlopen(req, timeout=30) as resp:
+                    code = int(getattr(resp, "status", 200))
+                    if code >= 400:
+                        body = resp.read().decode(errors="replace")[:500]
+                        self._log_relay(f"relay HTTP {code}: {body}")
+                        return False
+            except urllib.error.HTTPError as e:
+                body = e.read().decode(errors="replace")[:500] if e.fp else ""
+                self._log_relay(f"relay HTTP {e.code}: {body}")
+                return False
+            return True
+        except Exception as e:
+            self._log_relay(f"relay failed: {e}")
+            return False
     
     def send_email(self, to_email: str, subject: str, html_body: str, screenshot_path: str = None) -> bool:
         """Send an HTML email notification with optional screenshot attachment."""
@@ -31,41 +99,44 @@ class NotificationService:
             print("Email notification skipped: no recipient email configured")
             return False
 
-        if not Config.ADMIN_EMAIL or not Config.ADMIN_EMAIL_PASSWORD:
-            print("Email notification skipped: admin email credentials not configured")
-            return False
+        use_local_smtp = bool(Config.ADMIN_EMAIL and Config.ADMIN_EMAIL_PASSWORD)
 
-        try:
-            msg = MIMEMultipart("mixed")
-            msg['From'] = f"TLS Appointment Checker <{Config.ADMIN_EMAIL}>"
-            msg['To'] = to_email
-            msg['Subject'] = subject
+        if use_local_smtp:
+            try:
+                msg = MIMEMultipart("mixed")
+                msg['From'] = f"TLS Appointment Checker <{Config.ADMIN_EMAIL}>"
+                msg['To'] = to_email
+                msg['Subject'] = subject
 
-            # HTML body
-            alt = MIMEMultipart("alternative")
-            alt.attach(MIMEText(html_body, 'html'))
-            msg.attach(alt)
+                # HTML body
+                alt = MIMEMultipart("alternative")
+                alt.attach(MIMEText(html_body, 'html'))
+                msg.attach(alt)
 
-            # Attach screenshot if provided
-            if screenshot_path and os.path.exists(screenshot_path):
-                with open(screenshot_path, "rb") as attachment:
-                    part = MIMEBase('application', 'octet-stream')
-                    part.set_payload(attachment.read())
-                    encoders.encode_base64(part)
-                    filename = os.path.basename(screenshot_path)
-                    part.add_header('Content-Disposition', f'attachment; filename="{filename}"')
-                    msg.attach(part)
+                # Attach screenshot if provided
+                if screenshot_path and os.path.exists(screenshot_path):
+                    with open(screenshot_path, "rb") as attachment:
+                        part = MIMEBase('application', 'octet-stream')
+                        part.set_payload(attachment.read())
+                        encoders.encode_base64(part)
+                        filename = os.path.basename(screenshot_path)
+                        part.add_header('Content-Disposition', f'attachment; filename="{filename}"')
+                        msg.attach(part)
 
-            server = smtplib.SMTP(Config.SMTP_SERVER, Config.SMTP_PORT)
-            server.starttls()
-            server.login(Config.ADMIN_EMAIL, Config.ADMIN_EMAIL_PASSWORD)
-            server.sendmail(msg['From'], to_email, msg.as_string())
-            server.quit()
-            return True
+                server = smtplib.SMTP(Config.SMTP_SERVER, Config.SMTP_PORT)
+                server.starttls()
+                server.login(Config.ADMIN_EMAIL, Config.ADMIN_EMAIL_PASSWORD)
+                server.sendmail(msg['From'], to_email, msg.as_string())
+                server.quit()
+                return True
 
-        except Exception as e:
-            print(f"Email notification failed: {e}")
-            return False
+            except Exception as e:
+                print(f"Email notification failed: {e}")
+                self._log_relay(f"local SMTP failed, trying relay: {e}")
+                return self._send_email_via_backend_relay(to_email, subject, html_body, screenshot_path)
+
+        # Installed app: no Gmail app password in bundle — send via backend
+        return self._send_email_via_backend_relay(to_email, subject, html_body, screenshot_path)
     
     def send_windows_notification(self, title: str, message: str) -> bool:
         """Send Windows toast notification"""
