@@ -578,7 +578,13 @@ function TLSCredentialsTab({ showToast }: { showToast: (type: "success" | "error
               {credentials.map((cred) => (
                 <div key={cred.service_type} className="flex items-center justify-between p-4 bg-dark-800 rounded-xl">
                   <div>
-                    <div className="text-sm font-medium capitalize">{cred.service_type}</div>
+                    <div className="text-sm font-medium">
+                      {cred.service_type === "legalization"
+                        ? ((ts as any).serviceTypeLegalization || "Legalization")
+                        : cred.service_type === "visa"
+                        ? ((ts as any).serviceTypeVisa || "Visa")
+                        : cred.service_type}
+                    </div>
                     <div className="text-xs text-gray-500">{cred.tls_email}</div>
                   </div>
                   <button
