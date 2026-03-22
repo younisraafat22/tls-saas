@@ -2,6 +2,7 @@
 Notification Service
 Handles email and Windows toast notifications
 """
+import sys
 import smtplib
 import json
 import urllib.request
@@ -47,6 +48,7 @@ class NotificationService:
         """
         Use server SMTP on BACKEND_URL when local ADMIN_EMAIL is not bundled (installed .exe).
         Screenshot attachments are skipped in relay mode.
+        Uses requests+certifi first (Windows TLS / WinError 10054 with urllib is common).
         """
         if screenshot_path and os.path.exists(screenshot_path):
             self._log_relay("relay: screenshot attachment skipped (use local .env SMTP for attachments)")
@@ -59,40 +61,96 @@ class NotificationService:
                 return False
 
             hw = get_hardware_id() or ""
-            payload = json.dumps(
-                {
-                    "license_key": lic["key"],
-                    "hardware_id": hw,
-                    "to_email": to_email.strip(),
-                    "subject": subject,
-                    "html_body": html_body,
-                },
-                ensure_ascii=False,
-            ).encode("utf-8")
+            payload_obj = {
+                "license_key": lic["key"],
+                "hardware_id": hw,
+                "to_email": to_email.strip(),
+                "subject": subject,
+                "html_body": html_body,
+            }
 
             url = f"{Config.BACKEND_URL.rstrip('/')}/api/monitoring/desktop-email-relay"
+            ua = "TLSAppointmentChecker/1.0 (Windows; email-relay)"
+            hdr_json = {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": ua,
+            }
+
+            # 1) requests + certifi — more reliable HTTPS on frozen Windows builds than urllib alone
+            try:
+                import requests
+                try:
+                    import certifi
+                    verify = certifi.where()
+                except Exception:
+                    verify = True
+                r = requests.post(
+                    url,
+                    json=payload_obj,
+                    timeout=45,
+                    headers={"User-Agent": ua, "Accept": "application/json"},
+                    verify=verify,
+                )
+                if int(r.status_code) < 400:
+                    return True
+                self._log_relay(f"relay HTTP {r.status_code}: {(r.text or '')[:500]}")
+            except Exception as ex_req:
+                self._log_relay(f"relay requests path: {ex_req}")
+
+            # 2) urllib fallback
+            payload = json.dumps(payload_obj, ensure_ascii=False).encode("utf-8")
             req = urllib.request.Request(
                 url,
                 data=payload,
-                headers={"Content-Type": "application/json", "Accept": "application/json"},
+                headers=hdr_json,
                 method="POST",
             )
             try:
-                with _safe_urlopen(req, timeout=30) as resp:
+                with _safe_urlopen(req, timeout=45) as resp:
                     code = int(getattr(resp, "status", 200))
                     if code >= 400:
                         body = resp.read().decode(errors="replace")[:500]
-                        self._log_relay(f"relay HTTP {code}: {body}")
+                        self._log_relay(f"relay urllib HTTP {code}: {body}")
                         return False
             except urllib.error.HTTPError as e:
                 body = e.read().decode(errors="replace")[:500] if e.fp else ""
-                self._log_relay(f"relay HTTP {e.code}: {body}")
+                self._log_relay(f"relay urllib HTTP {e.code}: {body}")
                 return False
             return True
         except Exception as e:
             self._log_relay(f"relay failed: {e}")
             return False
-    
+
+    def _try_local_smtp(
+        self, to_email: str, subject: str, html_body: str, screenshot_path: Optional[str]
+    ) -> bool:
+        """Return True if Gmail/local SMTP succeeds."""
+        msg = MIMEMultipart("mixed")
+        msg["From"] = f"TLS Appointment Checker <{Config.ADMIN_EMAIL}>"
+        msg["To"] = to_email
+        msg["Subject"] = subject
+
+        alt = MIMEMultipart("alternative")
+        alt.attach(MIMEText(html_body, "html"))
+        msg.attach(alt)
+
+        if screenshot_path and os.path.exists(screenshot_path):
+            with open(screenshot_path, "rb") as attachment:
+                part = MIMEBase("application", "octet-stream")
+                part.set_payload(attachment.read())
+                encoders.encode_base64(part)
+                filename = os.path.basename(screenshot_path)
+                part.add_header("Content-Disposition", f'attachment; filename="{filename}"')
+                msg.attach(part)
+
+        server = smtplib.SMTP(Config.SMTP_SERVER, Config.SMTP_PORT)
+        server.starttls()
+        server.login(Config.ADMIN_EMAIL, Config.ADMIN_EMAIL_PASSWORD)
+        server.sendmail(msg["From"], to_email, msg.as_string())
+        server.quit()
+        return True
+
     def send_email(self, to_email: str, subject: str, html_body: str, screenshot_path: str = None) -> bool:
         """Send an HTML email notification with optional screenshot attachment."""
         if not to_email or not to_email.strip():
@@ -100,42 +158,29 @@ class NotificationService:
             return False
 
         use_local_smtp = bool(Config.ADMIN_EMAIL and Config.ADMIN_EMAIL_PASSWORD)
+        frozen = getattr(sys, "frozen", False)
 
+        # Installed .exe: try backend relay first. Bundled/example .env often has bad Gmail creds (535),
+        # which wasted time and broke relay with flaky urllib TLS (WinError 10054).
+        if frozen:
+            if self._send_email_via_backend_relay(to_email, subject, html_body, screenshot_path):
+                return True
+            if use_local_smtp:
+                try:
+                    return self._try_local_smtp(to_email, subject, html_body, screenshot_path)
+                except Exception as e:
+                    self._log_relay(f"local SMTP failed after relay: {e}")
+            return False
+
+        # Dev (python main.py): prefer local SMTP when configured, then relay
         if use_local_smtp:
             try:
-                msg = MIMEMultipart("mixed")
-                msg['From'] = f"TLS Appointment Checker <{Config.ADMIN_EMAIL}>"
-                msg['To'] = to_email
-                msg['Subject'] = subject
-
-                # HTML body
-                alt = MIMEMultipart("alternative")
-                alt.attach(MIMEText(html_body, 'html'))
-                msg.attach(alt)
-
-                # Attach screenshot if provided
-                if screenshot_path and os.path.exists(screenshot_path):
-                    with open(screenshot_path, "rb") as attachment:
-                        part = MIMEBase('application', 'octet-stream')
-                        part.set_payload(attachment.read())
-                        encoders.encode_base64(part)
-                        filename = os.path.basename(screenshot_path)
-                        part.add_header('Content-Disposition', f'attachment; filename="{filename}"')
-                        msg.attach(part)
-
-                server = smtplib.SMTP(Config.SMTP_SERVER, Config.SMTP_PORT)
-                server.starttls()
-                server.login(Config.ADMIN_EMAIL, Config.ADMIN_EMAIL_PASSWORD)
-                server.sendmail(msg['From'], to_email, msg.as_string())
-                server.quit()
-                return True
-
+                return self._try_local_smtp(to_email, subject, html_body, screenshot_path)
             except Exception as e:
                 print(f"Email notification failed: {e}")
                 self._log_relay(f"local SMTP failed, trying relay: {e}")
                 return self._send_email_via_backend_relay(to_email, subject, html_body, screenshot_path)
 
-        # Installed app: no Gmail app password in bundle — send via backend
         return self._send_email_via_backend_relay(to_email, subject, html_body, screenshot_path)
     
     def send_windows_notification(self, title: str, message: str) -> bool:
