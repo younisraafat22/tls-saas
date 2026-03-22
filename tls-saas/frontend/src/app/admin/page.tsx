@@ -8,7 +8,7 @@ import {
   Users, CreditCard, Activity, TrendingUp,
   CheckCircle2, Clock, AlertCircle, Wifi, WifiOff,
   ArrowUpRight, DollarSign, KeyRound, RefreshCw,
-  Loader2, Eye, Download, Star, Trophy,
+  Loader2, Eye, Download, Star, Trophy, Bell,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -19,16 +19,21 @@ const fadeUp = {
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<any>(null);
+  const [notifCounts, setNotifCounts] = useState<{ unread_total: number }>({ unread_total: 0 });
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState<number | null>(null);
   const { connected, lastMessage } = useWebSocket(true);
 
   useEffect(() => {
     loadStats();
+    loadNotifCounts();
   }, []);
 
   useEffect(() => {
-    if (lastMessage) loadStats();
+    if (lastMessage) {
+      loadStats();
+      loadNotifCounts();
+    }
   }, [lastMessage]);
 
   const loadStats = async () => {
@@ -39,6 +44,15 @@ export default function AdminDashboard() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadNotifCounts = async () => {
+    try {
+      const data = await adminApi.getNotificationCounts();
+      setNotifCounts({ unread_total: Number(data?.unread_total || 0) });
+    } catch {
+      setNotifCounts({ unread_total: 0 });
     }
   };
 
@@ -75,6 +89,18 @@ export default function AdminDashboard() {
           <p className="text-gray-400 text-sm mt-1">System overview and quick actions</p>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href="/admin/notifications"
+            className="relative p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+            title="Notifications"
+          >
+            <Bell className="w-4 h-4" />
+            {notifCounts.unread_total > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold inline-flex items-center justify-center">
+                {notifCounts.unread_total > 99 ? "99+" : notifCounts.unread_total}
+              </span>
+            )}
+          </Link>
           <button
             onClick={loadStats}
             className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
