@@ -743,8 +743,8 @@ function DownloadApp() {
 
             {/* Right: Download card */}
             <motion.div variants={fadeUp} className="glass p-8 rounded-2xl text-center">
-              <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-primary-500/20 to-blue-600/20 flex items-center justify-center">
-                <Laptop className="w-10 h-10 text-primary-400" />
+              <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-primary-500/20 to-blue-600/20 flex items-center justify-center p-3">
+                <img src="/icons/icon-192-white.png" alt="TLS Appointment Checker" className="w-full h-full object-contain" />
               </div>
 
               <h3 className="text-2xl font-bold mb-2">TLS Appointment Checker</h3>
