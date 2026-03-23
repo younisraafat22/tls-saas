@@ -335,11 +335,11 @@ function Hero() {
                 {[
                   { name: t.branchNames["Sheikh Zayed"], type: t.serviceTypes.legalization, status: t.hero.checking, color: "text-primary-400" },
                   { name: t.branchNames["Hurghada"], type: t.serviceTypes.legalization, status: t.hero.noSlots, color: "text-gray-400" },
-                  { name: t.branchNames["New Cairo"], type: t.serviceTypes.visa, status: t.hero.noSlots, color: "text-gray-400" },
+                  { name: t.branchNames["Sheikh Zayed"], type: t.serviceTypes.visa, status: t.hero.noSlots, color: "text-gray-400" },
                   { name: t.branchNames["Alexandria"], type: t.serviceTypes.visa, status: t.hero.noSlots, color: "text-gray-400" },
                 ].map((branch, i) => (
                   <motion.div
-                    key={branch.name}
+                    key={`${branch.type}-${branch.name}-${i}`}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.8 + i * 0.2 }}

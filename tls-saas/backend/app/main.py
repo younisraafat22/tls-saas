@@ -99,7 +99,7 @@ async def seed_data():
                 "description": "Monitor your personal TLS visa appointment — individual per-user check",
                 "price_monthly": settings.PRICE_VISA_MONTHLY,
                 "features": [
-                    "One branch of your choice (El-Sheikh Zayed, Hurghada, New Cairo or Alexandria)",
+                    "One branch of your choice (Sheikh Zayed, Hurghada, New Cairo or Alexandria)",
                     "Individual check using your TLS credentials",
                     "Email & web push notifications",
                     "Real-time dashboard",
@@ -146,12 +146,12 @@ async def seed_data():
             if not existing_plan:
                 db.add(Plan(**pd))
 
-        # Create branches — 2 legalization + 4 visa branches
+        # Create branches — 2 legalization + 4 visa branches (Cairo uses "Sheikh Zayed" for both services; suffix disambiguates in DB)
         branches_data = [
             {"name": "Sheikh Zayed - Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home", "service_type": ServiceType.LEGALIZATION},
             {"name": "Hurghada - Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egHRG2de/home", "service_type": ServiceType.LEGALIZATION},
             {"name": "New Cairo - Visa", "url": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egHAC2de", "service_type": ServiceType.VISA},
-            {"name": "El-Sheikh Zayed - Visa", "url": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egCAI2de", "service_type": ServiceType.VISA},
+            {"name": "Sheikh Zayed - Visa", "url": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egCAI2de", "service_type": ServiceType.VISA},
             {"name": "Alexandria - Visa", "url": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egALY2de", "service_type": ServiceType.VISA},
             {"name": "Hurghada - Visa", "url": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egHRG2de", "service_type": ServiceType.VISA},
         ]
@@ -379,11 +379,12 @@ async def lifespan(app: FastAPI):
     # Fix visa branch names and URLs to match original TLS application
     async with async_session() as db:
         try:
-            # Rename old incorrect entry and fix its URL
+            # Cairo visa: same "Sheikh Zayed" naming as legalization; fix URL if needed
             await db.execute(text(
-                "UPDATE branches SET name = 'El-Sheikh Zayed - Visa', "
+                "UPDATE branches SET name = 'Sheikh Zayed - Visa', "
                 "url = 'https://visas-de.tlscontact.com/en-us/country/eg/vac/egCAI2de' "
-                "WHERE name = 'Sheikh Zayed - Visa' AND UPPER(service_type) = 'VISA'"
+                "WHERE UPPER(service_type) = 'VISA' AND url LIKE '%visas-de.tlscontact.com%' AND url LIKE '%egCAI2de%' "
+                "AND (name IN ('El-Sheikh Zayed - Visa', 'El-Sheikh Zayed', 'Sheikh Zayed') OR name = 'Sheikh Zayed - Visa')"
             ))
             # Fix Hurghada visa URL
             await db.execute(text(
@@ -483,6 +484,40 @@ async def lifespan(app: FastAPI):
             logger.info("Migration: deactivated sub-type legalization branches (Students/Normal)")
         except Exception as e:
             logger.warning(f"Legalization sub-type deactivation migration skipped: {e}")
+
+    # Unify Cairo visa naming with legalization (Sheikh Zayed); restore suffixed names if a prior migration shortened them
+    async with async_session() as db:
+        try:
+            await db.execute(text(
+                "UPDATE branches SET name = 'Sheikh Zayed - Visa' "
+                "WHERE UPPER(service_type) = 'VISA' AND url LIKE '%visas-de.tlscontact.com%' AND url LIKE '%egCAI2de%' "
+                "AND name IN ('El-Sheikh Zayed - Visa', 'El-Sheikh Zayed', 'Sheikh Zayed')"
+            ))
+            await db.execute(text(
+                "UPDATE branches SET name = 'Sheikh Zayed - Legalization' "
+                "WHERE UPPER(service_type) = 'LEGALIZATION' AND url LIKE '%legalization-de.tlscontact.com%' AND url LIKE '%egCAI2de%' "
+                "AND name IN ('Sheikh Zayed', 'Sheikh Zayed (Legalization)')"
+            ))
+            await db.execute(text(
+                "UPDATE branches SET name = 'Hurghada - Legalization' "
+                "WHERE name = 'Hurghada' AND UPPER(service_type) = 'LEGALIZATION'"
+            ))
+            await db.execute(text(
+                "UPDATE branches SET name = 'Hurghada - Visa' "
+                "WHERE name = 'Hurghada' AND UPPER(service_type) = 'VISA'"
+            ))
+            await db.execute(text(
+                "UPDATE branches SET name = 'New Cairo - Visa' "
+                "WHERE name = 'New Cairo' AND UPPER(service_type) = 'VISA'"
+            ))
+            await db.execute(text(
+                "UPDATE branches SET name = 'Alexandria - Visa' "
+                "WHERE name = 'Alexandria' AND UPPER(service_type) = 'VISA'"
+            ))
+            await db.commit()
+            logger.info("Migration: Sheikh Zayed naming for Cairo visa+legalization; restored suffixed branch names where needed")
+        except Exception as e:
+            logger.warning(f"Branch naming migration skipped: {e}")
 
     await seed_data()
 

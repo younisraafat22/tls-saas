@@ -94,7 +94,7 @@ class Config:
     # TLS Website – Visa Process
     VISA_BRANCHES = {
         "New Cairo": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egHAC2de",
-        "El-Sheikh Zayed": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egCAI2de",
+        "Sheikh Zayed": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egCAI2de",
         "Alexandria": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egALY2de",
         "Hurghada": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egHRG2de",
     }
@@ -115,3 +115,37 @@ class Config:
     def validate(cls):
         """Validate optional desktop configuration."""
         return True
+
+    @staticmethod
+    def reload_env_paths():
+        """Re-apply the same .env load order as startup (for hot reload after user edits AppData)."""
+        if getattr(sys, "frozen", False):
+            _meipass = getattr(sys, "_MEIPASS", None)
+            _bundled_env = Path(_meipass) / ".env" if _meipass else None
+            if _bundled_env and _bundled_env.exists():
+                load_dotenv(_bundled_env)
+            _exe_env = Path(sys.executable).parent / ".env"
+            if _exe_env.exists():
+                load_dotenv(_exe_env, override=True)
+            _appdata_env = Path(os.getenv("APPDATA", "")) / "TLSAppointmentChecker" / ".env"
+            if _appdata_env.exists():
+                load_dotenv(_appdata_env, override=True)
+        else:
+            load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
+
+    @classmethod
+    def get_developer_password(cls) -> str:
+        """
+        Password for hidden developer mode (Ctrl+Shift+D / Ctrl+Shift+F12).
+        Reloads .env each time so AppData changes apply without restarting.
+        """
+        cls.reload_env_paths()
+        v = (os.getenv("DEVELOPER_PASSWORD") or "").strip()
+        if v:
+            return v
+        try:
+            from embedded_build_config import EMBEDDED_DEVELOPER_PASSWORD
+
+            return (EMBEDDED_DEVELOPER_PASSWORD or "").strip()
+        except ImportError:
+            return ""

@@ -27,7 +27,7 @@ from database import init_db, SessionLocal, UserSettings, CheckHistory
 from license_service import (
     get_license_status, activate_license, activate_trial,
     get_hardware_id, PLANS, can_check, increment_check_count,
-    deactivate_license,
+    deactivate_license, _build_backend_urls,
 )
 from config import Config
 from datetime import datetime, timedelta, timezone
@@ -188,7 +188,7 @@ class TLSApp:
         self.last_check_text = None
         self._ui_queue = queue.Queue()
         self._log_history = []  # Persist log messages across page rebuilds
-        self._developer_mode = False  # Hidden developer mode (Ctrl+Shift+D)
+        self._developer_mode = False  # Hidden developer mode (Ctrl+Shift+D or Ctrl+Shift+F12)
         self._cloud_monitoring = False   # True when using cloud/server-based monitoring
         self._cloud_poll_active = False  # Polling flag for cloud status
         self._feedback_queue_path = os.path.join(str(Config.BASE_DIR), "pending_feedback.jsonl")
@@ -728,13 +728,18 @@ class TLSApp:
                     except Exception:
                         pass
 
-    _DEV_PASSWORD = (Config.DEVELOPER_PASSWORD or "").strip()
-
     def on_keyboard_event(self, e: ft.KeyboardEvent):
-        """Handle keyboard events — Ctrl+Shift+F12 opens developer mode password dialog."""
-        if e.key == "F12" and e.ctrl and e.shift:
-            if not self._DEV_PASSWORD:
-                self._show_info_snack("Developer mode is disabled in this build.", color=ft.Colors.ORANGE_400)
+        """Handle keyboard events — Ctrl+Shift+D or Ctrl+Shift+F12 opens developer mode password dialog."""
+        _k = (e.key or "")
+        _dev_combo = e.ctrl and e.shift and (_k == "F12" or _k.upper() == "D")
+        if _dev_combo:
+            _pw = Config.get_developer_password()
+            if not _pw:
+                self._show_info_snack(
+                    "Developer password not set. Add DEVELOPER_PASSWORD to your .env "
+                    "(see desktop/.env.example) or rebuild with desktop/.env bundled.",
+                    color=ft.Colors.ORANGE_400,
+                )
                 return
             if self._developer_mode:
                 # Already in dev mode — just toggle off
@@ -762,7 +767,7 @@ class TLSApp:
             self.page.pop_dialog()
 
         def submit(e):
-            if pw_field.value == self._DEV_PASSWORD:
+            if pw_field.value == Config.get_developer_password():
                 self.page.pop_dialog()
                 self._developer_mode = True
                 if self.checker:
@@ -1021,8 +1026,8 @@ class TLSApp:
                 elif not settings.branch or settings.branch not in branches:
                     # Fall back to default branch for the service type
                     if svc == 'visa':
-                        settings.branch = "El-Sheikh Zayed"
-                        settings.branch_url = Config.VISA_BRANCHES["El-Sheikh Zayed"]
+                        settings.branch = "Sheikh Zayed"
+                        settings.branch_url = Config.VISA_BRANCHES["Sheikh Zayed"]
                     else:
                         settings.branch = "Sheikh Zayed"
                         settings.branch_url = Config.LEGALIZATION_BRANCHES["Sheikh Zayed"]
@@ -1763,7 +1768,7 @@ class TLSApp:
             raw_password = (self.flow_data.get('tls_password') or "").strip()
             encrypted_password = auth_service.encrypt_password(raw_password) if raw_password else None
             service_type_value = self.flow_data.get('service_type') or (getattr(settings, 'service_type', 'legalization') if settings else 'legalization') or 'legalization'
-            branch_value = self.flow_data.get('branch') or (settings.branch if settings else ("El-Sheikh Zayed" if service_type_value == 'visa' else "Sheikh Zayed"))
+            branch_value = self.flow_data.get('branch') or (settings.branch if settings else "Sheikh Zayed")
             # Resolve branch_url from config maps
             if service_type_value == 'visa':
                 default_url = Config.VISA_BRANCHES.get(branch_value, list(Config.VISA_BRANCHES.values())[0])
@@ -2017,8 +2022,11 @@ class TLSApp:
                 # Check for unsaved configuration changes (fast — no network)
                 unsaved_changes = []
                 try:
-                    if config_service_dropdown.value and config_service_dropdown.value != (settings.service_type or 'legalization'):
-                        unsaved_changes.append("Service Type")
+                    _svc_ui = (service_type_radio_group.value or "legalization")
+                    if _svc_ui not in ("visa", "legalization"):
+                        _svc_ui = "legalization"
+                    if _svc_ui != (settings.service_type or "legalization"):
+                        unsaved_changes.append("Service type")
                     if config_branch_dropdown.value and config_branch_dropdown.value != (settings.branch or ''):
                         unsaved_changes.append("Branch")
                     if config_notification_field.value is not None and config_notification_field.value.strip() != (settings.notification_email or ''):
@@ -2164,8 +2172,25 @@ class TLSApp:
             current_service_type = 'legalization'
             service_locked = True
         elif license_plan.startswith('all_in_one'):
-            # Combo plan — user can switch between legalization and visa
-            current_service_type = getattr(settings, 'service_type', 'legalization') if settings else 'legalization'
+            # Combo plan — user can switch between legalization and visa.
+            # Prefer license file (set at activation), then DB. A fresh AppData DB defaults to
+            # 'legalization' while the license file already has 'visa', which wrongly showed 2 branches.
+            _lic = str((license_status.get('service_type') or '') if license_status else '').strip().lower()
+            _db = (getattr(settings, 'service_type', None) or '').strip().lower() if settings else ''
+            _burl = str((license_status.get('branch_url') or '') if license_status else '').lower()
+            # If service_type was missing/wrong in the file but URL is clearly visa or legalization, infer it
+            # (common in frozen exe when activation could not save service_type).
+            if _lic not in ('visa', 'legalization') and _burl:
+                if 'visas-de.tlscontact.com' in _burl:
+                    _lic = 'visa'
+                elif 'legalization-de.tlscontact.com' in _burl:
+                    _lic = 'legalization'
+            if _lic in ('visa', 'legalization'):
+                current_service_type = _lic
+            elif _db in ('visa', 'legalization'):
+                current_service_type = _db
+            else:
+                current_service_type = 'legalization'
             service_locked = False
         else:
             # Trial — use whatever is saved in DB, allow changing
@@ -2173,13 +2198,47 @@ class TLSApp:
         if not current_service_type:
             current_service_type = 'legalization'
 
+        # Tracks user's Service Type choice immediately (avoids race with background branch sync).
+        self._monitoring_service_type_selection = current_service_type
+
+        def _visa_branches():
+            # Guard against stale/faulty config in frozen builds.
+            d = dict(getattr(Config, "VISA_BRANCHES", {}) or {})
+            canonical = {
+                "New Cairo": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egHAC2de",
+                "Sheikh Zayed": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egCAI2de",
+                "Alexandria": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egALY2de",
+                "Hurghada": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egHRG2de",
+            }
+            for k, v in canonical.items():
+                d.setdefault(k, v)
+            return d
+
+        def _legalization_branches():
+            d = dict(getattr(Config, "LEGALIZATION_BRANCHES", {}) or {})
+            canonical = {
+                "Sheikh Zayed": "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home",
+                "Hurghada": "https://legalization-de.tlscontact.com/service/eg/egHRG2de/home",
+            }
+            for k, v in canonical.items():
+                d.setdefault(k, v)
+            return d
+
+        def _branch_log(msg: str):
+            try:
+                p = os.path.join(str(Config.BASE_DIR), "branch_debug.log")
+                with open(p, "a", encoding="utf-8") as _f:
+                    _f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
+            except Exception:
+                pass
+
         # Resolve branch defaults per service type
         if current_service_type == 'visa':
-            default_branch = "El-Sheikh Zayed"
-            branch_options_list = list(Config.VISA_BRANCHES.keys())
+            default_branch = "Sheikh Zayed"
+            branch_options_list = list(_visa_branches().keys())
         else:
             default_branch = "Sheikh Zayed"
-            branch_options_list = list(Config.LEGALIZATION_BRANCHES.keys())
+            branch_options_list = list(_legalization_branches().keys())
 
         branch_value = settings.branch if settings and settings.branch else default_branch
         # If branch not in options (service type changed), reset to default
@@ -2198,78 +2257,8 @@ class TLSApp:
                 if clean in branch_options_list:
                     branch_value = clean
 
-        # Step 2 (online, non-blocking): ask the server in a background thread.
-        # Updates the DB and the branch dropdown AFTER the page is already loaded.
-        def _fetch_and_apply_server_branch(dropdown_ref, options_ref, page_ref):
-            if not (service_locked and license_status):
-                return
-            lic_key = license_status.get('key', '')
-            if not lic_key:
-                return
-            server_url = (Config.LICENSE_SERVER_URL or Config.BACKEND_URL or "").rstrip("/")
-            if not server_url:
-                return
-
-            # Retry up to 3 times with backoff (handles transient network issues in exe)
-            for _attempt in range(3):
-                try:
-                    import ssl as _ssl
-                    try:
-                        import certifi as _certifi
-                        _ctx = _ssl.create_default_context(cafile=_certifi.where())
-                    except Exception:
-                        _ctx = _ssl.create_default_context()
-
-                    req = urllib.request.Request(
-                        f"{server_url}/api/payments/license-branch?license_key={lic_key}",
-                        headers={"Accept": "application/json"},
-                        method="GET",
-                    )
-                    url_str = req.full_url
-                    if url_str.startswith("https"):
-                        resp = urllib.request.urlopen(req, timeout=10, context=_ctx)
-                    else:
-                        resp = urllib.request.urlopen(req, timeout=10)
-
-                    with resp:
-                        data = json.loads(resp.read())
-                    assigned_name = data.get('branch_name')
-                    assigned_url  = data.get('branch_url')
-                    if not assigned_name or not assigned_url:
-                        print(f"[BRANCH] Server returned no branch info: {data}")
-                        return
-                    print(f"[BRANCH] Server returned branch: {assigned_name} ({assigned_url})")
-                    # Persist to DB
-                    _db2 = SessionLocal()
-                    try:
-                        _s2 = _db2.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
-                        if _s2 and (_s2.branch != assigned_name or _s2.branch_url != assigned_url):
-                            _s2.branch = assigned_name
-                            _s2.branch_url = assigned_url
-                            _db2.commit()
-                            print(f"[BRANCH] Updated DB branch to {assigned_name}")
-                    finally:
-                        _db2.close()
-                    # Also persist to local .license file so offline step is correct next launch
-                    try:
-                        from license_service import update_license_branch
-                        update_license_branch(assigned_name, assigned_url,
-                                             data.get('service_type'))
-                    except Exception:
-                        pass
-                    # Update dropdown via thread-safe UI queue
-                    if dropdown_ref and assigned_name in options_ref and dropdown_ref.value != assigned_name:
-                        _name = assigned_name  # capture for closure
-                        _dd = dropdown_ref
-                        def _apply():
-                            _dd.value = _name
-                        self._ui_queue.put(_apply)
-                    return  # success
-                except Exception as exc:
-                    print(f"[BRANCH] Fetch attempt {_attempt+1}/3 failed ({server_url}): {exc}")
-                    if _attempt < 2:
-                        import time as _time
-                        _time.sleep(2)
+        # Step 2 (online): server branch/service sync runs in a background thread after
+        # both Service Type and TLS Branch dropdowns are created (see below).
 
         interval_value = str(settings.check_interval if settings else 120)
         notification_value = settings.notification_email if settings and settings.notification_email else ""
@@ -2291,6 +2280,13 @@ class TLSApp:
             text_size=13, label_style=ft.TextStyle(size=12),
         )
 
+        config_notification_field = ft.TextField(
+            label="Notification Email",
+            value=notification_value,
+            width=_FIELD_W, border_radius=10, prefix_icon=ft.Icons.NOTIFICATIONS,
+            text_size=13, label_style=ft.TextStyle(size=12),
+        )
+
         config_branch_dropdown = ft.Dropdown(
             label="TLS Branch" + (" (locked by license)" if service_locked else ""),
             value=branch_value,
@@ -2300,39 +2296,207 @@ class TLSApp:
             disabled=service_locked,
         )
 
-        # Launch non-blocking background thread to fetch & correct server-assigned branch.
-        threading.Thread(
-            target=_fetch_and_apply_server_branch,
-            args=(config_branch_dropdown, branch_options_list, self.page),
-            daemon=True,
-        ).start()
-
-        def _on_service_type_change(e):
-            """Update branch dropdown when service type changes."""
+        def _on_service_type_radio(e):
+            """Update branch list when choosing Document Legalization vs Visa Process."""
             new_type = e.control.value
-            if new_type == 'visa':
-                new_branches = list(Config.VISA_BRANCHES.keys())
-                new_default = "El-Sheikh Zayed"
+            if new_type not in ("visa", "legalization"):
+                new_type = "legalization"
+            self._monitoring_service_type_selection = new_type
+            if new_type == "visa":
+                new_branches = list(_visa_branches().keys())
+                new_default = "Sheikh Zayed"
             else:
-                new_branches = list(Config.LEGALIZATION_BRANCHES.keys())
+                new_branches = list(_legalization_branches().keys())
                 new_default = "Sheikh Zayed"
             config_branch_dropdown.options = [ft.dropdown.Option(b, b) for b in new_branches]
             config_branch_dropdown.value = new_default
+            _branch_log(f"service_radio -> {new_type}; options={new_branches}")
+            try:
+                config_branch_dropdown.update()
+            except Exception:
+                pass
             self.page.update()
 
-        config_service_dropdown = ft.Dropdown(
-            label="Service Type" + (" (locked by license)" if service_locked else ""),
+        service_type_radio_group = ft.RadioGroup(
+            content=ft.Row(
+                [
+                    ft.Radio(
+                        value="legalization",
+                        label="Document Legalization",
+                        fill_color="#00D9FF",
+                        expand=True,
+                    ),
+                    ft.Radio(
+                        value="visa",
+                        label="Visa Process",
+                        fill_color="#00D9FF",
+                        expand=True,
+                    ),
+                ],
+                spacing=12,
+                alignment=ft.MainAxisAlignment.START,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                wrap=False,
+            ),
             value=current_service_type,
-            width=_FIELD_W, border_radius=10,
-            text_size=13, label_style=ft.TextStyle(size=12),
+            on_change=_on_service_type_radio,
             disabled=service_locked,
-            options=[
-                ft.dropdown.Option("legalization", "Document Legalization"),
-                ft.dropdown.Option("visa", "Visa Process"),
-            ],
         )
-        if not service_locked:
-            config_service_dropdown.on_change = _on_service_type_change
+
+        service_type_radio_row = ft.Container(
+            content=ft.Column(
+                [
+                    ft.Text(
+                        "Service type" + (" (locked by license)" if service_locked else ""),
+                        size=12,
+                        color=ft.Colors.GREY_400,
+                    ),
+                    service_type_radio_group,
+                ],
+                spacing=6,
+                tight=True,
+            ),
+            width=_FIELD_W,
+        )
+
+        def _fetch_and_apply_server_branch():
+            """Sync branch from server. Same API base discovery as license verify (Vercel first)."""
+            should_fetch = bool(license_status) and (
+                service_locked or str(license_plan or "").startswith("all_in_one")
+            )
+            if not should_fetch:
+                return
+            lic_key = (license_status.get("key") or "").strip()
+            if not lic_key:
+                return
+
+            def _norm_svc(raw):
+                return "visa" if (raw or "").strip().lower() == "visa" else "legalization"
+
+            from urllib.parse import quote
+
+            branch_dd = config_branch_dropdown
+            service_sw = service_type_radio_group
+            all_in_one = str(license_plan or "").startswith("all_in_one")
+
+            base_urls = _build_backend_urls()
+            if not base_urls:
+                bu = (Config.LICENSE_SERVER_URL or Config.BACKEND_URL or "").strip().rstrip("/")
+                if bu:
+                    base_urls = [bu]
+            if not base_urls:
+                print("[BRANCH] No backend URL configured — cannot fetch license-branch")
+                return
+
+            for server_url in base_urls:
+                server_url = (server_url or "").strip().rstrip("/")
+                if not server_url:
+                    continue
+                for _attempt in range(3):
+                    try:
+                        import ssl as _ssl
+                        try:
+                            import certifi as _certifi
+                            _ctx = _ssl.create_default_context(cafile=_certifi.where())
+                        except Exception:
+                            _ctx = _ssl.create_default_context()
+
+                        qkey = quote(lic_key, safe="")
+                        req = urllib.request.Request(
+                            f"{server_url}/api/payments/license-branch?license_key={qkey}",
+                            headers={"Accept": "application/json"},
+                            method="GET",
+                        )
+                        if str(req.full_url).startswith("https"):
+                            resp = urllib.request.urlopen(req, timeout=10, context=_ctx)
+                        else:
+                            resp = urllib.request.urlopen(req, timeout=10)
+
+                        with resp:
+                            data = json.loads(resp.read())
+                        assigned_name = data.get("branch_name")
+                        assigned_url = data.get("branch_url")
+                        if not assigned_name or not assigned_url:
+                            print(f"[BRANCH] Server returned no branch info: {data}")
+                            return
+                        svc = _norm_svc(data.get("service_type"))
+                        print(
+                            f"[BRANCH] Server returned branch: {assigned_name} ({assigned_url}) "
+                            f"service_type={svc} via {server_url}"
+                        )
+                        _db2 = SessionLocal()
+                        try:
+                            _s2 = _db2.query(UserSettings).filter(UserSettings.user_id == USER_ID).first()
+                            if _s2:
+                                changed = False
+                                if _s2.branch != assigned_name or _s2.branch_url != assigned_url:
+                                    _s2.branch = assigned_name
+                                    _s2.branch_url = assigned_url
+                                    changed = True
+                                # All-in-one: user picks Visa vs Legalization in the UI — do not overwrite
+                                # service_type from payment row (often legalization) or the dropdown snaps to 2 branches.
+                                if not all_in_one:
+                                    if getattr(_s2, "service_type", None) != svc:
+                                        _s2.service_type = svc
+                                        changed = True
+                                if changed:
+                                    _db2.commit()
+                                    print("[BRANCH] Updated DB branch" + ("" if all_in_one else "/service_type"))
+                        finally:
+                            _db2.close()
+                        try:
+                            from license_service import update_license_branch
+                            update_license_branch(
+                                assigned_name,
+                                assigned_url,
+                                None if all_in_one else data.get("service_type"),
+                            )
+                        except Exception:
+                            pass
+
+                        def _apply_ui():
+                            if service_locked:
+                                service_sw.value = svc
+                                opts = (
+                                    list(_visa_branches().keys())
+                                    if svc == "visa"
+                                    else list(_legalization_branches().keys())
+                                )
+                                pick = assigned_name if assigned_name in opts else (
+                                    "Sheikh Zayed"
+                                )
+                            else:
+                                cur = service_sw.value
+                                if cur not in ("visa", "legalization"):
+                                    cur = (
+                                        getattr(self, "_monitoring_service_type_selection", None)
+                                        or current_service_type
+                                    )
+                                opts = (
+                                    list(_visa_branches().keys())
+                                    if cur == "visa"
+                                    else list(_legalization_branches().keys())
+                                )
+                                pick = assigned_name if assigned_name in opts else (
+                                    "Sheikh Zayed"
+                                )
+                            branch_dd.options = [ft.dropdown.Option(b, b) for b in opts]
+                            branch_dd.value = pick
+                            _branch_log(
+                                f"apply_ui service_locked={service_locked} cur={service_sw.value} "
+                                f"svc_server={svc} options={opts} pick={pick}"
+                            )
+
+                        self._ui_queue.put(_apply_ui)
+                        return
+                    except Exception as exc:
+                        print(f"[BRANCH] Fetch attempt {_attempt + 1}/3 failed ({server_url}): {exc}")
+                        if _attempt < 2:
+                            import time as _time
+                            _time.sleep(2)
+                print(f"[BRANCH] All retries failed for base {server_url}, trying next URL…")
+
+        threading.Thread(target=_fetch_and_apply_server_branch, daemon=True).start()
 
         # Interval options restricted by plan
         min_interval = license_status['min_interval'] if license_status and license_status.get('valid') else 120
@@ -2354,12 +2518,64 @@ class TLSApp:
             visible=False,  # Hidden by default, shown in developer mode
         )
 
-        config_notification_field = ft.TextField(
-            label="Notification Email",
-            value=notification_value,
-            width=_FIELD_W, border_radius=10, prefix_icon=ft.Icons.NOTIFICATIONS,
-            text_size=13, label_style=ft.TextStyle(size=12),
-        )
+        def _validate_notification_email_for_license(addr: str) -> tuple[bool, str]:
+            """Mirror relay recipient rule at save-time to avoid runtime email failures."""
+            try:
+                if not license_status or not license_status.get("valid"):
+                    return True, ""
+                lic_key = str(license_status.get("key") or "").strip()
+                if not lic_key:
+                    return True, ""
+
+                # Save-time enforcement applies to paid licenses (same rule as desktop-email-relay).
+                if lic_key.upper() == "TRIAL":
+                    return True, ""
+
+                payload_obj = {
+                    "license_key": lic_key,
+                    "hardware_id": (get_hardware_id() or ""),
+                    "to_email": (addr or "").strip(),
+                }
+                payload = json.dumps(payload_obj, ensure_ascii=False).encode("utf-8")
+
+                base_urls = _build_backend_urls()
+                if not base_urls:
+                    bu = (Config.LICENSE_SERVER_URL or Config.BACKEND_URL or "").strip().rstrip("/")
+                    if bu:
+                        base_urls = [bu]
+                if not base_urls:
+                    return False, "Cannot validate notification email: backend URL is not configured."
+
+                last_err = "Could not validate notification email with server."
+                for base in base_urls:
+                    base = (base or "").strip().rstrip("/")
+                    if not base:
+                        continue
+                    url = f"{base}/api/monitoring/desktop-email-relay/validate-recipient"
+                    req = urllib.request.Request(
+                        url,
+                        data=payload,
+                        headers={"Content-Type": "application/json", "Accept": "application/json"},
+                        method="POST",
+                    )
+                    try:
+                        with urllib.request.urlopen(req, timeout=12) as resp:
+                            if int(getattr(resp, "status", 200)) < 400:
+                                return True, ""
+                    except urllib.error.HTTPError as he:
+                        body = he.read().decode(errors="replace") if he.fp else ""
+                        try:
+                            msg = (json.loads(body).get("detail") or "").strip()
+                        except Exception:
+                            msg = ""
+                        last_err = msg or body or f"HTTP {he.code}"
+                        if he.code in (400, 401, 403, 404):
+                            return False, last_err
+                    except Exception:
+                        pass
+                return False, last_err
+            except Exception as ex:
+                return False, f"Notification email validation failed: {ex}"
 
         def save_configuration(e):
             try:
@@ -2380,29 +2596,75 @@ class TLSApp:
                 new_password = (config_password_field.value or "").strip()
                 existing_password = settings_obj.tls_password or ""
 
-                # --- Field validation ---
+                # --- Field validation (show each missing field in red) ---
+                config_email_field.error_text = None
+                config_password_field.error_text = None
+                config_notification_field.error_text = None
+
                 has_error = False
                 if not new_tls_email:
-                    config_email_field.error_text = "TLS email is required"
+                    config_email_field.error_text = "TLS email is missing"
                     has_error = True
-                else:
-                    config_email_field.error_text = None
 
                 if not new_password and not existing_password:
-                    config_password_field.error_text = "TLS password is required"
+                    config_password_field.error_text = "TLS password is missing"
                     has_error = True
-                else:
-                    config_password_field.error_text = None
 
                 if not new_email:
-                    config_notification_field.error_text = "Notification email is required"
+                    config_notification_field.error_text = "Notification email is missing"
                     has_error = True
-                else:
-                    config_notification_field.error_text = None
 
                 if has_error:
                     self.page.update()
                     db.close()
+                    try:
+                        if self.page:
+                            self.page.show_dialog(
+                                ft.SnackBar(
+                                    content=ft.Text(
+                                        "Please fill all required fields.",
+                                        size=14,
+                                        color=ft.Colors.WHITE,
+                                    ),
+                                    bgcolor=ft.Colors.RED_400,
+                                    duration=5000,
+                                )
+                            )
+                    except Exception:
+                        pass
+                    return
+
+                ok_email, email_msg = _validate_notification_email_for_license(new_email)
+                if not ok_email:
+                    raw_msg = (
+                        email_msg
+                        or "Notification email must be your account email or the email used when purchasing the desktop license"
+                    )
+                    err_text = raw_msg.replace(
+                        "Recipient",
+                        "Notification email",
+                    ).replace(
+                        "recipient",
+                        "Notification email",
+                    )
+                    config_notification_field.error_text = err_text
+                    self.page.update()
+                    db.close()
+                    try:
+                        if self.page:
+                            self.page.show_dialog(
+                                ft.SnackBar(
+                                    content=ft.Text(
+                                        err_text,
+                                        size=14,
+                                        color=ft.Colors.WHITE,
+                                    ),
+                                    bgcolor=ft.Colors.RED_400,
+                                    duration=8000,
+                                )
+                            )
+                    except Exception:
+                        pass
                     return
 
                 # Check if TLS credential email change is allowed
@@ -2432,24 +2694,36 @@ class TLSApp:
                 settings_obj.notification_email = new_email
                 settings_obj.check_interval = int(config_interval_dropdown.value) if config_interval_dropdown.value else settings_obj.check_interval
 
-                svc_type = config_service_dropdown.value or 'legalization'
+                svc_type = service_type_radio_group.value or "legalization"
+                if svc_type not in ("visa", "legalization"):
+                    svc_type = "legalization"
                 settings_obj.service_type = svc_type
 
                 branch_name = config_branch_dropdown.value
                 settings_obj.branch = branch_name
                 if svc_type == 'visa':
-                    settings_obj.branch_url = Config.VISA_BRANCHES.get(
-                        branch_name, list(Config.VISA_BRANCHES.values())[0]
+                    _vb = _visa_branches()
+                    settings_obj.branch_url = _vb.get(
+                        branch_name, list(_vb.values())[0]
                     )
                 else:
-                    settings_obj.branch_url = Config.LEGALIZATION_BRANCHES.get(
-                        branch_name, list(Config.LEGALIZATION_BRANCHES.values())[0]
+                    _lb = _legalization_branches()
+                    settings_obj.branch_url = _lb.get(
+                        branch_name, list(_lb.values())[0]
                     )
 
                 settings_obj.headless_mode = headless_switch.value
 
                 db.commit()
                 db.close()
+                # Keep local .license service_type in sync so all-in-one loads match after restart
+                try:
+                    lp = license_status.get('plan') if license_status else ''
+                    if lp and str(lp).startswith('all_in_one'):
+                        from license_service import update_license_branch
+                        update_license_branch(branch_name, settings_obj.branch_url, svc_type)
+                except Exception:
+                    pass
                 print("[UI] Configuration saved OK")
                 
                 if self.page:
@@ -2487,9 +2761,9 @@ class TLSApp:
             ft.Divider(height=1, color=ft.Colors.with_opacity(0.2, "#00D9FF")),
             config_email_field,
             config_password_field,
-            config_service_dropdown,
-            config_branch_dropdown,
             config_notification_field,
+            service_type_radio_row,
+            config_branch_dropdown,
             startup_row,
         ]
         

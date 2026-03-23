@@ -479,7 +479,7 @@ class VisaCheckerSB:
                 if m:
                     code = m.group(1).upper()
                     if code == "CAI":
-                        location_keywords = ["cai", "cairo", "sheikh zayed", "egcai"]
+                        location_keywords = ["cai", "cairo", "sheikh zayed", "el-sheikh zayed", "egcai"]
                     elif code == "HRG":
                         location_keywords = ["hrg", "hurghada", "eghrg"]
                     elif code == "HAC":

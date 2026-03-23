@@ -1687,7 +1687,7 @@ async def test_appointment_email(
     test_email = "omarraafat6@gmail.com"
     ok = email_service.send_appointment_alert(
         to_email=test_email,
-        branch_name="Sheikh Zayed (Legalization)",
+        branch_name="Sheikh Zayed",
         service_type="legalization",
         slot_details={"message": "Appointment slots are available — book now before they're gone!"},
         user_name=admin.full_name or "Admin",

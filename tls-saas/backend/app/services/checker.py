@@ -1278,7 +1278,10 @@ class TLSChecker:
                 if _m:
                     _code = _m.group(1).upper()
                     if _code == "CAI":
-                        location_keywords = ["cai", "cairo", "sheikh zayed", "sheik zayed", "egcai"]
+                        location_keywords = [
+                            "cai", "cairo", "sheikh zayed", "el-sheikh zayed",
+                            "sheik zayed", "egcai",
+                        ]
                         location_label = "Cairo / Sheikh Zayed"
                     elif _code == "HRG":
                         location_keywords = ["hrg", "hurghada", "eghrg"]
