@@ -36,6 +36,54 @@ logger = logging.getLogger("monitoring")
 
 router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
 
+# For desktop-app purchases, users can be "active" based on an approved
+# Payment row, without a Subscription row.
+# The website dashboard still needs an `expires_at` value, so we derive it from:
+#   Payment.processed_at + desktop plan duration (based on plan_key)
+#
+# Note: the desktop app license file expiry is computed on local activation time,
+# so this is an approximation used to fix missing dashboard expiry (shows `—`).
+_DESKTOP_PLAN_DURATION_DAYS: dict[str, int] = {
+    "trial": 1,
+    "legalization": 30,
+    "visa": 30,
+    "legalization_monthly": 30,
+    "visa_monthly": 30,
+    "all_in_one": 30,
+    "all_in_one_monthly": 30,
+    "premium": 30,
+    "premium_monthly": 30,
+    "legalization_quarterly": 90,
+    "visa_quarterly": 90,
+    "all_in_one_quarterly": 90,
+    "premium_quarterly": 90,
+    "premium_annual": 365,
+}
+
+_DESKTOP_PLAN_DURATION_HOURS: dict[str, int] = {
+    "test_2h": 2,
+}
+
+
+def _calc_desktop_expires_at(plan_key: str | None, processed_at: datetime | None) -> datetime | None:
+    if not plan_key or processed_at is None:
+        return None
+
+    pk = plan_key.strip().lower()
+    base = processed_at
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=timezone.utc)
+
+    hours = _DESKTOP_PLAN_DURATION_HOURS.get(pk)
+    if hours is not None:
+        return base + timedelta(hours=hours)
+
+    days = _DESKTOP_PLAN_DURATION_DAYS.get(pk)
+    if days is not None:
+        return base + timedelta(days=days)
+
+    return None
+
 
 # ── License verification / deactivation (public, no auth) ────────────
 
@@ -248,6 +296,7 @@ async def monitoring_status(
                 active_subs.append(s)
     sub = active_subs[0] if active_subs else None
     is_active = len(active_subs) > 0
+    desktop_expires_at: datetime | None = None
 
     # Desktop license users don't have Subscription rows — treat approved payment as active
     if not is_active:
@@ -258,8 +307,10 @@ async def monitoring_status(
                 Payment.license_key.isnot(None),
             ).limit(1)
         )
-        if paid.scalar_one_or_none():
+        paid_row = paid.scalar_one_or_none()
+        if paid_row:
             is_active = True
+            desktop_expires_at = _calc_desktop_expires_at(paid_row.plan_key, paid_row.processed_at)
 
     plan_types = list(dict.fromkeys(
         s.plan.plan_type.value for s in active_subs if s.plan
@@ -370,7 +421,7 @@ async def monitoring_status(
         "plan_types": plan_types,
         "payment_pending": pending_payment,
         "maintenance_mode": maintenance_mode,
-        "expires_at": sub.expires_at.isoformat() if sub and sub.expires_at else None,
+        "expires_at": sub.expires_at.isoformat() if sub and sub.expires_at else desktop_expires_at.isoformat() if desktop_expires_at else None,
         "monitored_branches": branches,
         "total_branches_monitored": len(branches),
         "worker_next_run": worker_next_run,
