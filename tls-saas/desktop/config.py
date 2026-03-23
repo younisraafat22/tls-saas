@@ -87,14 +87,14 @@ class Config:
     LOGIN_URL = "https://legalization-de.tlscontact.com/login"
 
     LEGALIZATION_BRANCHES = {
-        "Sheikh Zayed": "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home",
+        "El-Sheikh Zayed": "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home",
         "Hurghada": "https://legalization-de.tlscontact.com/service/eg/egHRG2de/home",
     }
 
     # TLS Website – Visa Process
     VISA_BRANCHES = {
         "New Cairo": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egHAC2de",
-        "Sheikh Zayed": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egCAI2de",
+        "El-Sheikh Zayed": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egCAI2de",
         "Alexandria": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egALY2de",
         "Hurghada": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egHRG2de",
     }

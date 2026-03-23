@@ -28,6 +28,7 @@ from app.schemas import (
     NotificationLogPublic,
     DesktopCheckReport,
     DesktopEmailRelay,
+    DesktopEmailRecipientCheck,
     DesktopHardwareRegister,
 )
 
@@ -699,6 +700,67 @@ def _simple_email_ok(addr: str) -> bool:
     return bool(local and domain and "." in domain)
 
 
+@router.post("/desktop-email-relay/validate-recipient")
+async def desktop_email_validate_recipient(
+    body: DesktopEmailRecipientCheck,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Validate the recipient address for desktop relay before saving desktop config.
+    Does NOT send an email.
+    """
+    if not body.license_key or not body.to_email.strip():
+        raise HTTPException(400, "license_key and to_email are required")
+    if not _simple_email_ok(body.to_email):
+        raise HTTPException(400, "Invalid recipient email")
+
+    lk = body.license_key.strip()
+    # Trial licenses can use any valid recipient once hardware is registered.
+    if lk.upper() == "TRIAL":
+        hw = (body.hardware_id or "").strip()
+        if len(hw) < 8:
+            raise HTTPException(400, "hardware_id is required for trial relay")
+        uq = await db.execute(select(HardwareUsage).where(HardwareUsage.hardware_id == hw))
+        if not uq.scalar_one_or_none():
+            raise HTTPException(
+                403,
+                "Device not registered for relay — open the app once after install or complete a check",
+            )
+        return {"status": "ok", "allowed": True}
+
+    pay_result = await db.execute(
+        select(Payment).where(
+            Payment.license_key.isnot(None),
+            Payment.license_key != "",
+            func.upper(Payment.license_key) == lk.upper(),
+            Payment.status == PaymentStatus.APPROVED,
+        ).limit(1)
+    )
+    payment = pay_result.scalar_one_or_none()
+    if not payment:
+        raise HTTPException(401, "Invalid or inactive license key")
+
+    if not _hardware_matches(payment.hardware_id, body.hardware_id):
+        raise HTTPException(403, "Hardware ID does not match this license")
+
+    user_result = await db.execute(select(User).where(User.id == payment.user_id))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    dest = body.to_email.strip().lower()
+    allowed = {user.email.strip().lower()}
+    if payment.submitter_email and payment.submitter_email.strip():
+        allowed.add(payment.submitter_email.strip().lower())
+
+    if dest not in allowed:
+        raise HTTPException(
+            400,
+            "Notification email must be your account email or the email used when purchasing the desktop license",
+        )
+    return {"status": "ok", "allowed": True}
+
+
 @router.post("/register-desktop-hardware")
 async def register_desktop_hardware(
     body: DesktopHardwareRegister,
@@ -792,7 +854,7 @@ async def desktop_email_relay(
     if dest not in allowed:
         raise HTTPException(
             400,
-            "Recipient must be your account email or the email used when purchasing the desktop license",
+            "Notification email must be your account email or the email used when purchasing the desktop license",
         )
 
     ok = email_service.send(

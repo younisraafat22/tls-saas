@@ -805,7 +805,7 @@ class TLSApp:
                     enable_email_notifications=True,
                     enable_windows_notifications=True,
                     headless_mode=True,
-                    branch="Sheikh Zayed",
+                    branch="El-Sheikh Zayed",
                     branch_url="https://legalization-de.tlscontact.com/service/eg/egCAI2de/home",
                     service_type="legalization",
                 )
@@ -1026,11 +1026,11 @@ class TLSApp:
                 elif not settings.branch or settings.branch not in branches:
                     # Fall back to default branch for the service type
                     if svc == 'visa':
-                        settings.branch = "Sheikh Zayed"
-                        settings.branch_url = Config.VISA_BRANCHES["Sheikh Zayed"]
+                        settings.branch = "El-Sheikh Zayed"
+                        settings.branch_url = Config.VISA_BRANCHES["El-Sheikh Zayed"]
                     else:
-                        settings.branch = "Sheikh Zayed"
-                        settings.branch_url = Config.LEGALIZATION_BRANCHES["Sheikh Zayed"]
+                        settings.branch = "El-Sheikh Zayed"
+                        settings.branch_url = Config.LEGALIZATION_BRANCHES["El-Sheikh Zayed"]
                 db.commit()
                 # Server-assigned branch will be fetched asynchronously by show_monitoring_page.
         finally:
@@ -1347,7 +1347,7 @@ class TLSApp:
                 "tls_email": settings.tls_email,
                 "tls_password": tls_password,
                 "service_type": settings.service_type or 'legalization',
-                "branch": settings.branch or 'Sheikh Zayed',
+                "branch": settings.branch or 'El-Sheikh Zayed',
                 "branch_url": settings.branch_url or '',
                 "notification_email": settings.notification_email,
                 "check_interval": settings.check_interval or 60,
@@ -1768,7 +1768,7 @@ class TLSApp:
             raw_password = (self.flow_data.get('tls_password') or "").strip()
             encrypted_password = auth_service.encrypt_password(raw_password) if raw_password else None
             service_type_value = self.flow_data.get('service_type') or (getattr(settings, 'service_type', 'legalization') if settings else 'legalization') or 'legalization'
-            branch_value = self.flow_data.get('branch') or (settings.branch if settings else "Sheikh Zayed")
+            branch_value = self.flow_data.get('branch') or (settings.branch if settings else "El-Sheikh Zayed")
             # Resolve branch_url from config maps
             if service_type_value == 'visa':
                 default_url = Config.VISA_BRANCHES.get(branch_value, list(Config.VISA_BRANCHES.values())[0])
@@ -2206,7 +2206,7 @@ class TLSApp:
             d = dict(getattr(Config, "VISA_BRANCHES", {}) or {})
             canonical = {
                 "New Cairo": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egHAC2de",
-                "Sheikh Zayed": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egCAI2de",
+                "El-Sheikh Zayed": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egCAI2de",
                 "Alexandria": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egALY2de",
                 "Hurghada": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egHRG2de",
             }
@@ -2217,7 +2217,7 @@ class TLSApp:
         def _legalization_branches():
             d = dict(getattr(Config, "LEGALIZATION_BRANCHES", {}) or {})
             canonical = {
-                "Sheikh Zayed": "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home",
+                "El-Sheikh Zayed": "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home",
                 "Hurghada": "https://legalization-de.tlscontact.com/service/eg/egHRG2de/home",
             }
             for k, v in canonical.items():
@@ -2234,10 +2234,10 @@ class TLSApp:
 
         # Resolve branch defaults per service type
         if current_service_type == 'visa':
-            default_branch = "Sheikh Zayed"
+            default_branch = "El-Sheikh Zayed"
             branch_options_list = list(_visa_branches().keys())
         else:
-            default_branch = "Sheikh Zayed"
+            default_branch = "El-Sheikh Zayed"
             branch_options_list = list(_legalization_branches().keys())
 
         branch_value = settings.branch if settings and settings.branch else default_branch
@@ -2304,10 +2304,10 @@ class TLSApp:
             self._monitoring_service_type_selection = new_type
             if new_type == "visa":
                 new_branches = list(_visa_branches().keys())
-                new_default = "Sheikh Zayed"
+                new_default = "El-Sheikh Zayed"
             else:
                 new_branches = list(_legalization_branches().keys())
-                new_default = "Sheikh Zayed"
+                new_default = "El-Sheikh Zayed"
             config_branch_dropdown.options = [ft.dropdown.Option(b, b) for b in new_branches]
             config_branch_dropdown.value = new_default
             _branch_log(f"service_radio -> {new_type}; options={new_branches}")
@@ -2463,7 +2463,7 @@ class TLSApp:
                                     else list(_legalization_branches().keys())
                                 )
                                 pick = assigned_name if assigned_name in opts else (
-                                    "Sheikh Zayed"
+                                    "El-Sheikh Zayed"
                                 )
                             else:
                                 cur = service_sw.value
@@ -2478,7 +2478,7 @@ class TLSApp:
                                     else list(_legalization_branches().keys())
                                 )
                                 pick = assigned_name if assigned_name in opts else (
-                                    "Sheikh Zayed"
+                                    "El-Sheikh Zayed"
                                 )
                             branch_dd.options = [ft.dropdown.Option(b, b) for b in opts]
                             branch_dd.value = pick

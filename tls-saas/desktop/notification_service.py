@@ -42,16 +42,38 @@ class NotificationService:
         except Exception:
             pass
 
+    @staticmethod
+    def _relay_endpoint_bases() -> list[str]:
+        """Same discovery order as license checks: Vercel /api/backend-url, LICENSE_SERVER_URL, BACKEND_URL."""
+        from license_service import _build_backend_urls
+
+        urls = _build_backend_urls()
+        if not urls:
+            b = (getattr(Config, "BACKEND_URL", None) or "").strip().rstrip("/")
+            if b:
+                urls = [b]
+        return urls
+
+    @staticmethod
+    def _redact_license_key(key: str) -> str:
+        k = (key or "").strip()
+        if len(k) <= 6:
+            return "***"
+        return f"{k[:4]}…{k[-2:]}"
+
     def _send_email_via_backend_relay(
         self, to_email: str, subject: str, html_body: str, screenshot_path: Optional[str]
     ) -> bool:
         """
-        Use server SMTP on BACKEND_URL when local ADMIN_EMAIL is not bundled (installed .exe).
-        Screenshot attachments are skipped in relay mode.
-        Uses requests+certifi first (Windows TLS / WinError 10054 with urllib is common).
+        POST to FastAPI /api/monitoring/desktop-email-relay on each discovered API base URL.
+        Uses the same URL list as license verification (Vercel discovery first).
         """
+        frozen = getattr(sys, "frozen", False)
         if screenshot_path and os.path.exists(screenshot_path):
-            self._log_relay("relay: screenshot attachment skipped (use local .env SMTP for attachments)")
+            self._log_relay(
+                "relay: screenshot attachment skipped (relay sends HTML only; "
+                "unfrozen + ALLOW_LOCAL_SMTP=1 enables local SMTP with attachments)"
+            )
         try:
             from license_service import _read_license_file, _safe_urlopen, get_hardware_id
 
@@ -69,7 +91,6 @@ class NotificationService:
                 "html_body": html_body,
             }
 
-            url = f"{Config.BACKEND_URL.rstrip('/')}/api/monitoring/desktop-email-relay"
             ua = "TLSAppointmentChecker/1.0 (Windows; email-relay)"
             hdr_json = {
                 "Content-Type": "application/json",
@@ -77,49 +98,108 @@ class NotificationService:
                 "User-Agent": ua,
             }
 
-            # 1) requests + certifi — more reliable HTTPS on frozen Windows builds than urllib alone
-            try:
-                import requests
-                try:
-                    import certifi
-                    verify = certifi.where()
-                except Exception:
-                    verify = True
-                r = requests.post(
-                    url,
-                    json=payload_obj,
-                    timeout=45,
-                    headers={"User-Agent": ua, "Accept": "application/json"},
-                    verify=verify,
-                )
-                if int(r.status_code) < 400:
-                    return True
-                self._log_relay(f"relay HTTP {r.status_code}: {(r.text or '')[:500]}")
-            except Exception as ex_req:
-                self._log_relay(f"relay requests path: {ex_req}")
-
-            # 2) urllib fallback
-            payload = json.dumps(payload_obj, ensure_ascii=False).encode("utf-8")
-            req = urllib.request.Request(
-                url,
-                data=payload,
-                headers=hdr_json,
-                method="POST",
+            bases = self._relay_endpoint_bases()
+            self._log_relay(
+                f"relay debug: frozen={frozen} bases={bases} "
+                f"license_key={self._redact_license_key(str(lic.get('key', '')))} hw_len={len(hw)}"
             )
+            if not bases:
+                self._log_relay(
+                    "relay aborted: no backend base URL (set BACKEND_URL / LICENSE_SERVER_URL; "
+                    "or ensure Vercel NEXT_PUBLIC_API_URL + /api/backend-url discovery works)"
+                )
+                return False
+
+            relay_path = "/api/monitoring/desktop-email-relay"
+            last_err = ""
+
+            import requests
+
             try:
-                with _safe_urlopen(req, timeout=45) as resp:
-                    code = int(getattr(resp, "status", 200))
-                    if code >= 400:
+                import certifi
+
+                verify = certifi.where()
+            except Exception:
+                verify = True
+
+            for i, base in enumerate(bases, start=1):
+                base = (base or "").strip().rstrip("/")
+                if not base:
+                    continue
+                url = f"{base}{relay_path}"
+                self._log_relay(f"relay attempt {i}/{len(bases)} POST {url}")
+
+                try:
+                    r = requests.post(
+                        url,
+                        json=payload_obj,
+                        timeout=45,
+                        headers={"User-Agent": ua, "Accept": "application/json"},
+                        verify=verify,
+                        allow_redirects=True,
+                    )
+                    final_url = getattr(r, "url", url)
+                    if final_url != url:
+                        self._log_relay(f"relay debug: requests final URL after redirects: {final_url}")
+                    if int(r.status_code) < 400:
+                        self._log_relay(f"relay OK: status={r.status_code} base={base}")
+                        return True
+                    body = (r.text or "")[:800]
+                    self._log_relay(f"relay HTTP {r.status_code} body_snip={body[:500]!r}")
+                    last_err = f"HTTP {r.status_code}"
+                    if r.status_code == 404:
+                        if "vercel.app" in base.lower() or "tls-saas" in base.lower():
+                            self._log_relay(
+                                "relay hint: 404 on website host — the FastAPI app is usually on Fly.io. "
+                                "Point BACKEND_URL at the API base, or fix NEXT_PUBLIC_API_URL on Vercel."
+                            )
+                        try:
+                            h = requests.get(
+                                f"{base}/api/health",
+                                timeout=10,
+                                headers={"User-Agent": ua},
+                                verify=verify,
+                            )
+                            self._log_relay(
+                                f"relay probe GET {base}/api/health -> {h.status_code} "
+                                f"{(h.text or '')[:200]!r}"
+                            )
+                        except Exception as probe_exc:
+                            self._log_relay(f"relay probe /api/health failed: {type(probe_exc).__name__}: {probe_exc!r}")
+                except Exception as ex_req:
+                    self._log_relay(f"relay requests: {type(ex_req).__name__}: {ex_req!r}")
+                    last_err = str(ex_req)
+
+                payload = json.dumps(payload_obj, ensure_ascii=False).encode("utf-8")
+                req = urllib.request.Request(
+                    url,
+                    data=payload,
+                    headers=hdr_json,
+                    method="POST",
+                )
+                try:
+                    with _safe_urlopen(req, timeout=45) as resp:
+                        code = int(getattr(resp, "status", 200))
+                        if code < 400:
+                            self._log_relay(f"relay OK (urllib): status={code} base={base}")
+                            return True
                         body = resp.read().decode(errors="replace")[:500]
                         self._log_relay(f"relay urllib HTTP {code}: {body}")
-                        return False
-            except urllib.error.HTTPError as e:
-                body = e.read().decode(errors="replace")[:500] if e.fp else ""
-                self._log_relay(f"relay urllib HTTP {e.code}: {body}")
-                return False
-            return True
+                        last_err = f"urllib HTTP {code}"
+                except urllib.error.HTTPError as e:
+                    body = e.read().decode(errors="replace")[:500] if e.fp else ""
+                    self._log_relay(f"relay urllib HTTPError {e.code}: {body}")
+                    last_err = f"HTTPError {e.code}"
+                except Exception as uex:
+                    self._log_relay(f"relay urllib: {type(uex).__name__}: {uex!r}")
+                    last_err = str(uex)
+
+            self._log_relay(f"relay failed on all bases ({len(bases)}). Last error: {last_err}")
+            return False
         except Exception as e:
-            self._log_relay(f"relay failed: {e}")
+            import traceback
+
+            self._log_relay(f"relay failed: {e}\n{traceback.format_exc()}")
             return False
 
     def _try_local_smtp(
@@ -157,22 +237,14 @@ class NotificationService:
             print("Email notification skipped: no recipient email configured")
             return False
 
-        use_local_smtp = bool(Config.ADMIN_EMAIL and Config.ADMIN_EMAIL_PASSWORD)
         frozen = getattr(sys, "frozen", False)
+        # Installed .exe: never use local SMTP (no Gmail credentials in the client). Relay only.
+        # Dev: optional local SMTP if ADMIN_* set and ALLOW_LOCAL_SMTP is not 0/false/no.
+        allow_smtp = not frozen
+        if allow_smtp:
+            allow_smtp = os.getenv("ALLOW_LOCAL_SMTP", "1").strip().lower() not in ("0", "false", "no")
+        use_local_smtp = bool(Config.ADMIN_EMAIL and Config.ADMIN_EMAIL_PASSWORD) and allow_smtp
 
-        # Installed .exe: try backend relay first. Bundled/example .env often has bad Gmail creds (535),
-        # which wasted time and broke relay with flaky urllib TLS (WinError 10054).
-        if frozen:
-            if self._send_email_via_backend_relay(to_email, subject, html_body, screenshot_path):
-                return True
-            if use_local_smtp:
-                try:
-                    return self._try_local_smtp(to_email, subject, html_body, screenshot_path)
-                except Exception as e:
-                    self._log_relay(f"local SMTP failed after relay: {e}")
-            return False
-
-        # Dev (python main.py): prefer local SMTP when configured, then relay
         if use_local_smtp:
             try:
                 return self._try_local_smtp(to_email, subject, html_body, screenshot_path)

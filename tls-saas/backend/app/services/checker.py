@@ -1269,7 +1269,7 @@ class TLSChecker:
                 pass
 
             # ── Extract location keywords from branch URL for multi-app selection ──
-            # e.g. egCAI2de → keywords for Cairo/Sheikh Zayed
+            # e.g. egCAI2de → keywords for Cairo/El-Sheikh Zayed
             #      egHRG2de → keywords for Hurghada
             location_keywords: list[str] = []
             location_label = ""
@@ -1282,13 +1282,13 @@ class TLSChecker:
                             "cai", "cairo", "sheikh zayed", "el-sheikh zayed",
                             "sheik zayed", "egcai",
                         ]
-                        location_label = "Cairo / Sheikh Zayed"
+                        location_label = "Cairo / El-Sheikh Zayed"
                     elif _code == "HRG":
                         location_keywords = ["hrg", "hurghada", "eghrg"]
                         location_label = "Hurghada"
 
             # ── Step 0: Multi-application card detection ──────────────────
-            # When 2+ applications exist under the same TLS account (e.g. Sheikh Zayed
+            # When 2+ applications exist under the same TLS account (e.g. El-Sheikh Zayed
             # + Hurghada legalization), TLS shows one card per application each with its
             # own Select button.  Pick the card whose text matches the target branch.
             select_el = None

@@ -141,7 +141,7 @@ def init_db():
             tls_email         TEXT NOT NULL,
             tls_password_enc  TEXT NOT NULL,
             service_type      TEXT DEFAULT 'legalization',
-            branch            TEXT DEFAULT 'Sheikh Zayed',
+            branch            TEXT DEFAULT 'El-Sheikh Zayed',
             branch_url        TEXT,
             notification_email TEXT NOT NULL,
             check_interval    INTEGER DEFAULT 60,
@@ -483,7 +483,7 @@ def monitoring_start():
             WHERE hardware_id=?
         """, (lk, data["tls_email"], enc_pass,
               data.get("service_type", "legalization"),
-              data.get("branch", "Sheikh Zayed"),
+              data.get("branch", "El-Sheikh Zayed"),
               data.get("branch_url", ""),
               data["notification_email"],
               data.get("check_interval", 60),
@@ -499,7 +499,7 @@ def monitoring_start():
             VALUES (?,?,?,?,?,?,?,?,?,1,'pending',?,?)
         """, (lk, hw, data["tls_email"], enc_pass,
               data.get("service_type", "legalization"),
-              data.get("branch", "Sheikh Zayed"),
+              data.get("branch", "El-Sheikh Zayed"),
               data.get("branch_url", ""),
               data["notification_email"],
               data.get("check_interval", 60),
@@ -753,7 +753,7 @@ class MonitoringWorker:
                         tls_email=job["tls_email"],
                         tls_password=auth_service.encrypt_password(tls_password),
                         service_type=job["service_type"] or "legalization",
-                        branch=job["branch"] or "Sheikh Zayed",
+                        branch=job["branch"] or "El-Sheikh Zayed",
                         branch_url=job["branch_url"] or "",
                         notification_email=job["notification_email"],
                         check_interval=job["check_interval"] or 60,
@@ -768,7 +768,7 @@ class MonitoringWorker:
                     settings.tls_email = job["tls_email"]
                     settings.tls_password = auth_service.encrypt_password(tls_password)
                     settings.service_type = job["service_type"] or "legalization"
-                    settings.branch = job["branch"] or "Sheikh Zayed"
+                    settings.branch = job["branch"] or "El-Sheikh Zayed"
                     settings.branch_url = job["branch_url"] or ""
                     settings.notification_email = job["notification_email"]
                     settings.check_interval = job["check_interval"] or 60

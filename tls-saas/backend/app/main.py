@@ -84,7 +84,7 @@ async def seed_data():
                 "description": "Monitor all legalization branches for appointment availability",
                 "price_monthly": settings.PRICE_LEGALIZATION_MONTHLY,
                 "features": [
-                    "One branch of your choice (Sheikh Zayed or Hurghada)",
+                    "One branch of your choice (El-Sheikh Zayed or Hurghada)",
                     "Email & web push notifications",
                     "Real-time dashboard",
                     "60-minute check interval",
@@ -99,7 +99,7 @@ async def seed_data():
                 "description": "Monitor your personal TLS visa appointment — individual per-user check",
                 "price_monthly": settings.PRICE_VISA_MONTHLY,
                 "features": [
-                    "One branch of your choice (Sheikh Zayed, Hurghada, New Cairo or Alexandria)",
+                    "One branch of your choice (El-Sheikh Zayed, Hurghada, New Cairo or Alexandria)",
                     "Individual check using your TLS credentials",
                     "Email & web push notifications",
                     "Real-time dashboard",
@@ -146,12 +146,12 @@ async def seed_data():
             if not existing_plan:
                 db.add(Plan(**pd))
 
-        # Create branches — 2 legalization + 4 visa branches (Cairo uses "Sheikh Zayed" for both services; suffix disambiguates in DB)
+        # Create branches — 2 legalization + 4 visa branches (Cairo: "El-Sheikh Zayed" for both services; suffix disambiguates in DB)
         branches_data = [
-            {"name": "Sheikh Zayed - Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home", "service_type": ServiceType.LEGALIZATION},
+            {"name": "El-Sheikh Zayed - Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egCAI2de/home", "service_type": ServiceType.LEGALIZATION},
             {"name": "Hurghada - Legalization", "url": "https://legalization-de.tlscontact.com/service/eg/egHRG2de/home", "service_type": ServiceType.LEGALIZATION},
             {"name": "New Cairo - Visa", "url": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egHAC2de", "service_type": ServiceType.VISA},
-            {"name": "Sheikh Zayed - Visa", "url": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egCAI2de", "service_type": ServiceType.VISA},
+            {"name": "El-Sheikh Zayed - Visa", "url": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egCAI2de", "service_type": ServiceType.VISA},
             {"name": "Alexandria - Visa", "url": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egALY2de", "service_type": ServiceType.VISA},
             {"name": "Hurghada - Visa", "url": "https://visas-de.tlscontact.com/en-us/country/eg/vac/egHRG2de", "service_type": ServiceType.VISA},
         ]
@@ -347,7 +347,7 @@ async def lifespan(app: FastAPI):
             import json as _json
             # Update legalization plan name, description, features and price
             new_features = _json.dumps([
-                "Sheikh Zayed & Hurghada branches",
+                "El-Sheikh Zayed & Hurghada branches",
                 "Individual appointment monitoring",
                 "Email notifications",
                 "Web push notifications",
@@ -379,12 +379,12 @@ async def lifespan(app: FastAPI):
     # Fix visa branch names and URLs to match original TLS application
     async with async_session() as db:
         try:
-            # Cairo visa: same "Sheikh Zayed" naming as legalization; fix URL if needed
+            # Cairo visa: canonical name El-Sheikh Zayed (same family as legalization); fix URL if needed
             await db.execute(text(
-                "UPDATE branches SET name = 'Sheikh Zayed - Visa', "
+                "UPDATE branches SET name = 'El-Sheikh Zayed - Visa', "
                 "url = 'https://visas-de.tlscontact.com/en-us/country/eg/vac/egCAI2de' "
                 "WHERE UPPER(service_type) = 'VISA' AND url LIKE '%visas-de.tlscontact.com%' AND url LIKE '%egCAI2de%' "
-                "AND (name IN ('El-Sheikh Zayed - Visa', 'El-Sheikh Zayed', 'Sheikh Zayed') OR name = 'Sheikh Zayed - Visa')"
+                "AND (name IN ('El-Sheikh Zayed - Visa', 'El-Sheikh Zayed', 'Sheikh Zayed', 'Sheikh Zayed - Visa') OR name = 'Sheikh Zayed')"
             ))
             # Fix Hurghada visa URL
             await db.execute(text(
@@ -485,18 +485,18 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Legalization sub-type deactivation migration skipped: {e}")
 
-    # Unify Cairo visa naming with legalization (Sheikh Zayed); restore suffixed names if a prior migration shortened them
+    # Cairo branches: canonical El-Sheikh Zayed for visa + legalization; restore suffixed names if a prior migration shortened them
     async with async_session() as db:
         try:
             await db.execute(text(
-                "UPDATE branches SET name = 'Sheikh Zayed - Visa' "
+                "UPDATE branches SET name = 'El-Sheikh Zayed - Visa' "
                 "WHERE UPPER(service_type) = 'VISA' AND url LIKE '%visas-de.tlscontact.com%' AND url LIKE '%egCAI2de%' "
-                "AND name IN ('El-Sheikh Zayed - Visa', 'El-Sheikh Zayed', 'Sheikh Zayed')"
+                "AND name IN ('Sheikh Zayed - Visa', 'Sheikh Zayed', 'El-Sheikh Zayed', 'El-Sheikh Zayed - Visa')"
             ))
             await db.execute(text(
-                "UPDATE branches SET name = 'Sheikh Zayed - Legalization' "
+                "UPDATE branches SET name = 'El-Sheikh Zayed - Legalization' "
                 "WHERE UPPER(service_type) = 'LEGALIZATION' AND url LIKE '%legalization-de.tlscontact.com%' AND url LIKE '%egCAI2de%' "
-                "AND name IN ('Sheikh Zayed', 'Sheikh Zayed (Legalization)')"
+                "AND name IN ('Sheikh Zayed', 'Sheikh Zayed - Legalization', 'Sheikh Zayed (Legalization)', 'El-Sheikh Zayed', 'El-Sheikh Zayed - Legalization')"
             ))
             await db.execute(text(
                 "UPDATE branches SET name = 'Hurghada - Legalization' "
@@ -515,7 +515,7 @@ async def lifespan(app: FastAPI):
                 "WHERE name = 'Alexandria' AND UPPER(service_type) = 'VISA'"
             ))
             await db.commit()
-            logger.info("Migration: Sheikh Zayed naming for Cairo visa+legalization; restored suffixed branch names where needed")
+            logger.info("Migration: El-Sheikh Zayed naming for Cairo visa+legalization; restored suffixed branch names where needed")
         except Exception as e:
             logger.warning(f"Branch naming migration skipped: {e}")
 
@@ -528,7 +528,7 @@ async def lifespan(app: FastAPI):
             await db.execute(text(
                 "UPDATE branches SET is_active = 0 "
                 "WHERE UPPER(service_type) = 'LEGALIZATION' "
-                "AND name NOT IN ('Sheikh Zayed - Legalization', 'Hurghada - Legalization')"
+                "AND name NOT IN ('El-Sheikh Zayed - Legalization', 'Hurghada - Legalization')"
             ))
             await db.commit()
             logger.info("Migration: ensured only 2 active legalization branches")

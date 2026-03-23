@@ -343,6 +343,13 @@ class DesktopEmailRelay(BaseModel):
     html_body: str
 
 
+class DesktopEmailRecipientCheck(BaseModel):
+    """Validate whether a notification recipient is allowed for a desktop license."""
+    license_key: str
+    hardware_id: str = ""
+    to_email: str
+
+
 class DesktopHardwareRegister(BaseModel):
     """Register a desktop device id so trial builds can use email relay before the first check."""
     hardware_id: str = ""
