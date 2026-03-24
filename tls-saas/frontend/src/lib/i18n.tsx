@@ -34,6 +34,9 @@ export const translations = {
       checking: "Checking...",
       noSlots: "No slots",
       slotsOpen: "🎉 Slots Open!",
+      appointmentNoteTitle: "Note",
+      appointmentNoteBody:
+        "If you already have a confirmed appointment, the app will not work for that account. You must create a new application on the TLS website to check for other appointments.",
     },
     stats: {
       branches: "Branches Monitored",
@@ -44,7 +47,8 @@ export const translations = {
         suffix3: "min",
       },
     features: {
-      notice: "<strong>⚠️ IMPORTANT NOTICE:</strong> TLS Appointment Checker is <strong>monitoring only</strong>. No auto-booking, and it does not guarantee appointments. It is a tool to help you find open slots by checking the TLS website automatically.<br/><br/><strong>Note:</strong> If you already have a confirmed appointment, the app will not work for that account. You must create a new application on the TLS website to check for other appointments.",
+      notice:
+        "<strong>⚠️ IMPORTANT NOTICE:</strong> TLS Appointment Checker is <strong>monitoring only</strong>. No auto-booking, and it does not guarantee appointments. It is a tool to help you find open slots by checking the TLS website automatically.",
       title: "Why Choose",
       titleHighlight: "TLS Appointment Checker",
       titleEnd: "?",
@@ -522,6 +526,9 @@ export const translations = {
       checking: "جارٍ الفحص...",
       noSlots: "لا توجد مواعيد",
       slotsOpen: "🎉 مواعيد متاحة!",
+      appointmentNoteTitle: "ملاحظة",
+      appointmentNoteBody:
+        "إذا كان لديك موعد مؤكد مسبقاً، فلن يعمل التطبيق مع هذا الحساب. لمراقبة مواعيد أخرى، عليك إنشاء طلباً جديداً على موقع TLS.",
     },
     stats: {
       branches: "فروع مُراقَبة",
@@ -532,7 +539,8 @@ export const translations = {
         suffix3: "دقيقة",
       },
     features: {
-      notice: "<strong>⚠️ تنبيه هام:</strong> تطبيق TLS Appointment Checker هو <strong>أداة مراقبة فقط</strong>. لا يقوم بالحجز التلقائي، ولا يضمن لك المواعيد. هو مجرد أداة لتسهيل العثور على المواعيد المتاحة عن طريق فحص الموقع تلقائيًا.<br/><br/><strong>ملاحظة:</strong> إذا كان لديك موعد محجوز ومؤكد بالفعل، فلن يعمل التطبيق على هذا الحساب. يجب عليك إنشاء طلب جديد على موقع TLS لمراقبة المواعيد الأخرى ومسح ملف db واستخدام الحساب الجديد.", 
+      notice:
+        "<strong>⚠️ تنبيه هام:</strong> تطبيق TLS Appointment Checker هو <strong>أداة مراقبة فقط</strong>. لا يقوم بالحجز التلقائي، ولا يضمن لك المواعيد. هو أداة تساعدك على العثور على المواعيد المتاحة عبر فحص موقع TLS تلقائياً.",
       title: "لماذا تختار",
       titleHighlight: "TLS Appointment Checker",
       titleEnd: "؟",
@@ -1012,6 +1020,9 @@ export const translations = {
       checking: "Prüfe...",
       noSlots: "Keine Termine",
       slotsOpen: "🎉 Termine frei!",
+      appointmentNoteTitle: "Hinweis",
+      appointmentNoteBody:
+        "Wenn Sie bereits einen bestätigten Termin haben, funktioniert die App mit diesem Konto nicht. Sie müssen einen neuen Antrag auf der TLS-Website erstellen, um nach weiteren Terminen zu suchen.",
     },
     stats: {
       branches: "Überwachte Filialen",
@@ -1022,7 +1033,8 @@ export const translations = {
         suffix3: "min",
       },
     features: {
-      notice: "<strong>⚠️ WICHTIGER HINWEIS:</strong> TLS Appointment Checker <strong>überwacht nur</strong>. Keine automatische Buchung und keine Garantie für Termine. Es ist ein Tool, das Ihnen hilft, freie Termine zu finden, indem es die TLS-Website automatisch überprüft.<br/><br/><strong>Hinweis:</strong> Wenn Sie bereits einen bestätigten Termin haben, funktioniert die App nicht für dieses Konto. Sie müssen einen neuen Antrag auf der TLS-Website erstellen, um nach neuen Terminen zu suchen.",
+      notice:
+        "<strong>⚠️ WICHTIGER HINWEIS:</strong> TLS Appointment Checker <strong>überwacht nur</strong>. Keine automatische Buchung und keine Garantie für Termine. Es ist ein Tool, das Ihnen hilft, freie Termine zu finden, indem es die TLS-Website automatisch überprüft.",
       title: "Warum",
       titleHighlight: "TLS Appointment Checker",
       titleEnd: "wählen?",

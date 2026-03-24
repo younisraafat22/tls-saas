@@ -7,6 +7,7 @@ import {
   Bell, Shield, Globe, Zap, Clock, Smartphone,
   Check, ChevronDown, ChevronUp, ArrowRight,
   Mail, Monitor, Download, Laptop, HardDrive, Star,
+  Info,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { subscriptionApi } from "@/lib/api";
@@ -368,8 +369,26 @@ function Hero() {
           </motion.div>
         </div>
 
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.35 }}
+          className="max-w-3xl mx-auto mt-14 lg:mt-16 px-1"
+        >
+          <div
+            className="flex gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3.5 text-sm text-gray-300 leading-relaxed"
+            dir={locale === "ar" ? "rtl" : "ltr"}
+          >
+            <Info className="w-5 h-5 text-primary-400 shrink-0 mt-0.5" aria-hidden />
+            <p className="min-w-0">
+              <span className="font-semibold text-gray-200">{(t.hero as any).appointmentNoteTitle}: </span>
+              {(t.hero as any).appointmentNoteBody}
+            </p>
+          </div>
+        </motion.div>
+
         {/* Stats bar */}
-        <AnimatedSection className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-20 pt-10 border-t border-white/5">
+        <AnimatedSection className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-12 lg:mt-14 pt-10 border-t border-white/5">
           {[
             { value: 4, suffix: "", label: t.stats.branches },
             { value: 24, suffix: (t.stats as any).suffix2 || "/7", label: t.stats.monitoring },

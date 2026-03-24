@@ -184,7 +184,14 @@ export default function AdminLayout({
       {/* Main content */}
       <main className="flex-1 lg:ml-64 max-lg:pt-14 max-lg:pb-20 overflow-x-hidden w-full">
         <div className="bg-amber-500/10 border-b border-amber-500/20 text-amber-200/90 py-2 sm:py-3 px-4 text-xs sm:text-sm text-center">
-          {(t.hero as any).notice || "⚠️ IMPORTANT NOTICE: TLS Appointment Checker is monitoring only. No auto-booking, and it does not guarantee appointments. It is a tool to help you find open slots by checking the TLS website automatically."}
+          <p
+            dangerouslySetInnerHTML={{
+              __html:
+                (t.features as any)?.notice ||
+                (t.hero as any)?.notice ||
+                "<strong>⚠️ IMPORTANT NOTICE:</strong> TLS Appointment Checker is <strong>monitoring only</strong>. No auto-booking, and it does not guarantee appointments. It is a tool to help you find open slots by checking the TLS website automatically.",
+            }}
+          />
         </div>
         <div className="max-w-6xl mx-auto p-4 sm:p-6 w-full min-w-0">
           {children}
