@@ -109,7 +109,7 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
             </div>
             <div style="padding:32px;">
               <p style="font-size:16px;color:#d1d5db;">Hi <strong style="color:#fff;">{user.full_name or user.email}</strong>,</p>
-              <p style="color:#9ca3af;line-height:1.6;">Your account has been created successfully. You can now log in and subscribe to start monitoring legalization appointment availability.</p>
+              <p style="color:#9ca3af;line-height:1.6;">Your account has been created successfully. You can now log in and subscribe to start monitoring visa and document legalization appointment availability.</p>
               <div style="background:#1f2937;border-radius:12px;padding:20px;margin:24px 0;">
                 <p style="margin:0;color:#9ca3af;font-size:14px;">&#x26A0;&#xFE0F; <strong style="color:#fbbf24;">Early Access:</strong> This service is in early access. Subscription is activated manually after payment confirmation via InstaPay or Vodafone Cash.</p>
               </div>
