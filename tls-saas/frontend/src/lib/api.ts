@@ -272,6 +272,10 @@ export const adminApi = {
     if (limit) params.set("limit", String(limit));
     return api.get(`/api/admin/check-errors?${params.toString()}`);
   },
+  resolveCheckError: (id: number) => api.patch(`/api/admin/check-errors/${id}/resolve`, {}),
+  deleteCheckError: (id: number) => api.delete(`/api/admin/check-errors/${id}`),
+  messageUserForError: (id: number, data: { subject: string; message: string }) =>
+    api.post(`/api/admin/check-errors/${id}/message-user`, data),
   deleteCheckResults: (branchId?: number) => {
     const params = new URLSearchParams();
     if (branchId) params.set("branch_id", String(branchId));

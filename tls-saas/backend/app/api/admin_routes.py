@@ -1347,6 +1347,88 @@ async def admin_check_errors(
     return rows
 
 
+@router.patch("/check-errors/{result_id}/resolve", response_model=MessageResponse)
+async def resolve_check_error(
+    result_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark an error row as resolved (keeps history row, clears only error text)."""
+    row = (await db.execute(select(CheckResult).where(CheckResult.id == result_id))).scalar_one_or_none()
+    if not row:
+        raise HTTPException(404, "Check result not found")
+    row.error = ""
+    await db.commit()
+    return MessageResponse(message=f"Error #{result_id} marked as resolved")
+
+
+@router.delete("/check-errors/{result_id}", response_model=MessageResponse)
+async def delete_check_error(
+    result_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a single error row from check history."""
+    row = (await db.execute(select(CheckResult).where(CheckResult.id == result_id))).scalar_one_or_none()
+    if not row:
+        raise HTTPException(404, "Check result not found")
+    await db.delete(row)
+    await db.commit()
+    return MessageResponse(message=f"Error #{result_id} deleted")
+
+
+@router.post("/check-errors/{result_id}/message-user", response_model=MessageResponse)
+async def message_user_about_error(
+    result_id: int,
+    body: dict,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send a custom admin message to the user tied to an error row."""
+    subject = (body.get("subject") or "").strip()
+    message = (body.get("message") or "").strip()
+    if not subject or not message:
+        raise HTTPException(400, "Subject and message are required")
+
+    result = await db.execute(
+        select(CheckResult, User, Branch)
+        .join(User, CheckResult.user_id == User.id)
+        .join(Branch, CheckResult.branch_id == Branch.id)
+        .where(CheckResult.id == result_id)
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(404, "Error row with user not found")
+    cr, user, branch = row
+    if not user.email:
+        raise HTTPException(400, "User email missing")
+
+    from app.services.email_service import email_service
+    import html as _html
+    html = f"""
+    <div style='font-family:Arial,sans-serif;max-width:700px;margin:0 auto;color:#111827;'>
+      <h2 style='color:#0ea5e9;margin-bottom:12px;'>TLS Appointment Checker - Admin Message</h2>
+      <p style='margin:0 0 12px 0;'>Hello {user.full_name or user.email},</p>
+      <p style='margin:0 0 12px 0;'>Our monitoring detected an issue on your account. Please review this note from support:</p>
+      <div style='white-space:pre-wrap;background:#f3f4f6;border-radius:8px;padding:14px;margin:8px 0 16px 0;'>{_html.escape(message)}</div>
+      <p style='margin:0 0 8px 0;color:#6b7280;font-size:12px;'>Branch: {branch.name} ({branch.service_type.value})</p>
+      <p style='margin:0 0 8px 0;color:#6b7280;font-size:12px;'>Detected error: {_html.escape(cr.error or "N/A")}</p>
+      <p style='margin:0;color:#6b7280;font-size:12px;'>Sent from admin panel on {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
+    </div>
+    """
+    ok = email_service.send(user.email, subject, html)
+    if not ok:
+        raise HTTPException(500, "Failed to send user email")
+
+    db.add(ActivityLog(
+        actor_id=admin.id,
+        action="error_user_message_sent",
+        details={"check_result_id": cr.id, "user_id": user.id, "user_email": user.email, "branch": branch.name},
+    ))
+    await db.commit()
+    return MessageResponse(message=f"Message sent to {user.email}")
+
+
 @router.delete("/check-results", response_model=MessageResponse)
 async def delete_all_check_results(
     branch_id: int | None = None,

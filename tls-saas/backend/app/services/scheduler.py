@@ -123,6 +123,12 @@ def _is_captcha_failure(error: str) -> bool:
 
 
 async def _notify_admin_login_failure(branch_name: str, user_email: str, error: str):
+    if not settings.ADMIN_ERROR_EMAILS_ENABLED:
+        logger.info(
+            f"Admin login-failure email suppressed (ADMIN_ERROR_EMAILS_ENABLED=false): "
+            f"{branch_name} / {user_email} / {error}"
+        )
+        return
     try:
         email_service.send(
             to_email=settings.ADMIN_EMAIL,
@@ -424,7 +430,7 @@ class SchedulerService:
                     if consecutive_failures >= 2:
                         await db.commit()
                         await _notify_admin_login_failure(branch.name, user.email, res["error"])
-                        await _emit_log("error", "2 consecutive login failures  admin notified", branch.name)
+                        await _emit_log("error", "2 consecutive login failures captured in admin errors panel", branch.name)
                         return
                     continue
 
@@ -516,7 +522,7 @@ class SchedulerService:
                     await db.commit()
                     await _notify_admin_login_failure(branch.name, user.email, res["error"])
                     await _notify_user_check_error(user, branch.name, res["error"])
-                    await _emit_log("error", f"Login failed for {user.email}  admin notified", branch.name)
+                    await _emit_log("error", f"Login failed for {user.email} captured in admin errors panel", branch.name)
                     continue
 
                 cred.last_error = res.get("error", "")

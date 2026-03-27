@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     # ── Admin ────────────────────────────────────────────
     ADMIN_EMAIL: str = "admin@tlschecker.com"
     ADMIN_PASSWORD: str = ""
+    ADMIN_ERROR_EMAILS_ENABLED: bool = False
 
     # ── Email (SMTP) ─────────────────────────────────────
     SMTP_SERVER: str = "smtp.gmail.com"

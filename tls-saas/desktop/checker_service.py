@@ -745,7 +745,7 @@ class TLSCheckerService:
         return os.path.isfile(self.WARP_CLI)
 
     def _warp_connect(self) -> bool:
-        """Enable Cloudflare WARP to get a fresh IP. Returns True on success."""
+        """Enable Cloudflare WARP. Returns True when tunnel is connected."""
         if not self._warp_available():
             self._log("⚠️ Cloudflare WARP not found — cannot change IP")
             return False
@@ -768,7 +768,7 @@ class TLSCheckerService:
                 ).stdout
                 if "Connected" in status and "Connecting" not in status:
                     self._warp_enabled = True
-                    self._log("✅ WARP connected — IP changed via Cloudflare")
+                    self._log("✅ WARP connected")
                     return True
             self._log("⚠️ WARP did not connect within 30s")
             return False
@@ -791,6 +791,43 @@ class TLSCheckerService:
             self._log("🌐 WARP disconnected")
         except Exception as e:
             print(f"[Checker] WARP disconnect error: {e}")
+
+    def _get_public_ip(self) -> str:
+        """Best-effort public IP check for validating WARP egress changes."""
+        try:
+            with urllib.request.urlopen("https://api.ipify.org", timeout=6) as resp:
+                return resp.read().decode().strip()
+        except Exception:
+            return ""
+
+    def _warp_rotate_ip(self) -> bool:
+        """Force disconnect/connect and verify public IP changed when observable."""
+        if not self._warp_available():
+            self._log("⚠️ Cloudflare WARP not found — cannot change IP")
+            return False
+
+        before_ip = self._get_public_ip()
+        if before_ip:
+            self._log(f"🌐 Public IP before rotation: {before_ip}")
+
+        self._warp_disconnect()
+        time.sleep(2)
+
+        for attempt in range(1, 4):
+            if not self._warp_connect():
+                continue
+            after_ip = self._get_public_ip()
+            if after_ip:
+                self._log(f"🌐 Public IP after rotation attempt {attempt}: {after_ip}")
+            if before_ip and after_ip and before_ip == after_ip:
+                self._log("⚠️ WARP reconnected but IP did not change; retrying")
+                self._warp_disconnect()
+                time.sleep(2)
+                continue
+            return True
+
+        self._log("⚠️ Failed to rotate to a different IP via WARP")
+        return False
 
     def _cleanup_driver(self):
         """Close browser"""
@@ -1016,7 +1053,7 @@ class TLSCheckerService:
                     self._audio_blocked = True
                     self.driver.switch_to.default_content()
                     # Enable WARP for a fresh Cloudflare IP, then restart
-                    if not self._warp_enabled and self._warp_connect():
+                    if self._warp_rotate_ip():
                         # Close browser so run_check restarts with the new IP
                         self._cleanup_driver()
                         self._audio_blocked = False
@@ -1036,7 +1073,7 @@ class TLSCheckerService:
             if self._audio_blocked:
                 # IP still blocked — try enabling WARP before giving up
                 self.driver.switch_to.default_content()
-                if not self._warp_enabled and self._warp_connect():
+                if self._warp_rotate_ip():
                     self._cleanup_driver()
                     self._audio_blocked = False
                     self._log("🔄 IP changed — restarting with fresh browser...")
@@ -1105,7 +1142,7 @@ class TLSCheckerService:
                     self._log("❌ Google blocked audio — switching IP via WARP...")
                     self._audio_blocked = True
                     self.driver.switch_to.default_content()
-                    if not self._warp_enabled and self._warp_connect():
+                    if self._warp_rotate_ip():
                         self._cleanup_driver()
                         self._audio_blocked = False
                         self._log("🔄 IP changed — restarting with fresh browser...")
