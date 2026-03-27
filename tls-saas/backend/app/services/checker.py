@@ -257,8 +257,9 @@ class TLSChecker:
         - Legalization branches → Patchright async
         """
         try:
-            # Visa: use SeleniumBase UC (synchronous) in a thread pool on all platforms
-            if service_type == "visa":
+            # Visa + Legalization: use SeleniumBase UC (sync) in thread pool.
+            # Legalization was switched to UC for better parity with desktop behavior.
+            if service_type in ("visa", "legalization"):
                 global visa_checker_sb
                 if visa_checker_sb is None:
                     from app.services.visa_checker_sb import visa_checker_sb as _vcb
@@ -266,10 +267,10 @@ class TLSChecker:
                 return await asyncio.get_event_loop().run_in_executor(
                     _sb_executor,
                     visa_checker_sb.check,
-                    branch_url, tls_email, tls_password, branch_name,
+                    branch_url, tls_email, tls_password, branch_name, service_type,
                 )
 
-            # Legalization: use Patchright (async)
+            # Fallback: Patchright async (kept for compatibility with unknown service types)
             if sys.platform == "win32":
                 return await asyncio.shield(
                     asyncio.get_event_loop().run_in_executor(

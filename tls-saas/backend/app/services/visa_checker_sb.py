@@ -15,6 +15,8 @@ import re
 import subprocess
 import sys
 import time
+import json
+import hashlib
 from datetime import datetime
 from typing import Optional
 
@@ -38,12 +40,95 @@ class VisaCheckerSB:
     Designed to be run in a thread pool from async code.
     """
 
+    STATE_DIR = os.path.join("data", "sb_cookies")
+
+    def _cookie_state_path(self, service_type: str, branch_url: str, tls_email: str) -> str:
+        os.makedirs(self.STATE_DIR, exist_ok=True)
+        key = f"{service_type}|{branch_url}|{(tls_email or '').strip().lower()}"
+        digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
+        return os.path.join(self.STATE_DIR, f"{digest}.json")
+
+    def _save_cookies(self, driver, state_path: str, log) -> None:
+        try:
+            with open(state_path, "w", encoding="utf-8") as f:
+                json.dump(driver.get_cookies(), f)
+            log("Saved session cookies for next checks")
+        except Exception as e:
+            log(f"Could not save cookies: {e}", "warn")
+
+    def _load_cookies(self, driver, state_path: str, log) -> bool:
+        if not os.path.exists(state_path):
+            return False
+        try:
+            with open(state_path, "r", encoding="utf-8") as f:
+                cookies = json.load(f) or []
+            loaded = 0
+            for c in cookies:
+                try:
+                    cc = dict(c)
+                    if "expiry" in cc and cc["expiry"] is not None:
+                        cc["expiry"] = int(cc["expiry"])
+                    driver.add_cookie(cc)
+                    loaded += 1
+                except Exception:
+                    continue
+            if loaded > 0:
+                log(f"Loaded {loaded} saved cookies")
+                return True
+        except Exception as e:
+            log(f"Could not load cookies: {e}", "warn")
+        return False
+
+    def _is_logged_in(self, driver) -> bool:
+        try:
+            url = driver.current_url.lower()
+            if any(p in url for p in ["/login", "/auth/", "kc-login", "openid-connect"]):
+                return False
+        except Exception:
+            pass
+        # Login form visible => not logged in
+        for sel in ["#email-input-field", "#username", "#password-input-field", "#password"]:
+            try:
+                el = driver.find_element(By.CSS_SELECTOR, sel)
+                if el.is_displayed():
+                    return False
+            except Exception:
+                pass
+        return True
+
+    def _open_my_application_from_menu(self, driver, log) -> bool:
+        """Requested flow for persisted sessions: user icon -> My application."""
+        try:
+            icon_svg = driver.find_element(By.CSS_SELECTOR, "svg[aria-label='User icon']")
+            menu_btn = icon_svg.find_element(By.XPATH, "..")
+            driver.execute_script("arguments[0].click();", menu_btn)
+            _wait(0.8, 1.5)
+        except Exception:
+            return False
+
+        # Try known menu labels
+        xpaths = [
+            "//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'my application')]",
+            "//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'application')]",
+        ]
+        for xp in xpaths:
+            try:
+                el = WebDriverWait(driver, 6).until(EC.element_to_be_clickable((By.XPATH, xp)))
+                driver.execute_script("arguments[0].click();", el)
+                log("Opened My application from user menu")
+                _wait(1.5, 2.5)
+                return True
+            except Exception:
+                continue
+        return False
+
     def check(
         self,
         branch_url: str,
         tls_email: str,
         tls_password: str,
         branch_name: str = "",
+        service_type: str = "visa",
     ) -> dict:
         result = {
             "slots_available": False,
@@ -67,6 +152,7 @@ class VisaCheckerSB:
         driver = None
         try:
             from seleniumbase import Driver
+            state_path = self._cookie_state_path(service_type, branch_url, tls_email)
 
             # IMPORTANT: UC mode CANNOT bypass Cloudflare/Turnstile in headless=True.
             # Use the real desktop display (:0) if available, otherwise Xvfb.
@@ -107,6 +193,20 @@ class VisaCheckerSB:
             driver.uc_open_with_reconnect(branch_url, reconnect_time=6)
             _wait(2, 3)
 
+            # Try to reuse saved authenticated session first.
+            reused_session = False
+            if self._load_cookies(driver, state_path, log):
+                try:
+                    driver.refresh()
+                except Exception:
+                    driver.get(branch_url)
+                _wait(2, 3)
+                self._accept_cookies(driver)
+                if self._is_logged_in(driver):
+                    reused_session = True
+                    log("Reused existing logged-in session")
+                    self._open_my_application_from_menu(driver, log)
+
             # If Turnstile checkbox is present, click it
             if self._has_cloudflare(driver):
                 log("Cloudflare/Turnstile still present, clicking captcha checkbox...")
@@ -134,49 +234,51 @@ class VisaCheckerSB:
             # Accept cookies
             self._accept_cookies(driver)
 
-            # Click Login
-            if not self._click_login(driver, log):
-                result["error"] = "Login button not found"
-                try:
-                    result["screenshot"] = driver.get_screenshot_as_png()
-                except Exception:
-                    pass
-                return result
+            if not reused_session:
+                # Click Login
+                if not self._click_login(driver, log):
+                    result["error"] = "Login button not found"
+                    try:
+                        result["screenshot"] = driver.get_screenshot_as_png()
+                    except Exception:
+                        pass
+                    return result
 
-            _wait(2, 3)
-            self._accept_cookies(driver)
+                _wait(2, 3)
+                self._accept_cookies(driver)
 
-            # Fill credentials
-            log("Logging in...")
-            if not self._fill_credentials(driver, tls_email, tls_password, log):
-                result["error"] = "Login form not found"
-                return result
+                # Fill credentials
+                log("Logging in...")
+                if not self._fill_credentials(driver, tls_email, tls_password, log):
+                    result["error"] = "Login form not found"
+                    return result
 
-            # Submit login
-            if not self._submit_login(driver, log):
-                result["error"] = "Submit button not found"
-                return result
+                # Submit login
+                if not self._submit_login(driver, log):
+                    result["error"] = "Submit button not found"
+                    return result
 
-            _wait(4, 6)
+                _wait(4, 6)
 
-            # Verify login
-            if not self._verify_login(driver, tls_email, log):
-                if self._has_cloudflare(driver):
-                    result["error"] = "captcha_bypass_failed"
-                    log("Login blocked by Cloudflare captcha — will retry later", "warn")
-                else:
-                    result["error"] = "Login failed — invalid credentials"
-                    log("Login failed — invalid credentials detected", "error")
-                try:
-                    result["screenshot"] = driver.get_screenshot_as_png()
-                except Exception:
-                    pass
-                return result
+                # Verify login
+                if not self._verify_login(driver, tls_email, log):
+                    if self._has_cloudflare(driver):
+                        result["error"] = "captcha_bypass_failed"
+                        log("Login blocked by Cloudflare captcha — will retry later", "warn")
+                    else:
+                        result["error"] = "Login failed — invalid credentials"
+                        log("Login failed — invalid credentials detected", "error")
+                    try:
+                        result["screenshot"] = driver.get_screenshot_as_png()
+                    except Exception:
+                        pass
+                    return result
 
-            log("Login successful")
+                log("Login successful")
+                self._save_cookies(driver, state_path, log)
 
             # Navigate to booking
-            if not self._navigate_to_booking(driver, log, branch_url):
+            if not self._navigate_to_booking(driver, log, branch_url, service_type=service_type):
                 # Check logs for specific "no application" error
                 no_app_logs = [l for l in result["logs"] if "no application" in l.get("message", "").lower()]
                 if no_app_logs:
@@ -466,8 +568,8 @@ class VisaCheckerSB:
 
     # ── Navigation to Booking ────────────────────────────────────────
 
-    def _navigate_to_booking(self, driver, log, branch_url: str = "") -> bool:
-        """Click Select → (Continue for legalization / skip for visa) → appointment calendar."""
+    def _navigate_to_booking(self, driver, log, branch_url: str = "", service_type: str = "visa") -> bool:
+        """Click Select -> Continue (legalization) / skip (visa) -> appointment calendar."""
         try:
             self._accept_cookies(driver)
             time.sleep(2)
@@ -563,7 +665,40 @@ class VisaCheckerSB:
             log("Clicked Select")
             _wait(3, 5)
 
-            # ── Step 2: Visa goes straight to appointments — skip Continue ──
+            # ── Step 2: Continue is needed on legalization flow ────────────
+            if service_type == "legalization":
+                continue_clicked = False
+                for sel in ["a#book-appointment-btn", "button.button-neo-inside.-primary"]:
+                    try:
+                        btns = driver.find_elements(By.CSS_SELECTOR, sel)
+                        for b in btns:
+                            if b.is_displayed():
+                                driver.execute_script("arguments[0].click();", b)
+                                log("Clicked Continue button")
+                                continue_clicked = True
+                                _wait(2, 4)
+                                break
+                        if continue_clicked:
+                            break
+                    except Exception:
+                        continue
+                if not continue_clicked:
+                    # Fallback by text
+                    try:
+                        for tag in ["a", "button", "span"]:
+                            for el in driver.find_elements(By.TAG_NAME, tag):
+                                txt = (el.text or "").strip().lower()
+                                if txt in {"continue", "proceed", "next"} and el.is_displayed():
+                                    driver.execute_script("arguments[0].click();", el)
+                                    log("Clicked Continue button (text fallback)")
+                                    continue_clicked = True
+                                    _wait(2, 4)
+                                    break
+                            if continue_clicked:
+                                break
+                    except Exception:
+                        pass
+
             log("Group selected – loading appointments...")
             _wait(4, 6)
 
