@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Optional
@@ -168,6 +169,42 @@ class TLSChecker:
         except Exception:
             pass
         self._warp_enabled = False
+
+    def _get_public_ip(self) -> str:
+        """Best-effort public IP check used to verify WARP rotation actually changed egress."""
+        try:
+            with urllib.request.urlopen("https://api.ipify.org", timeout=6) as resp:
+                return resp.read().decode().strip()
+        except Exception:
+            return ""
+
+    def _warp_rotate_ip(self, log=None) -> bool:
+        """Force a disconnect/connect cycle and verify egress IP changed when possible."""
+        _log = log or (lambda m, *a: None)
+        before_ip = self._get_public_ip()
+        if before_ip:
+            _log(f"Public IP before rotation: {before_ip}")
+
+        # Force a fresh tunnel (connect alone can keep same session/egress).
+        self._warp_disconnect(log)
+        time.sleep(2)
+
+        for attempt in range(1, 4):
+            if not self._warp_connect(log):
+                continue
+            after_ip = self._get_public_ip()
+            if after_ip:
+                _log(f"Public IP after rotation attempt {attempt}: {after_ip}")
+            # If we can observe both and they're identical, retry another reconnect.
+            if before_ip and after_ip and before_ip == after_ip:
+                _log("WARP reconnected but IP did not change; retrying rotation", "warn")
+                self._warp_disconnect(log)
+                time.sleep(2)
+                continue
+            return True
+
+        _log("Failed to rotate to a different IP via WARP", "warn")
+        return False
 
     def _get_dedicated_loop(self):
         """Get or create a ProactorEventLoop for Playwright (Windows-safe)."""
@@ -958,10 +995,10 @@ class TLSChecker:
                     )
                     if "automated queries" in body_text or "unusual traffic" in body_text:
                         log("Google detected automation — rate-limited", "warn")
-                        if self._warp_available() and not self._warp_enabled:
+                        if self._warp_available():
                             log("Connecting WARP to rotate IP...", "warn")
                             connected = await asyncio.get_event_loop().run_in_executor(
-                                None, lambda: self._warp_connect(log)
+                                None, lambda: self._warp_rotate_ip(log)
                             )
                             if connected:
                                 log("WARP connected — closing browser for fresh session", "warn")
@@ -1014,10 +1051,10 @@ class TLSChecker:
                     err_el = await bframe.query_selector(".rc-audiochallenge-error-message")
                     if err_el and await err_el.is_visible():
                         log("Google blocked audio challenges (rate-limited)", "warn")
-                        if self._warp_available() and not self._warp_enabled:
+                        if self._warp_available():
                             log("Connecting WARP to rotate IP...", "warn")
                             connected = await asyncio.get_event_loop().run_in_executor(
-                                None, lambda: self._warp_connect(log)
+                                None, lambda: self._warp_rotate_ip(log)
                             )
                             if connected:
                                 log("WARP connected — closing browser for fresh session", "warn")
