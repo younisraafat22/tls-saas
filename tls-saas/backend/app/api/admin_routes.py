@@ -1614,6 +1614,8 @@ async def stop_checker(admin=Depends(get_current_admin), db: AsyncSession = Depe
 async def checker_status(admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
     import os as _os
     worker_mode = _os.environ.get("WORKER_MODE", "false").lower() == "true"
+    maint_row = (await db.execute(select(SystemSetting).where(SystemSetting.key == "maintenance_mode"))).scalar_one_or_none()
+    maintenance_mode = bool(maint_row and (maint_row.value or "").strip().lower() == "true")
     if worker_mode:
         rows = {r.key: r.value for r in (await db.execute(
             select(SystemSetting).where(SystemSetting.key.in_([
@@ -1629,6 +1631,7 @@ async def checker_status(admin=Depends(get_current_admin), db: AsyncSession = De
         return {
             "running": worker_running,
             "worker_mode": True,
+            "maintenance_mode": maintenance_mode,
             "next_run": rows.get("worker_next_run"),
             "last_run": rows.get("worker_last_run"),
             "interval_minutes": interval,
@@ -1670,6 +1673,7 @@ async def checker_status(admin=Depends(get_current_admin), db: AsyncSession = De
 
     return {
         "running": running,
+        "maintenance_mode": maintenance_mode,
         "next_run": scheduler_service.next_run_time,
         "last_run": scheduler_service.last_run_time,
         "interval_minutes": settings.CHECK_INTERVAL_MINUTES,
@@ -1706,6 +1710,9 @@ async def run_all_checks_now(
     db: AsyncSession = Depends(get_db),
 ):
     """Trigger a full check cycle immediately (all active branches)."""
+    maint_row = (await db.execute(select(SystemSetting).where(SystemSetting.key == "maintenance_mode"))).scalar_one_or_none()
+    if maint_row and (maint_row.value or "").strip().lower() == "true":
+        raise HTTPException(409, "Maintenance mode is enabled. Disable it to run checks.")
     import os as _os
     if _os.environ.get("WORKER_MODE", "false").lower() == "true":
         # Signal the laptop worker to start a new cycle ASAP (picked up within 30s)

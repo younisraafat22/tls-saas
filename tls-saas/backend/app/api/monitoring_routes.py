@@ -962,6 +962,10 @@ async def worker_get_jobs(db: AsyncSession = Depends(get_db)):
     state = state_r.scalar_one_or_none()
     if not state or state.value != "true":
         return {"jobs": [], "paused": True}
+    maint_r = await db.execute(select(SystemSetting).where(SystemSetting.key == "maintenance_mode"))
+    maint = maint_r.scalar_one_or_none()
+    if maint and (maint.value or "").strip().lower() == "true":
+        return {"jobs": [], "paused": True, "maintenance_mode": True}
 
     result = await db.execute(select(Branch).where(Branch.is_active == True))
     branches = result.scalars().all()

@@ -34,6 +34,7 @@ export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingToggles, setSavingToggles] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const [testingEmail, setTestingEmail] = useState(false);
 
@@ -54,7 +55,7 @@ export default function AdminSettingsPage() {
       }
       // Merge defaults
       settingsDef.forEach((s) => {
-        if (!map[s.key]) map[s.key] = s.value;
+        if (!(s.key in map)) map[s.key] = s.value;
       });
       setSettings(map);
     } catch (err) {
@@ -91,6 +92,23 @@ export default function AdminSettingsPage() {
     } finally {
       setSaving(false);
       setTimeout(() => setToast(null), 4000);
+    }
+  };
+
+  const handleToggle = async (key: string) => {
+    const oldValue = settings[key] === "true" ? "true" : "false";
+    const nextValue = oldValue === "true" ? "false" : "true";
+    setSettings((prev) => ({ ...prev, [key]: nextValue }));
+    setSavingToggles((prev) => ({ ...prev, [key]: true }));
+    try {
+      await adminApi.updateSetting(key, nextValue);
+      setToast({ type: "success", msg: "Setting saved!" });
+    } catch (err: any) {
+      setSettings((prev) => ({ ...prev, [key]: oldValue }));
+      setToast({ type: "error", msg: err?.detail || "Failed to save setting" });
+    } finally {
+      setSavingToggles((prev) => ({ ...prev, [key]: false }));
+      setTimeout(() => setToast(null), 3000);
     }
   };
 
@@ -174,15 +192,11 @@ export default function AdminSettingsPage() {
                     <div className="sm:w-64">
                       {setting.type === "toggle" ? (
                         <button
-                          onClick={() =>
-                            setSettings((prev) => ({
-                              ...prev,
-                              [setting.key]: prev[setting.key] === "true" ? "false" : "true",
-                            }))
-                          }
+                          onClick={() => handleToggle(setting.key)}
+                          disabled={!!savingToggles[setting.key]}
                           className={`w-11 h-6 rounded-full transition-colors relative ${
                             settings[setting.key] === "true" ? "bg-primary-500" : "bg-dark-600"
-                          }`}
+                          } ${savingToggles[setting.key] ? "opacity-70 cursor-not-allowed" : ""}`}
                         >
                           <div className={`w-5 h-5 rounded-full bg-white shadow-sm absolute top-0.5 transition-all ${
                             settings[setting.key] === "true" ? "left-[22px]" : "left-0.5"

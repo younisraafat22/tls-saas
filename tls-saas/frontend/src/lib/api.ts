@@ -43,6 +43,7 @@ class ApiClient {
     const config: RequestInit = {
       method,
       headers: requestHeaders,
+      cache: method === "GET" ? "no-store" : "default",
     };
 
     if (body && method !== "GET") {
