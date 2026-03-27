@@ -176,7 +176,8 @@ class VisaCheckerSB:
                     except Exception as _xe:
                         log(f"Xvfb start warning: {_xe}", "warn")
 
-            log("Opening TLS Visa website (SeleniumBase UC mode)...")
+            service_label = "Visa" if service_type == "visa" else "Legalization"
+            log(f"Opening TLS {service_label} website (SeleniumBase UC mode)...")
             driver = Driver(
                 uc=True,
                 headless=False,   # Must be False — headless is detectable by Cloudflare
