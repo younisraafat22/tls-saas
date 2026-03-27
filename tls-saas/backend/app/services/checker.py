@@ -19,6 +19,7 @@ import sys
 import tempfile
 import time
 import urllib.request
+import socket
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Optional
@@ -86,6 +87,7 @@ class TLSChecker:
         self._playwright = None
         self._loop = None  # Dedicated event loop for Playwright thread
         self._warp_enabled = False  # True when WARP is active for this session
+        self._use_tor_proxy = False
 
     # ── Cloudflare WARP helpers ─────────────────────────────────────────
 
@@ -206,6 +208,79 @@ class TLSChecker:
         _log("Failed to rotate to a different IP via WARP", "warn")
         return False
 
+    # ── Tor helpers (free rotation path) ───────────────────────────────
+
+    def _tor_proxy_server(self) -> str:
+        return f"socks5://{settings.TOR_SOCKS_HOST}:{settings.TOR_SOCKS_PORT}"
+
+    def _tor_available(self) -> bool:
+        if not settings.TOR_ENABLED:
+            return False
+        try:
+            with socket.create_connection(
+                (settings.TOR_SOCKS_HOST, int(settings.TOR_SOCKS_PORT)), timeout=2
+            ):
+                pass
+        except Exception:
+            return False
+        # Require control port too, otherwise we cannot force rotation.
+        try:
+            with socket.create_connection(
+                (settings.TOR_SOCKS_HOST, int(settings.TOR_CONTROL_PORT)), timeout=2
+            ):
+                return True
+        except Exception:
+            return False
+
+    def _tor_signal_newnym(self, log=None) -> bool:
+        _log = log or (lambda m, *a: None)
+        try:
+            with socket.create_connection(
+                (settings.TOR_SOCKS_HOST, int(settings.TOR_CONTROL_PORT)), timeout=4
+            ) as s:
+                s.settimeout(4)
+                auth_line = "AUTHENTICATE\r\n"
+                if settings.TOR_CONTROL_PASSWORD:
+                    auth_line = f'AUTHENTICATE "{settings.TOR_CONTROL_PASSWORD}"\r\n'
+                s.sendall(auth_line.encode("utf-8"))
+                auth_resp = s.recv(1024).decode("utf-8", errors="ignore")
+                if not auth_resp.startswith("250"):
+                    _log(f"Tor control auth failed: {auth_resp.strip()}", "warn")
+                    return False
+                s.sendall(b"SIGNAL NEWNYM\r\n")
+                sig_resp = s.recv(1024).decode("utf-8", errors="ignore")
+                s.sendall(b"QUIT\r\n")
+                if sig_resp.startswith("250"):
+                    return True
+                _log(f"Tor NEWNYM failed: {sig_resp.strip()}", "warn")
+                return False
+        except Exception as exc:
+            _log(f"Tor NEWNYM error: {exc}", "warn")
+            return False
+
+    def _tor_rotate_ip(self, log=None) -> bool:
+        _log = log or (lambda m, *a: None)
+        if not self._tor_available():
+            return False
+        _log("Rotating IP via Tor (NEWNYM)...", "warn")
+        ok = self._tor_signal_newnym(log)
+        if ok:
+            # Tor circuits need a brief settle time before re-launching browser.
+            time.sleep(2.0)
+            _log("Tor signaled new identity", "info")
+        return ok
+
+    def _rotate_ip(self, log=None) -> bool:
+        """Try free Tor rotation first; fall back to WARP when Tor is unavailable/fails."""
+        _log = log or (lambda m, *a: None)
+        if self._tor_rotate_ip(log):
+            return True
+        if self._warp_available():
+            _log("Tor unavailable/failed — trying WARP rotation...", "warn")
+            return self._warp_rotate_ip(log)
+        _log("No IP rotator available (Tor/WARP)", "warn")
+        return False
+
     def _get_dedicated_loop(self):
         """Get or create a ProactorEventLoop for Playwright (Windows-safe)."""
         if self._loop is None or self._loop.is_closed():
@@ -222,12 +297,19 @@ class TLSChecker:
 
         from patchright.async_api import async_playwright
         self._playwright = await async_playwright().start()
-        self._browser = await self._playwright.chromium.launch(
-            headless=settings.BROWSER_HEADLESS,
-            args=[
+        launch_kwargs = {
+            "headless": settings.BROWSER_HEADLESS,
+            "args": [
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
             ],
+        }
+        self._use_tor_proxy = self._tor_available()
+        if self._use_tor_proxy:
+            launch_kwargs["proxy"] = {"server": self._tor_proxy_server()}
+            logger.info("Patchright launch using Tor proxy")
+        self._browser = await self._playwright.chromium.launch(
+            **launch_kwargs,
         )
         logger.info("Patchright browser launched")
 
@@ -1010,19 +1092,19 @@ class TLSChecker:
                     )
                     if "automated queries" in body_text or "unusual traffic" in body_text:
                         log("Google detected automation — rate-limited", "warn")
-                        if self._warp_available():
-                            log("Connecting WARP to rotate IP...", "warn")
-                            connected = await asyncio.get_event_loop().run_in_executor(
-                                None, lambda: self._warp_rotate_ip(log)
-                            )
-                            if connected:
-                                log("WARP connected — closing browser for fresh session", "warn")
-                                try:
-                                    await self._browser.close()
-                                except Exception:
-                                    pass
-                                self._browser = None
-                                return False  # signal caller: browser closed, session aborted
+                        log("Rotating IP (Tor/WARP)...", "warn")
+                        connected = await asyncio.get_event_loop().run_in_executor(
+                            None, lambda: self._rotate_ip(log)
+                        )
+                        if connected:
+                            rotator = "Tor" if self._use_tor_proxy else "WARP"
+                            log(f"{rotator} rotation done — closing browser for fresh session", "warn")
+                            try:
+                                await self._browser.close()
+                            except Exception:
+                                pass
+                            self._browser = None
+                            return False  # signal caller: browser closed, session aborted
                         if attempt < MAX_ATTEMPTS:
                             wait_time = 10 * attempt
                             log(f"Waiting {wait_time}s before retry (cooldown)...", "warn")
@@ -1066,19 +1148,19 @@ class TLSChecker:
                     err_el = await bframe.query_selector(".rc-audiochallenge-error-message")
                     if err_el and await err_el.is_visible():
                         log("Google blocked audio challenges (rate-limited)", "warn")
-                        if self._warp_available():
-                            log("Connecting WARP to rotate IP...", "warn")
-                            connected = await asyncio.get_event_loop().run_in_executor(
-                                None, lambda: self._warp_rotate_ip(log)
-                            )
-                            if connected:
-                                log("WARP connected — closing browser for fresh session", "warn")
-                                try:
-                                    await self._browser.close()
-                                except Exception:
-                                    pass
-                                self._browser = None
-                                return False  # signal caller: browser closed, session aborted
+                        log("Rotating IP (Tor/WARP)...", "warn")
+                        connected = await asyncio.get_event_loop().run_in_executor(
+                            None, lambda: self._rotate_ip(log)
+                        )
+                        if connected:
+                            rotator = "Tor" if self._use_tor_proxy else "WARP"
+                            log(f"{rotator} rotation done — closing browser for fresh session", "warn")
+                            try:
+                                await self._browser.close()
+                            except Exception:
+                                pass
+                            self._browser = None
+                            return False  # signal caller: browser closed, session aborted
                         if attempt < MAX_ATTEMPTS:
                             await asyncio.sleep(5)
                             continue

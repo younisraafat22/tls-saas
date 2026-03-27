@@ -72,6 +72,13 @@ class Settings(BaseSettings):
     # Set via environment variable on both sides.
     WORKER_SECRET: str = ""
 
+    # ── Free IP Rotation (Tor, optional) ──────────────────
+    TOR_ENABLED: bool = True
+    TOR_SOCKS_HOST: str = "127.0.0.1"
+    TOR_SOCKS_PORT: int = 9050
+    TOR_CONTROL_PORT: int = 9051
+    TOR_CONTROL_PASSWORD: str = ""
+
     # ── Desktop App Release ──────────────────────────────
     DESKTOP_APP_VERSION: str = "1.0.0"
     DESKTOP_DOWNLOAD_URL: str = "https://github.com/younisraafat22/tls-saas/releases/download/v1.0.0/TLS_Appointment_Checker_v1.0.0_Setup.exe"
