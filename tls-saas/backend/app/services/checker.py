@@ -1,10 +1,10 @@
-"""
-TLS Checker Service — Playwright-based branch availability checker.
+﻿"""
+TLS Checker Service â€” Playwright-based branch availability checker.
 Ported from the battle-tested desktop Selenium checker for server-side shared checking.
 
-Flow per branch: Navigate → Cloudflare → Cookie → Login → Group Select → Continue → Month-by-Month Slot Check
+Flow per branch: Navigate â†’ Cloudflare â†’ Cookie â†’ Login â†’ Group Select â†’ Continue â†’ Month-by-Month Slot Check
 
-One browser instance per branch — checks once, notifies all subscribers.
+One browser instance per branch â€” checks once, notifies all subscribers.
 """
 
 import asyncio
@@ -40,7 +40,7 @@ except ImportError:
 from cryptography.fernet import Fernet
 from app.config import settings
 
-# Lazy import — visa_checker_sb pulls in selenium which isn't available in WORKER_MODE (Fly.io)
+# Lazy import â€” visa_checker_sb pulls in selenium which isn't available in WORKER_MODE (Fly.io)
 visa_checker_sb = None
 
 logger = logging.getLogger("checker")
@@ -48,10 +48,10 @@ logger = logging.getLogger("checker")
 # Thread pool for running Playwright in its own ProactorEventLoop on Windows
 _pw_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="playwright")
 
-# Separate thread pool for SeleniumBase (visa branches — sync, UC mode)
+# Separate thread pool for SeleniumBase (visa branches â€” sync, UC mode)
 _sb_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="sb_visa")
 
-# ── Credential Encryption ────────────────────────────────────────────
+# â”€â”€ Credential Encryption â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _derive_key(secret: str) -> bytes:
     """Derive a Fernet key from the config secret."""
@@ -70,7 +70,7 @@ def decrypt_credential(encrypted: str) -> str:
     return _fernet.decrypt(encrypted.encode()).decode()
 
 
-# ── TLS Checker ──────────────────────────────────────────────────────
+# â”€â”€ TLS Checker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class TLSChecker:
     """
@@ -78,7 +78,7 @@ class TLSChecker:
     Designed to be called per-branch by the scheduler.
     """
 
-    # Path to warp-cli — works on both Windows (worker laptop) and Linux (Fly.io)
+    # Path to warp-cli â€” works on both Windows (worker laptop) and Linux (Fly.io)
     WARP_CLI_WINDOWS = r"C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe"
     WARP_CLI_LINUX = "/usr/bin/warp-cli"
 
@@ -88,8 +88,9 @@ class TLSChecker:
         self._loop = None  # Dedicated event loop for Playwright thread
         self._warp_enabled = False  # True when WARP is active for this session
         self._use_tor_proxy = False
+        self._allow_tor_rotation = True
 
-    # ── Cloudflare WARP helpers ─────────────────────────────────────────
+    # â”€â”€ Cloudflare WARP helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _warp_cli_path(self) -> str:
         """Return the platform-appropriate warp-cli path."""
@@ -149,7 +150,7 @@ class TLSChecker:
                 status = r.stdout
                 if "Connected" in status and "Connecting" not in status:
                     self._warp_enabled = True
-                    _log("✅ WARP connected — IP rotated")
+                    _log("âœ… WARP connected â€” IP rotated")
                     return True
             except Exception:
                 pass
@@ -208,7 +209,7 @@ class TLSChecker:
         _log("Failed to rotate to a different IP via WARP", "warn")
         return False
 
-    # ── Tor helpers (free rotation path) ───────────────────────────────
+    # â”€â”€ Tor helpers (free rotation path) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _tor_proxy_server(self) -> str:
         return f"socks5://{settings.TOR_SOCKS_HOST}:{settings.TOR_SOCKS_PORT}"
@@ -271,12 +272,13 @@ class TLSChecker:
         return ok
 
     def _rotate_ip(self, log=None) -> bool:
-        """Try free Tor rotation first; fall back to WARP when Tor is unavailable/fails."""
+        """Rotate IP with transport-aware strategy."""
         _log = log or (lambda m, *a: None)
-        if self._tor_rotate_ip(log):
-            return True
+        if self._use_tor_proxy and self._allow_tor_rotation:
+            if self._tor_rotate_ip(log):
+                return True
         if self._warp_available():
-            _log("Tor unavailable/failed — trying WARP rotation...", "warn")
+            _log("Tor unavailable/failed ï¿½ trying WARP rotation...", "warn")
             return self._warp_rotate_ip(log)
         _log("No IP rotator available (Tor/WARP)", "warn")
         return False
@@ -290,7 +292,7 @@ class TLSChecker:
                 self._loop = asyncio.new_event_loop()
         return self._loop
 
-    async def _ensure_browser(self):
+    async def _ensure_browser(self, force_no_tor: bool = False):
         """Lazy-init Patchright browser (binary-level stealth, bypasses Cloudflare/Turnstile)."""
         if self._browser and self._browser.is_connected():
             return
@@ -304,7 +306,7 @@ class TLSChecker:
                 "--disable-dev-shm-usage",
             ],
         }
-        self._use_tor_proxy = self._tor_available()
+        self._use_tor_proxy = (not force_no_tor) and self._tor_available()
         if self._use_tor_proxy:
             launch_kwargs["proxy"] = {"server": self._tor_proxy_server()}
             logger.info("Patchright launch using Tor proxy")
@@ -323,7 +325,7 @@ class TLSChecker:
             self._playwright = None
         self._warp_disconnect()
 
-    # ── Public entry point ───────────────────────────────────────────
+    # â”€â”€ Public entry point â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def check_branch(
         self,
@@ -335,8 +337,8 @@ class TLSChecker:
     ) -> dict:
         """
         Check a branch for appointment availability.
-        - Visa branches → SeleniumBase UC (bypasses Cloudflare on visas-de.tlscontact.com)
-        - Legalization branches → Patchright async
+        - Visa branches â†’ SeleniumBase UC (bypasses Cloudflare on visas-de.tlscontact.com)
+        - Legalization branches â†’ Patchright async
         """
         try:
             # Visa: use SeleniumBase UC (synchronous) in a thread pool on all platforms
@@ -383,7 +385,7 @@ class TLSChecker:
             self._check_branch_async(branch_url, tls_email, tls_password, branch_name, service_type)
         )
 
-    # ── Core async check ─────────────────────────────────────────────
+    # â”€â”€ Core async check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def _check_branch_async(
         self,
@@ -393,6 +395,8 @@ class TLSChecker:
         branch_name: str = "",
         service_type: str = "legalization",
         ip_rotation_retries_left: int = 3,
+        tor_fallback_retries_left: int = 1,
+        force_no_tor: bool = False,
     ) -> dict:
         """
         Full TLS check flow matching the desktop app:
@@ -425,7 +429,8 @@ class TLSChecker:
         page = None
         context = None
         try:
-            await self._ensure_browser()
+            self._allow_tor_rotation = not force_no_tor
+            await self._ensure_browser(force_no_tor=force_no_tor)
             context = await self._browser.new_context(
                 viewport={"width": 1920, "height": 1080},
                 user_agent=(
@@ -437,13 +442,45 @@ class TLSChecker:
             page = await context.new_page()
             page.set_default_timeout(settings.PLAYWRIGHT_TIMEOUT)
 
-            # ── Step 1: Navigate ──────────────────────────────────
+            # â”€â”€ Step 1: Navigate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             label = "Visa" if service_type == "visa" else "Legalization"
             log(f"Opening TLS {label} website...")
-            await page.goto(branch_url, wait_until="networkidle", timeout=60000)
+            try:
+                await page.goto(branch_url, wait_until="networkidle", timeout=60000)
+            except Exception as nav_exc:
+                nav_msg = str(nav_exc)
+                if (
+                    self._use_tor_proxy
+                    and "ERR_TIMED_OUT" in nav_msg
+                    and tor_fallback_retries_left > 0
+                    and not force_no_tor
+                ):
+                    log("Tor route timed out reaching TLS â€” retrying immediately without Tor", "warn")
+                    try:
+                        await context.close()
+                    except Exception:
+                        pass
+                    try:
+                        await self._browser.close()
+                    except Exception:
+                        pass
+                    self._browser = None
+                    retry_res = await self._check_branch_async(
+                        branch_url=branch_url,
+                        tls_email=tls_email,
+                        tls_password=tls_password,
+                        branch_name=branch_name,
+                        service_type=service_type,
+                        ip_rotation_retries_left=ip_rotation_retries_left,
+                        tor_fallback_retries_left=tor_fallback_retries_left - 1,
+                        force_no_tor=True,
+                    )
+                    retry_res["logs"] = result["logs"] + retry_res.get("logs", [])
+                    return retry_res
+                raise
             await asyncio.sleep(2)
 
-            # ── Step 2: Cloudflare / Turnstile ────────────────────
+            # â”€â”€ Step 2: Cloudflare / Turnstile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             cf_passed = await self._handle_cloudflare(page, branch_name, log)
             if not cf_passed:
                 result["error"] = "Cloudflare challenge did not pass"
@@ -452,10 +489,10 @@ class TLSChecker:
                 result["duration"] = round(time.time() - start, 2)
                 return result
 
-            # ── Step 3: Cookie consent ────────────────────────────
+            # â”€â”€ Step 3: Cookie consent â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             await self._handle_cookie_consent(page, log)
 
-            # ── Step 4: Check for maintenance ─────────────────────
+            # â”€â”€ Step 4: Check for maintenance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             content = await page.content()
             if "maintenance" in content.lower():
                 try:
@@ -469,7 +506,7 @@ class TLSChecker:
                 except Exception:
                     pass
 
-            # ── Step 5: Handle Application Error ──────────────────
+            # â”€â”€ Step 5: Handle Application Error â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             app_ok = await self._handle_application_error(page, log)
             if not app_ok:
                 result["error"] = "TLS Application error persists"
@@ -477,7 +514,7 @@ class TLSChecker:
                 result["duration"] = round(time.time() - start, 2)
                 return result
 
-            # ── Step 6: Click Login button ────────────────────────
+            # â”€â”€ Step 6: Click Login button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             login_clicked = await self._click_login_button(page, log)
             if not login_clicked:
                 result["error"] = "Login button not found on TLS website"
@@ -493,7 +530,7 @@ class TLSChecker:
             await asyncio.sleep(3)
             await self._handle_cookie_consent(page, log)
 
-            # ── Step 7: Fill credentials ──────────────────────────
+            # â”€â”€ Step 7: Fill credentials â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             log("Logging in...")
             cred_ok = await self._fill_credentials(page, tls_email, tls_password, log)
             if not cred_ok:
@@ -503,8 +540,8 @@ class TLSChecker:
                 result["duration"] = round(time.time() - start, 2)
                 return result
 
-            # ── Step 8: Handle reCAPTCHA (if present) ─────────────
-            # Returns False if browser was closed for WARP IP rotate — must abort session
+            # â”€â”€ Step 8: Handle reCAPTCHA (if present) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            # Returns False if browser was closed for WARP IP rotate â€” must abort session
             captcha_ok = await self._check_recaptcha(page, log)
             if captcha_ok is False:
                 # When IP rotation succeeds, retry immediately in the same cycle
@@ -517,7 +554,7 @@ class TLSChecker:
                 if ip_rotation_retries_left > 0:
                     used = 3 - ip_rotation_retries_left + 1
                     log(
-                        f"Session reset after IP rotation — retrying immediately now "
+                        f"Session reset after IP rotation â€” retrying immediately now "
                         f"({used}/3)",
                         "warn",
                     )
@@ -530,6 +567,8 @@ class TLSChecker:
                         branch_name=branch_name,
                         service_type=service_type,
                         ip_rotation_retries_left=ip_rotation_retries_left - 1,
+                        tor_fallback_retries_left=tor_fallback_retries_left,
+                        force_no_tor=force_no_tor,
                     )
                     retry_res["logs"] = result["logs"] + retry_res.get("logs", [])
                     return retry_res
@@ -538,7 +577,7 @@ class TLSChecker:
                 result["duration"] = round(time.time() - start, 2)
                 return result
 
-            # ── Step 9: Click submit login ────────────────────────
+            # â”€â”€ Step 9: Click submit login â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             submit_ok = await self._submit_login(page, log)
             if not submit_ok:
                 result["error"] = "Login submit button not found"
@@ -548,15 +587,15 @@ class TLSChecker:
 
             await asyncio.sleep(3)
 
-            # ── Step 10: Verify login succeeded ───────────────────
+            # â”€â”€ Step 10: Verify login succeeded â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             login_ok, login_reason = await self._verify_login(page, log)
             if not login_ok:
                 if login_reason == "captcha_blocked":
-                    result["error"] = "Login failed — CAPTCHA blocked or unsolved"
+                    result["error"] = "Login failed â€” CAPTCHA blocked or unsolved"
                 elif login_reason == "invalid_credentials":
-                    result["error"] = "Login failed — invalid TLS credentials"
+                    result["error"] = "Login failed â€” invalid TLS credentials"
                 else:
-                    result["error"] = "Login failed — invalid credentials or CAPTCHA"
+                    result["error"] = "Login failed â€” invalid credentials or CAPTCHA"
                 try:
                     result["screenshot"] = await page.screenshot(type="png")
                 except Exception:
@@ -567,10 +606,10 @@ class TLSChecker:
 
             log("Login successful")
 
-            # ── Step 11: Handle Application Error (post-login) ────
+            # â”€â”€ Step 11: Handle Application Error (post-login) â”€â”€â”€â”€
             await self._handle_application_error(page, log)
 
-            # ── Step 12: Navigate to booking ──────────────────────
+            # â”€â”€ Step 12: Navigate to booking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             nav_ok = await self._navigate_to_booking(page, service_type, log, branch_url=branch_url)
             if not nav_ok:
                 # Check logs for specific "no application" error
@@ -587,7 +626,7 @@ class TLSChecker:
                 result["duration"] = round(time.time() - start, 2)
                 return result
 
-            # ── Step 13: Check slots across all months ────────────
+            # â”€â”€ Step 13: Check slots across all months â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             slots_available, slot_details, slot_msg = await self._check_slots(
                 page, service_type, branch_name, log
             )
@@ -632,7 +671,7 @@ class TLSChecker:
         result["duration"] = round(time.time() - start, 2)
         return result
 
-    # ── Cloudflare / Turnstile ────────────────────────────────────────
+    # â”€â”€ Cloudflare / Turnstile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def _handle_cloudflare(self, page, branch_name: str, log) -> bool:
         """Detect Cloudflare challenge and wait for it to pass."""
@@ -656,7 +695,7 @@ class TLSChecker:
 
         return False
 
-    # ── Cookie Consent ────────────────────────────────────────────────
+    # â”€â”€ Cookie Consent â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def _handle_cookie_consent(self, page, log):
         """Dismiss Osano / generic cookie consent banners."""
@@ -689,7 +728,7 @@ class TLSChecker:
         except Exception:
             pass
 
-    # ── Application Error Recovery ────────────────────────────────────
+    # â”€â”€ Application Error Recovery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def _handle_application_error(self, page, log, max_retries: int = 3) -> bool:
         """Detect TLS 'Application error: a client-side exception' and recover."""
@@ -697,12 +736,12 @@ class TLSChecker:
             content = (await page.content()).lower()
             if "application error" not in content and "client-side exception" not in content:
                 return True
-            log(f"Application error detected — reloading (attempt {attempt + 1})...", "warn")
+            log(f"Application error detected â€” reloading (attempt {attempt + 1})...", "warn")
             await page.reload(wait_until="networkidle", timeout=30000)
             await asyncio.sleep(2)
         return False
 
-    # ── Login Flow ────────────────────────────────────────────────────
+    # â”€â”€ Login Flow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def _click_login_button(self, page, log) -> bool:
         """Find and click the LOGIN button on the TLS home page."""
@@ -741,13 +780,13 @@ class TLSChecker:
         except Exception:
             pass
 
-        # SVG icon fallback — click the person icon, then find Login in the dropdown
+        # SVG icon fallback â€” click the person icon, then find Login in the dropdown
         try:
             icon = await page.query_selector("svg[aria-label='User icon']")
             if icon:
                 parent = await icon.evaluate_handle("el => el.parentElement")
                 await parent.as_element().click()
-                log("Clicked SVG user icon — waiting for dropdown...")
+                log("Clicked SVG user icon â€” waiting for dropdown...")
                 await asyncio.sleep(1.5)
                 # Find the Login link inside the opened dropdown
                 for xpath_text in ["LOGIN", "Login", "Log in"]:
@@ -761,7 +800,7 @@ class TLSChecker:
                             return True
                     except Exception:
                         continue
-                # Dropdown may have navigated directly — treat as success
+                # Dropdown may have navigated directly â€” treat as success
                 log("Clicked login icon button (direct navigation)")
                 return True
         except Exception:
@@ -841,7 +880,7 @@ class TLSChecker:
         log("Credentials entered")
         return True
 
-    # ── reCAPTCHA helpers ──────────────────────────────────────────────────
+    # â”€â”€ reCAPTCHA helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def _is_captcha_solved(self, page) -> bool:
         """Check if the g-recaptcha-response textarea already has a token."""
@@ -878,11 +917,11 @@ class TLSChecker:
         return cleaned
 
     def _enhance_audio(self, mp3_path: str, log) -> str:
-        """Convert MP3 → mono 16 kHz WAV with loudnorm via imageio_ffmpeg."""
+        """Convert MP3 â†’ mono 16 kHz WAV with loudnorm via imageio_ffmpeg."""
         wav_path = os.path.splitext(mp3_path)[0] + ".wav"
         try:
             if not FFMPEG_AVAILABLE:
-                log("imageio_ffmpeg not available — install: pip install imageio-ffmpeg", "warn")
+                log("imageio_ffmpeg not available â€” install: pip install imageio-ffmpeg", "warn")
                 return ""
             ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
             flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
@@ -904,7 +943,7 @@ class TLSChecker:
     def _transcribe_with_google(self, wav_path: str, log) -> Optional[str]:
         """Transcribe a WAV file using Google Web Speech API (online, free)."""
         if not SR_AVAILABLE:
-            log("speech_recognition not available — install: pip install SpeechRecognition", "warn")
+            log("speech_recognition not available â€” install: pip install SpeechRecognition", "warn")
             return None
         if not os.path.exists(wav_path):
             log(f"WAV file not found: {wav_path}", "warn")
@@ -932,7 +971,7 @@ class TLSChecker:
         try:
             audio_bytes = None
 
-            # ── Strategy 1: fetch inside the bframe (same-origin with recaptcha.net) ──
+            # â”€â”€ Strategy 1: fetch inside the bframe (same-origin with recaptcha.net) â”€â”€
             bframe = next((f for f in page.frames if "recaptcha" in f.url and "bframe" in f.url), None)
             if bframe:
                 try:
@@ -955,7 +994,7 @@ class TLSChecker:
                 except Exception as e:
                     log(f"bframe fetch failed: {e}", "warn")
 
-            # ── Strategy 2: fetch from page default context ──
+            # â”€â”€ Strategy 2: fetch from page default context â”€â”€
             if not audio_bytes:
                 try:
                     b64 = await page.evaluate("""
@@ -977,7 +1016,7 @@ class TLSChecker:
                 except Exception as e:
                     log(f"Page fetch fallback failed: {e}", "warn")
 
-            # ── Strategy 3: requests with page cookies (last resort) ──
+            # â”€â”€ Strategy 3: requests with page cookies (last resort) â”€â”€
             if not audio_bytes:
                 try:
                     import requests as _req
@@ -1018,19 +1057,19 @@ class TLSChecker:
                     except Exception:
                         pass
 
-    # ── Full reCAPTCHA v2 audio solver ─────────────────────────────────────
+    # â”€â”€ Full reCAPTCHA v2 audio solver â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def _check_recaptcha(self, page, log):
         """
-        Full reCAPTCHA v2 audio solver — ported from original desktop Selenium app.
-        Flow: detect → click checkbox → (auto-solved?) → audio challenge → download →
-              ffmpeg convert → Google Speech API → type answer → verify (up to 3 retries).
+        Full reCAPTCHA v2 audio solver â€” ported from original desktop Selenium app.
+        Flow: detect â†’ click checkbox â†’ (auto-solved?) â†’ audio challenge â†’ download â†’
+              ffmpeg convert â†’ Google Speech API â†’ type answer â†’ verify (up to 3 retries).
         """
         MAX_ATTEMPTS = 3
 
         for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
-                # ── 1. Is there even a CAPTCHA? ──────────────────────────
+                # â”€â”€ 1. Is there even a CAPTCHA? â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 recaptcha = await page.query_selector(
                     "iframe[src*='recaptcha'], iframe[title='reCAPTCHA'], "
                     ".g-recaptcha, #it-recaptcha-here"
@@ -1043,9 +1082,9 @@ class TLSChecker:
                     log("reCAPTCHA already solved (token present)")
                     return
 
-                log(f"reCAPTCHA detected — solving (attempt {attempt}/{MAX_ATTEMPTS})...", "warn")
+                log(f"reCAPTCHA detected â€” solving (attempt {attempt}/{MAX_ATTEMPTS})...", "warn")
 
-                # ── 2. Click the checkbox in the anchor iframe ────────────
+                # â”€â”€ 2. Click the checkbox in the anchor iframe â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 anchor_frame = next(
                     (f for f in page.frames if "recaptcha" in f.url and "anchor" in f.url), None
                 )
@@ -1069,11 +1108,11 @@ class TLSChecker:
                     except Exception:
                         pass
                 else:
-                    log("Anchor iframe not found — trying challenge directly", "warn")
+                    log("Anchor iframe not found â€” trying challenge directly", "warn")
 
                 await asyncio.sleep(random.uniform(1, 2))
 
-                # ── 3. Find the bframe (challenge iframe) ────────────────
+                # â”€â”€ 3. Find the bframe (challenge iframe) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 bframe = next(
                     (f for f in page.frames if "recaptcha" in f.url and "bframe" in f.url), None
                 )
@@ -1082,23 +1121,23 @@ class TLSChecker:
                     if attempt < MAX_ATTEMPTS:
                         await asyncio.sleep(3)
                         continue
-                    log("reCAPTCHA could not be solved — proceeding anyway", "warn")
+                    log("reCAPTCHA could not be solved â€” proceeding anyway", "warn")
                     return
 
-                # ── 4. Check for "automated queries" block ───────────────
+                # â”€â”€ 4. Check for "automated queries" block â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 try:
                     body_text = await bframe.evaluate(
                         "() => document.body ? document.body.innerText.toLowerCase() : ''"
                     )
                     if "automated queries" in body_text or "unusual traffic" in body_text:
-                        log("Google detected automation — rate-limited", "warn")
+                        log("Google detected automation â€” rate-limited", "warn")
                         log("Rotating IP (Tor/WARP)...", "warn")
                         connected = await asyncio.get_event_loop().run_in_executor(
                             None, lambda: self._rotate_ip(log)
                         )
                         if connected:
                             rotator = "Tor" if self._use_tor_proxy else "WARP"
-                            log(f"{rotator} rotation done — closing browser for fresh session", "warn")
+                            log(f"{rotator} rotation done â€” closing browser for fresh session", "warn")
                             try:
                                 await self._browser.close()
                             except Exception:
@@ -1110,12 +1149,12 @@ class TLSChecker:
                             log(f"Waiting {wait_time}s before retry (cooldown)...", "warn")
                             await asyncio.sleep(wait_time)
                             continue
-                        log("reCAPTCHA rate-limited — proceeding anyway", "warn")
+                        log("reCAPTCHA rate-limited â€” proceeding anyway", "warn")
                         return
                 except Exception:
                     pass
 
-                # ── 5. Click the audio challenge button ──────────────────
+                # â”€â”€ 5. Click the audio challenge button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 try:
                     audio_btn = await bframe.wait_for_selector(
                         "#recaptcha-audio-button, button.rc-button-audio",
@@ -1128,7 +1167,7 @@ class TLSChecker:
                 except Exception as e:
                     log(f"Audio button not found or not clickable: {e}", "warn")
 
-                # ── 6. Re-find bframe after audio click (DOM may reload) ──
+                # â”€â”€ 6. Re-find bframe after audio click (DOM may reload) â”€â”€
                 await asyncio.sleep(random.uniform(1, 2))
                 bframe = next(
                     (f for f in page.frames if "recaptcha" in f.url and "bframe" in f.url), None
@@ -1138,7 +1177,7 @@ class TLSChecker:
                     if attempt < MAX_ATTEMPTS:
                         await asyncio.sleep(3)
                         continue
-                    log("reCAPTCHA could not be solved — proceeding anyway", "warn")
+                    log("reCAPTCHA could not be solved â€” proceeding anyway", "warn")
                     return
 
                 await asyncio.sleep(random.uniform(1, 2))
@@ -1154,7 +1193,7 @@ class TLSChecker:
                         )
                         if connected:
                             rotator = "Tor" if self._use_tor_proxy else "WARP"
-                            log(f"{rotator} rotation done — closing browser for fresh session", "warn")
+                            log(f"{rotator} rotation done â€” closing browser for fresh session", "warn")
                             try:
                                 await self._browser.close()
                             except Exception:
@@ -1164,12 +1203,12 @@ class TLSChecker:
                         if attempt < MAX_ATTEMPTS:
                             await asyncio.sleep(5)
                             continue
-                        log("reCAPTCHA blocked — proceeding anyway", "warn")
+                        log("reCAPTCHA blocked â€” proceeding anyway", "warn")
                         return
                 except Exception:
                     pass
 
-                # ── 7. Get the audio URL (poll up to 15 s) ───────────────
+                # â”€â”€ 7. Get the audio URL (poll up to 15 s) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 audio_url = None
                 for _poll in range(30):
                     # Strategy A: <audio id="audio-source" src="...">
@@ -1209,28 +1248,28 @@ class TLSChecker:
                     if attempt < MAX_ATTEMPTS:
                         await asyncio.sleep(3)
                         continue
-                    log("reCAPTCHA could not be solved — proceeding anyway", "warn")
+                    log("reCAPTCHA could not be solved â€” proceeding anyway", "warn")
                     return
 
                 log("Audio challenge URL found, downloading...")
 
-                # ── 8. Download, convert, transcribe ────────────────────
+                # â”€â”€ 8. Download, convert, transcribe â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 transcript = await self._transcribe_audio(page, audio_url, log)
                 if not transcript:
                     if attempt < MAX_ATTEMPTS:
-                        log("Transcription failed — retrying in 3s...", "warn")
+                        log("Transcription failed â€” retrying in 3s...", "warn")
                         await asyncio.sleep(3)
                         continue
-                    log("Transcription failed after all attempts — proceeding anyway", "warn")
+                    log("Transcription failed after all attempts â€” proceeding anyway", "warn")
                     return
 
-                # ── 9. Type the answer ───────────────────────────────────
+                # â”€â”€ 9. Type the answer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 # Re-fetch bframe in case it reloaded during transcription
                 bframe = next(
                     (f for f in page.frames if "recaptcha" in f.url and "bframe" in f.url), None
                 )
                 if not bframe:
-                    log("bframe gone after transcription — proceeding anyway", "warn")
+                    log("bframe gone after transcription â€” proceeding anyway", "warn")
                     return
 
                 try:
@@ -1248,7 +1287,7 @@ class TLSChecker:
                         continue
                     return
 
-                # ── 10. Click verify ─────────────────────────────────────
+                # â”€â”€ 10. Click verify â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 try:
                     verify_btn = await bframe.query_selector("#recaptcha-verify-button")
                     if verify_btn:
@@ -1261,18 +1300,18 @@ class TLSChecker:
                         continue
                     return
 
-                # ── 11. Confirm token ────────────────────────────────────
+                # â”€â”€ 11. Confirm token â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 if await self._wait_for_captcha_token(page, 10):
                     log("reCAPTCHA solved via audio!")
                     return
 
-                # Token not set — probably got a new challenge, retry
+                # Token not set â€” probably got a new challenge, retry
                 if attempt < MAX_ATTEMPTS:
-                    log("Answer not accepted — retrying in 3s...", "warn")
+                    log("Answer not accepted â€” retrying in 3s...", "warn")
                     await asyncio.sleep(3)
                     continue
 
-                log("Could not solve reCAPTCHA after multiple attempts — proceeding anyway", "warn")
+                log("Could not solve reCAPTCHA after multiple attempts â€” proceeding anyway", "warn")
                 return
 
             except Exception as e:
@@ -1285,7 +1324,7 @@ class TLSChecker:
     async def _submit_login(self, page, log) -> bool:
         """Click the login submit button."""
         submit_selectors = ["#btn-login", "#kc-login", "button[type='submit']", "input[type='submit']"]
-        # Wait for submit button to appear — generous timeout in case reCAPTCHA delayed things
+        # Wait for submit button to appear â€” generous timeout in case reCAPTCHA delayed things
         try:
             await page.wait_for_selector(
                 ", ".join(submit_selectors), timeout=30000
@@ -1371,16 +1410,16 @@ class TLSChecker:
                             recaptcha_present = False
                         captcha_solved = await self._is_captcha_solved(page)
                         if recaptcha_present and not captcha_solved:
-                            log("Still on login page — CAPTCHA likely blocked/unsolved", "error")
+                            log("Still on login page â€” CAPTCHA likely blocked/unsolved", "error")
                             return False, "captcha_blocked"
-                        log("Still on login page — credentials may be wrong", "error")
+                        log("Still on login page â€” credentials may be wrong", "error")
                         return False, "likely_credentials"
                 except Exception:
                     pass
 
         return True, "ok"
 
-    # ── Navigation to Booking Page ────────────────────────────────────
+    # â”€â”€ Navigation to Booking Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def _find_element_by_text(self, page, target_texts: list[str]) -> Optional[object]:
         """
@@ -1415,7 +1454,7 @@ class TLSChecker:
             return None
 
     async def _navigate_to_booking(self, page, service_type: str, log, branch_url: str = "") -> bool:
-        """Navigate to the appointment calendar page: Group Select → Continue."""
+        """Navigate to the appointment calendar page: Group Select â†’ Continue."""
         try:
             await self._handle_application_error(page, log)
             await self._handle_cookie_consent(page, log)
@@ -1427,21 +1466,21 @@ class TLSChecker:
                 pass
             await asyncio.sleep(2)
 
-            # ── Check for "No application created" ───────────────────
-            # Only bail if the VERY-SPECIFIC TLS phrase is VISIBLE as rendered text —
+            # â”€â”€ Check for "No application created" â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            # Only bail if the VERY-SPECIFIC TLS phrase is VISIBLE as rendered text â€”
             # NOT just anywhere in the raw HTML (avoids false positives from loading states).
             try:
                 no_app_phrase = "click on the button to create a new application"
                 rendered_text = await page.evaluate("() => document.body ? document.body.innerText.toLowerCase() : ''")
                 if no_app_phrase in rendered_text:
-                    log("No application found on TLS website — user must create one first", "error")
+                    log("No application found on TLS website â€” user must create one first", "error")
                     return False
             except Exception:
                 pass
 
-            # ── Extract location keywords from branch URL for multi-app selection ──
-            # e.g. egCAI2de → keywords for Cairo/El-Sheikh Zayed
-            #      egHRG2de → keywords for Hurghada
+            # â”€â”€ Extract location keywords from branch URL for multi-app selection â”€â”€
+            # e.g. egCAI2de â†’ keywords for Cairo/El-Sheikh Zayed
+            #      egHRG2de â†’ keywords for Hurghada
             location_keywords: list[str] = []
             location_label = ""
             if branch_url:
@@ -1458,7 +1497,7 @@ class TLSChecker:
                         location_keywords = ["hrg", "hurghada", "eghrg"]
                         location_label = "Hurghada"
 
-            # ── Step 0: Multi-application card detection ──────────────────
+            # â”€â”€ Step 0: Multi-application card detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             # When 2+ applications exist under the same TLS account (e.g. El-Sheikh Zayed
             # + Hurghada legalization), TLS shows one card per application each with its
             # own Select button.  Pick the card whose text matches the target branch.
@@ -1466,7 +1505,7 @@ class TLSChecker:
             try:
                 all_app_btns = await page.query_selector_all("button[name='formGroupId']")
                 if len(all_app_btns) > 1 and location_keywords:
-                    log(f"Multiple application cards found — looking for {location_label}...")
+                    log(f"Multiple application cards found â€” looking for {location_label}...")
                     for _btn in all_app_btns:
                         try:
                             card_text = await page.evaluate(
@@ -1499,7 +1538,7 @@ class TLSChecker:
             except Exception:
                 pass
 
-            # ── Step 1: Find & click the "Select" group element ───────
+            # â”€â”€ Step 1: Find & click the "Select" group element â”€â”€â”€â”€â”€â”€â”€
             log("Looking for Select button...")
             if not select_el:
                 select_el = None  # will be resolved by CSS fallbacks below
@@ -1521,11 +1560,11 @@ class TLSChecker:
 
             # Try 2: find ANY visible element whose text/label/value is exactly "select"
             if not select_el:
-                select_el = await self._find_element_by_text(page, ["select", "sélectionner", "seleccionar", "enter"])
+                select_el = await self._find_element_by_text(page, ["select", "sÃ©lectionner", "seleccionar", "enter"])
                 if select_el:
                     log("Select button found via text scan")
 
-            # Try 3: Playwright locator — first visible "Select" text match
+            # Try 3: Playwright locator â€” first visible "Select" text match
             if not select_el:
                 try:
                     loc = page.get_by_text("Select", exact=True)
@@ -1572,7 +1611,7 @@ class TLSChecker:
                     log("Select / Enter button not found on page", "error")
                 return False
 
-            # Click it — try normal click first, JS click as fallback
+            # Click it â€” try normal click first, JS click as fallback
             try:
                 await select_el.scroll_into_view_if_needed()
                 await asyncio.sleep(random.uniform(0.4, 0.8))
@@ -1590,9 +1629,9 @@ class TLSChecker:
             # Handle application error after select
             await self._handle_application_error(page, log)
 
-            # ── Step 2: Click "Continue" / "Book Appointment" ─────────
+            # â”€â”€ Step 2: Click "Continue" / "Book Appointment" â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if service_type == "visa":
-                log("Group selected — loading appointments...")
+                log("Group selected â€” loading appointments...")
                 await asyncio.sleep(5)
             else:
                 log("Looking for Continue button...")
@@ -1654,7 +1693,7 @@ class TLSChecker:
             # Handle application error after continue
             await self._handle_application_error(page, log)
 
-            # ── Verify calendar / appointment page loaded ─────────────
+            # â”€â”€ Verify calendar / appointment page loaded â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             calendar_selectors = [
                 "[data-testid*='month']",
                 ".MonthSelector_month-selector_button__An0eF",
@@ -1693,7 +1732,7 @@ class TLSChecker:
             log(f"Navigation failed: {e}", "error")
             return False
 
-    # ── Slot Checking ─────────────────────────────────────────────────
+    # â”€â”€ Slot Checking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def _check_slots(self, page, service_type: str, branch_name: str, log) -> tuple[bool, dict | None, str]:
         """
@@ -1715,7 +1754,7 @@ class TLSChecker:
 
             await self._handle_application_error(page, log)
 
-            # ── Check for immediate "no slots" popup ──────────────
+            # â”€â”€ Check for immediate "no slots" popup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             try:
                 popup = await page.wait_for_selector(".tls-popup", timeout=3000)
                 if popup:
@@ -1723,9 +1762,9 @@ class TLSChecker:
                     if any(p in popup_text for p in [
                         "no appointment", "no slot", "not available", "unavailable"
                     ]):
-                        log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                        log("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
                         log("NO APPOINTMENTS AVAILABLE (popup)")
-                        log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                        log("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
                         # Close popup
                         try:
                             close_btns = await page.query_selector_all(
@@ -1742,9 +1781,9 @@ class TLSChecker:
                             pass
                         return False, None, "No appointments (popup)"
             except Exception:
-                pass  # No popup — continue
+                pass  # No popup â€” continue
 
-            # ── Discover months ───────────────────────────────────
+            # â”€â”€ Discover months â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             checked_months = set()
             months_to_check = []
 
@@ -1762,9 +1801,9 @@ class TLSChecker:
                     "currently available", "check this page",
                 ]
                 if any(p in content for p in no_slot_phrases):
-                    log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    log("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
                     log("NO APPOINTMENTS AVAILABLE (current month)")
-                    log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    log("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
                     initial_months = await self._get_available_months(page)
 
             # Visa fallback: generate month URLs from current URL
@@ -1796,7 +1835,7 @@ class TLSChecker:
             months_to_check.extend(initial_months)
             log(f"Starting with {len(months_to_check)} visible month(s)")
 
-            # ── Process each month ────────────────────────────────
+            # â”€â”€ Process each month â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             while months_to_check:
                 month_name, month_link = months_to_check.pop(0)
                 if month_name in checked_months:
@@ -1914,7 +1953,7 @@ class TLSChecker:
                             months_to_check.append((nm, nl))
                     continue
 
-                # ── SLOTS FOUND! ──────────────────────────────────
+                # â”€â”€ SLOTS FOUND! â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 any_slots_found = True
                 slot_count = len(available_buttons)
 
@@ -1950,11 +1989,11 @@ class TLSChecker:
                     except Exception:
                         continue
 
-                log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                log("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
                 log(f"APPOINTMENTS FOUND! {month_name} ({slot_count} slots)")
                 for sd in slot_day_details:
                     log(f"  {sd['day']}: {', '.join(sd['times'])}")
-                log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                log("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
 
                 full_slot_details.extend(slot_day_details)
                 all_results.append(f"{month_name}: {slot_count} slots found")
@@ -1965,12 +2004,12 @@ class TLSChecker:
                     if nm not in checked_months:
                         months_to_check.append((nm, nl))
 
-            # ── Summary ───────────────────────────────────────────
+            # â”€â”€ Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if not any_slots_found:
-                log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                log("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
                 log(f"NO APPOINTMENTS in any month (checked {len(checked_months)} months)")
-                log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                return False, None, f"Checked {len(checked_months)} months — no slots"
+                log("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
+                return False, None, f"Checked {len(checked_months)} months â€” no slots"
 
             details = {
                 "message": "Appointment slots detected!",
@@ -2049,9 +2088,9 @@ class TLSChecker:
             try:
                 popup = await page.wait_for_selector(".tls-popup", timeout=10000)
                 if popup:
-                    log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    log("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
                     log("NO APPOINTMENTS AVAILABLE (legacy popup)")
-                    log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    log("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
                     try:
                         btn = await page.query_selector(
                             "button.tls-button-primary.-uppercase[data-tls-value='confirm']"
@@ -2070,15 +2109,15 @@ class TLSChecker:
                 ".tls-time-unit:not(.-unavailable)"
             )
             if not available_slots:
-                log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                log("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
                 log("NO APPOINTMENTS AVAILABLE (legacy)")
-                log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                log("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
                 return False, None, "No appointments (legacy)"
 
             slot_count = len(available_slots)
-            log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            log("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
             log(f"APPOINTMENTS AVAILABLE! ({slot_count} slots)")
-            log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            log("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
             details = {"message": "Appointment slots detected!", "count": slot_count}
             return True, details, f"{slot_count} slots found (legacy)"
 
@@ -2089,3 +2128,8 @@ class TLSChecker:
 
 # Singleton
 tls_checker = TLSChecker()
+
+
+
+
+
