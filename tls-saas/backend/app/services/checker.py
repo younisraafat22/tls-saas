@@ -273,6 +273,7 @@ class TLSChecker:
         tls_password: str,
         branch_name: str = "",
         service_type: str = "legalization",
+        ip_rotation_retries_left: int = 1,
     ) -> dict:
         """
         Full TLS check flow matching the desktop app:
@@ -387,7 +388,27 @@ class TLSChecker:
             # Returns False if browser was closed for WARP IP rotate — must abort session
             captcha_ok = await self._check_recaptcha(page, log)
             if captcha_ok is False:
-                result["error"] = "Session reset for IP rotation — will retry"
+                # When IP rotation succeeds, retry immediately in the same cycle
+                # so admins don't have to wait for the next scheduled run.
+                if context:
+                    try:
+                        await context.close()
+                    except Exception:
+                        pass
+                if ip_rotation_retries_left > 0:
+                    log("Session reset after IP rotation — retrying immediately now", "warn")
+                    retry_res = await self._check_branch_async(
+                        branch_url=branch_url,
+                        tls_email=tls_email,
+                        tls_password=tls_password,
+                        branch_name=branch_name,
+                        service_type=service_type,
+                        ip_rotation_retries_left=ip_rotation_retries_left - 1,
+                    )
+                    retry_res["logs"] = result["logs"] + retry_res.get("logs", [])
+                    return retry_res
+
+                result["error"] = "Session reset for IP rotation after immediate retry"
                 result["duration"] = round(time.time() - start, 2)
                 return result
 
