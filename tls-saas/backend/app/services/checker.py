@@ -310,7 +310,7 @@ class TLSChecker:
         tls_password: str,
         branch_name: str = "",
         service_type: str = "legalization",
-        ip_rotation_retries_left: int = 1,
+        ip_rotation_retries_left: int = 3,
     ) -> dict:
         """
         Full TLS check flow matching the desktop app:
@@ -433,7 +433,14 @@ class TLSChecker:
                     except Exception:
                         pass
                 if ip_rotation_retries_left > 0:
-                    log("Session reset after IP rotation — retrying immediately now", "warn")
+                    used = 3 - ip_rotation_retries_left + 1
+                    log(
+                        f"Session reset after IP rotation — retrying immediately now "
+                        f"({used}/3)",
+                        "warn",
+                    )
+                    # Give the new egress route a brief moment to settle before relaunch.
+                    await asyncio.sleep(1.5)
                     retry_res = await self._check_branch_async(
                         branch_url=branch_url,
                         tls_email=tls_email,
@@ -445,7 +452,7 @@ class TLSChecker:
                     retry_res["logs"] = result["logs"] + retry_res.get("logs", [])
                     return retry_res
 
-                result["error"] = "Session reset for IP rotation after immediate retry"
+                result["error"] = "Session reset for IP rotation after maximum immediate retries"
                 result["duration"] = round(time.time() - start, 2)
                 return result
 
