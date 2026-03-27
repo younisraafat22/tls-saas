@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # ── Admin ────────────────────────────────────────────
-    ADMIN_EMAIL: str = "admin@tlschecker.com"
+    ADMIN_EMAIL: str = "younis.raafat2@gmail.com"
     ADMIN_PASSWORD: str = ""
     ADMIN_ERROR_EMAILS_ENABLED: bool = False
 
