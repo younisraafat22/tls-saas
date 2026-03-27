@@ -423,9 +423,14 @@ class TLSChecker:
             await asyncio.sleep(3)
 
             # ── Step 10: Verify login succeeded ───────────────────
-            login_ok = await self._verify_login(page, log)
+            login_ok, login_reason = await self._verify_login(page, log)
             if not login_ok:
-                result["error"] = "Login failed — invalid credentials or CAPTCHA"
+                if login_reason == "captcha_blocked":
+                    result["error"] = "Login failed — CAPTCHA blocked or unsolved"
+                elif login_reason == "invalid_credentials":
+                    result["error"] = "Login failed — invalid TLS credentials"
+                else:
+                    result["error"] = "Login failed — invalid credentials or CAPTCHA"
                 try:
                     result["screenshot"] = await page.screenshot(type="png")
                 except Exception:
@@ -1195,7 +1200,7 @@ class TLSChecker:
         log("Login submit button not found", "error")
         return False
 
-    async def _verify_login(self, page, log) -> bool:
+    async def _verify_login(self, page, log) -> tuple[bool, str]:
         """Verify that login actually succeeded."""
         await asyncio.sleep(2)
         url = page.url.lower()
@@ -1214,7 +1219,7 @@ class TLSChecker:
         for phrase in error_phrases:
             if phrase in content:
                 log(f"Login failed: '{phrase}' detected", "error")
-                return False
+                return False, "invalid_credentials"
 
         # Still on login/auth page?
         still_on_login = any(p in url for p in ["/login", "/auth/", "kc-login", "openid-connect"])
@@ -1223,12 +1228,23 @@ class TLSChecker:
                 try:
                     el = await page.query_selector(sel)
                     if el and await el.is_visible():
+                        # Distinguish likely CAPTCHA-blocked from likely credential issues.
+                        try:
+                            recaptcha_present = bool(await page.query_selector(
+                                "iframe[src*='recaptcha'], iframe[title='reCAPTCHA'], .g-recaptcha, #it-recaptcha-here"
+                            ))
+                        except Exception:
+                            recaptcha_present = False
+                        captcha_solved = await self._is_captcha_solved(page)
+                        if recaptcha_present and not captcha_solved:
+                            log("Still on login page — CAPTCHA likely blocked/unsolved", "error")
+                            return False, "captcha_blocked"
                         log("Still on login page — credentials may be wrong", "error")
-                        return False
+                        return False, "likely_credentials"
                 except Exception:
                     pass
 
-        return True
+        return True, "ok"
 
     # ── Navigation to Booking Page ────────────────────────────────────
 
