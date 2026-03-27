@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Mail, Send, CheckCircle2, ArrowLeft, MessageCircle, Loader2 } from "lucide-react";
 import { contactApi } from "@/lib/api";
@@ -10,6 +11,9 @@ import { useLanguage } from "@/lib/i18n";
 export default function ContactPage() {
   const { t, locale } = useLanguage();
   const tr = t.contact;
+  const searchParams = useSearchParams();
+  const from = searchParams.get("from");
+  const backHref = from === "dashboard" ? "/dashboard" : "/";
   const [form, setForm] = useState({ name: "", email: "", subject: "", message: "" });
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -47,7 +51,7 @@ export default function ContactPage() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-12">
-          <Link href="/" className="inline-flex items-center gap-1 text-gray-400 hover:text-white text-sm mb-8 transition-colors">
+          <Link href={backHref} className="inline-flex items-center gap-1 text-gray-400 hover:text-white text-sm mb-8 transition-colors">
           <ArrowLeft className="w-4 h-4" /> {tr.backHome}
         </Link>
 
@@ -60,7 +64,7 @@ export default function ContactPage() {
             <CheckCircle2 className="w-16 h-16 text-accent-green mx-auto" />
             <h1 className="text-2xl font-display font-bold">{tr.sentTitle}</h1>
             <p className="text-gray-400">{tr.sentBody}</p>
-            <Link href="/" className="btn-gradient inline-flex items-center gap-2 !px-6 !py-2.5 mt-4">
+            <Link href={backHref} className="btn-gradient inline-flex items-center gap-2 !px-6 !py-2.5 mt-4">
               {tr.backHome}
             </Link>
           </motion.div>

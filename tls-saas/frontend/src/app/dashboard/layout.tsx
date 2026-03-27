@@ -55,7 +55,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { href: "/dashboard/notifications", icon: Bell, label: sb.notifications },
     { href: "/dashboard/payments", icon: CreditCard, label: sb.payments },
     { href: "/dashboard/settings", icon: Settings, label: sb.settings },
-    { href: "/contact", icon: Mail, label: sb.contact },
+    { href: "/contact?from=dashboard", icon: Mail, label: sb.contact },
   ];
 
   return (
@@ -117,7 +117,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <span className="font-display font-bold text-sm truncate">TLS Appointment Checker</span>
           </Link>
           <div className="justify-self-end flex items-center gap-3 min-w-[28px] justify-end">
-            <Link href="/contact" className="text-gray-400 hover:text-primary-400 transition-colors" title={sb.contact}>
+            <Link href="/contact?from=dashboard" className="text-gray-400 hover:text-primary-400 transition-colors" title={sb.contact}>
               <Mail className="w-5 h-5" />
             </Link>
             {user.is_admin && (
