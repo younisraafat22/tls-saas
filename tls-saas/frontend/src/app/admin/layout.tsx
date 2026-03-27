@@ -9,7 +9,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { adminApi } from "@/lib/api";
 import {
   LayoutDashboard, Users, CreditCard, Activity,
-  Settings, ArrowLeft, Shield, KeyRound, Star, Bell, Mail
+  Settings, ArrowLeft, Shield, KeyRound, Star, Bell, Mail, AlertTriangle
 } from "lucide-react";
 
 const adminNav = [
@@ -20,6 +20,7 @@ const adminNav = [
   { href: "/admin/notifications", label: "Notifications", icon: Bell },
   { href: "/admin/licenses", label: "Licenses", icon: KeyRound },
   { href: "/admin/monitoring", label: "Monitoring", icon: Activity },
+  { href: "/admin/errors", label: "Errors", icon: AlertTriangle },
   { href: "/admin/reviews", label: "Reviews", icon: Star },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];

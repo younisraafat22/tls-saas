@@ -267,6 +267,11 @@ export const adminApi = {
     if (branchId) params.set("branch_id", String(branchId));
     return api.get(`/api/admin/check-results?${params.toString()}`);
   },
+  getCheckErrors: (limit?: number) => {
+    const params = new URLSearchParams();
+    if (limit) params.set("limit", String(limit));
+    return api.get(`/api/admin/check-errors?${params.toString()}`);
+  },
   deleteCheckResults: (branchId?: number) => {
     const params = new URLSearchParams();
     if (branchId) params.set("branch_id", String(branchId));

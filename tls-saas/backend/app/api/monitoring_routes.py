@@ -941,6 +941,7 @@ class WorkerResultBody(BaseModel):
     slots_available: bool
     slot_details: str | None = None
     error: str = ""
+    screenshot_b64: str | None = None
     duration_seconds: float = 0
     source: str = "worker"
     logs: list = []  # Step-by-step logs from the checker to forward to the admin panel
@@ -1125,6 +1126,12 @@ async def worker_post_result(
         "screenshot": None,
         "logs": body.logs,
     }
+    if body.screenshot_b64:
+        try:
+            import base64 as _b64
+            check_result["screenshot"] = _b64.b64decode(body.screenshot_b64)
+        except Exception:
+            check_result["screenshot"] = None
     # Re-use the scheduler's persist+notify logic so emails/WebSocket work uniformly
     await scheduler_service._persist_and_notify(db, branch, check_result, active_users)
 

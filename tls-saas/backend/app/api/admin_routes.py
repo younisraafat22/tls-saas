@@ -1303,6 +1303,50 @@ async def admin_check_results(
     ]
 
 
+@router.get("/check-errors")
+async def admin_check_errors(
+    limit: int = 100,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    import base64 as _b64
+    import os as _os
+
+    query = (
+        select(CheckResult, Branch, User)
+        .join(Branch, CheckResult.branch_id == Branch.id)
+        .join(User, CheckResult.user_id == User.id, isouter=True)
+        .where(and_(CheckResult.error.is_not(None), CheckResult.error != ""))
+        .order_by(CheckResult.checked_at.desc())
+        .limit(limit)
+    )
+    result = await db.execute(query)
+    rows = []
+    for cr, b, u in result.all():
+        screenshot_b64 = ""
+        if cr.screenshot_path:
+            try:
+                if _os.path.exists(cr.screenshot_path):
+                    with open(cr.screenshot_path, "rb") as f:
+                        screenshot_b64 = _b64.b64encode(f.read()).decode()
+            except Exception:
+                screenshot_b64 = ""
+        rows.append({
+            "id": cr.id,
+            "checked_at": cr.checked_at.isoformat() if cr.checked_at else None,
+            "branch_name": b.name,
+            "service_type": b.service_type.value,
+            "user_id": cr.user_id,
+            "user_email": u.email if u else "",
+            "source": cr.source or "",
+            "duration_seconds": cr.duration_seconds,
+            "error": cr.error or "",
+            "screenshot_b64": screenshot_b64,
+            "has_screenshot": bool(screenshot_b64),
+        })
+    return rows
+
+
 @router.delete("/check-results", response_model=MessageResponse)
 async def delete_all_check_results(
     branch_id: int | None = None,

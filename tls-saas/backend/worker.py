@@ -15,6 +15,7 @@ posts results.  It uses the same checker code already in app/services/.
 """
 
 import asyncio
+import base64
 import logging
 import os
 import queue as _queue
@@ -276,6 +277,9 @@ async def check_cycle():
             "logs": banner + step_logs,
             "skip_log_replay": True,  # logs already streamed in real-time
         }
+        screenshot_bytes = res.get("screenshot")
+        if isinstance(screenshot_bytes, (bytes, bytearray)):
+            payload["screenshot_b64"] = base64.b64encode(screenshot_bytes).decode()
         async with httpx.AsyncClient(timeout=15) as client:
             try:
                 r2 = await client.post(

@@ -531,6 +531,14 @@ class TLSChecker:
                     await context.close()
                 except Exception:
                     pass
+        finally:
+            # Last-resort evidence capture: if an error occurred but no screenshot
+            # was captured on the exact failure branch, try once before returning.
+            if result.get("error") and not result.get("screenshot") and page:
+                try:
+                    result["screenshot"] = await page.screenshot(type="png")
+                except Exception:
+                    pass
 
         result["duration"] = round(time.time() - start, 2)
         return result
