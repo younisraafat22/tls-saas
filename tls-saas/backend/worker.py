@@ -18,6 +18,7 @@ import asyncio
 import logging
 import os
 import queue as _queue
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone, timedelta
@@ -290,15 +291,28 @@ async def check_cycle():
     logger.info("=== Worker check cycle complete ===")
 
 
-async def _poll_force_run_signal() -> bool:
-    """Ask the backend if the admin has requested a force-run. Returns True and clears the flag."""
+async def _poll_worker_signal() -> dict:
+    """Ask backend for worker control signals. Flags are cleared server-side when read."""
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             r = await client.get(f"{FLY_BACKEND_URL}/api/monitoring/worker/signal", headers=HEADERS)
             r.raise_for_status()
-            return r.json().get("force_run", False)
+            data = r.json() or {}
+            return {
+                "force_run": bool(data.get("force_run")),
+                "restart_laptop": bool(data.get("restart_laptop")),
+            }
     except Exception:
-        return False
+        return {"force_run": False, "restart_laptop": False}
+
+
+def _restart_host_machine():
+    """Request OS restart on the worker machine."""
+    if os.name == "nt":
+        logger.warning("Restart signal received - rebooting Windows worker laptop in 5 seconds")
+        subprocess.Popen(["shutdown", "/r", "/t", "5", "/f"])
+        return
+    logger.warning("Restart signal received, but automatic restart is only implemented for Windows workers")
 
 
 async def main():
@@ -313,8 +327,13 @@ async def main():
         while slept < CHECK_INTERVAL:
             await asyncio.sleep(30)
             slept += 30
-            if await _poll_force_run_signal():
-                logger.info("Force-run signal received from admin panel — starting immediate cycle")
+            signals = await _poll_worker_signal()
+            if signals.get("restart_laptop"):
+                _restart_host_machine()
+                # Give the OS a moment to process reboot command.
+                await asyncio.sleep(10)
+            if signals.get("force_run"):
+                logger.info("Force-run signal received from admin panel - starting immediate cycle")
                 break
 
 

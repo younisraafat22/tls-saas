@@ -285,6 +285,7 @@ export const adminApi = {
   getSchedulerStatus: () => api.get("/api/admin/checker/status"),
   triggerCheck: (branchId: number) => api.post(`/api/admin/checker/run-now/${branchId}`),
   runAllNow: () => api.post("/api/admin/checker/run-all-now"),
+  restartWorkerLaptop: () => api.post("/api/admin/checker/restart-worker-laptop"),
   // Legacy aliases
   startChecker: () => api.post("/api/admin/checker/start"),
   stopChecker: () => api.post("/api/admin/checker/stop"),

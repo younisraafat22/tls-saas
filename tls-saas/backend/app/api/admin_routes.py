@@ -1596,6 +1596,25 @@ async def run_all_checks_now(
     return MessageResponse(message="Full check cycle started immediately")
 
 
+@router.post("/checker/restart-worker-laptop", response_model=MessageResponse)
+async def restart_worker_laptop(
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Signal the laptop worker process to restart the host machine."""
+    import os as _os
+    if _os.environ.get("WORKER_MODE", "false").lower() != "true":
+        raise HTTPException(400, "This action is only available when WORKER_MODE=true.")
+
+    row = (await db.execute(select(SystemSetting).where(SystemSetting.key == "worker_restart_laptop"))).scalar_one_or_none()
+    if row:
+        row.value = "true"
+    else:
+        db.add(SystemSetting(key="worker_restart_laptop", value="true"))
+    await db.commit()
+    return MessageResponse(message="Restart signal sent — worker laptop will restart on next signal poll.")
+
+
 # ── Headless Mode Toggle ─────────────────────────────────────────────
 
 @router.get("/checker/headless")

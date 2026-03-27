@@ -9,7 +9,7 @@ import {
   Key, Plus, Trash2, Loader2,
   CheckCircle2, XCircle, AlertCircle, Zap, Clock,
   Bell, Monitor, Save, Terminal, Download,
-  ChevronDown, ChevronUp, Wifi, WifiOff, Circle,
+  ChevronDown, ChevronUp, Wifi, WifiOff, Circle, Power,
 } from "lucide-react";
 
 interface LogEntry {
@@ -99,6 +99,7 @@ export default function AdminMonitoringPage() {
   const [headless, setHeadless] = useState(true);
   const [headlessLoading, setHeadlessLoading] = useState(false);
   const [runAllNowLoading, setRunAllNowLoading] = useState(false);
+  const [restartWorkerLoading, setRestartWorkerLoading] = useState(false);
   const [testNotifLoading, setTestNotifLoading] = useState(false);
   const [testApptEmailLoading, setTestApptEmailLoading] = useState(false);
   const [deletingAllResults, setDeletingAllResults] = useState(false);
@@ -318,6 +319,19 @@ export default function AdminMonitoringPage() {
     }
   };
 
+  const restartWorkerLaptop = async () => {
+    if (!confirm("Restart the worker laptop now? This will interrupt ongoing checks for a few minutes.")) return;
+    setRestartWorkerLoading(true);
+    try {
+      const res: any = await adminApi.restartWorkerLaptop();
+      showToastMsg("success", res?.message || "Restart signal sent");
+    } catch (err: any) {
+      showToastMsg("error", err?.detail || "Failed to send restart signal");
+    } finally {
+      setRestartWorkerLoading(false);
+    }
+  };
+
   const addServiceAccount = async () => {
     if (!newAccount.branch_id || !newAccount.email || !newAccount.password) {
       showToastMsg("error", "Fill in all fields");
@@ -446,6 +460,19 @@ export default function AdminMonitoringPage() {
                 <Zap className="w-4 h-4" />
               )}
               Run Now
+            </button>
+            <button
+              onClick={restartWorkerLaptop}
+              disabled={restartWorkerLoading || !schedulerStatus?.worker_mode}
+              title={!schedulerStatus?.worker_mode ? "Available only when WORKER_MODE=true" : "Restart the worker laptop"}
+              className="px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-all bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {restartWorkerLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Power className="w-4 h-4" />
+              )}
+              Restart Worker
             </button>
             <button
               onClick={toggleScheduler}

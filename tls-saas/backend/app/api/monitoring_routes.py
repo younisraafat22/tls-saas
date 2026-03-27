@@ -1068,13 +1068,24 @@ async def worker_stream_log(body: WorkerLogBody):
 
 @router.get("/worker/signal", dependencies=[Depends(_verify_worker)])
 async def worker_signal(db: AsyncSession = Depends(get_db)):
-    """Check for a force-run signal from the admin panel. Clears the flag after reading."""
-    row = (await db.execute(select(SystemSetting).where(SystemSetting.key == "worker_force_run"))).scalar_one_or_none()
-    force_run = bool(row and row.value == "true")
-    if force_run and row:
-        row.value = "false"
+    """Check for worker control signals from the admin panel. Clears flags after reading."""
+    force_row = (await db.execute(select(SystemSetting).where(SystemSetting.key == "worker_force_run"))).scalar_one_or_none()
+    restart_row = (await db.execute(select(SystemSetting).where(SystemSetting.key == "worker_restart_laptop"))).scalar_one_or_none()
+
+    force_run = bool(force_row and force_row.value == "true")
+    restart_laptop = bool(restart_row and restart_row.value == "true")
+
+    changed = False
+    if force_run and force_row:
+        force_row.value = "false"
+        changed = True
+    if restart_laptop and restart_row:
+        restart_row.value = "false"
+        changed = True
+    if changed:
         await db.commit()
-    return {"force_run": force_run}
+
+    return {"force_run": force_run, "restart_laptop": restart_laptop}
 
 
 @router.post("/worker/result", dependencies=[Depends(_verify_worker)])
