@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { adminApi } from "@/lib/api";
@@ -115,7 +115,7 @@ export default function AdminErrorsPage() {
             <div key={r.id} className="glass-card p-4 sm:p-5 border border-red-500/20 bg-red-500/5">
               <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs sm:text-sm text-gray-300">
                 <span className="inline-flex items-center gap-1.5"><AlertTriangle className="w-4 h-4 text-red-400" /> #{r.id}</span>
-                <span className="inline-flex items-center gap-1.5"><Clock className="w-4 h-4 text-gray-400" /> {r.checked_at ? new Date(r.checked_at).toLocaleString("en-GB", { hour12: false }) : "—"}</span>
+                <span className="inline-flex items-center gap-1.5"><Clock className="w-4 h-4 text-gray-400" /> {r.checked_at ? new Date(r.checked_at.includes("Z") || r.checked_at.includes("+") ? r.checked_at : r.checked_at + "Z").toLocaleString("en-GB", { hour12: false }) : "â€”"}</span>
                 <span className="inline-flex items-center gap-1.5"><Mail className="w-4 h-4 text-gray-400" /> {r.user_email || "Unknown user"}</span>
                 <span>{r.branch_name} ({r.service_type})</span>
                 <span>Source: {r.source || "worker"}</span>
@@ -176,3 +176,5 @@ export default function AdminErrorsPage() {
     </div>
   );
 }
+
+
