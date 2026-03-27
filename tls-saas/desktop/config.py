@@ -107,13 +107,6 @@ class Config:
     BROWSER_HEADLESS = True
     BROWSER_PAGE_LOAD_TIMEOUT = 60
     CLOUDFLARE_MAX_WAIT = 180
-
-    # Free IP rotation via Tor (optional, falls back to WARP)
-    TOR_ENABLED = os.getenv("TOR_ENABLED", "true").lower() == "true"
-    TOR_SOCKS_HOST = os.getenv("TOR_SOCKS_HOST", "127.0.0.1")
-    TOR_SOCKS_PORT = int(os.getenv("TOR_SOCKS_PORT", "9050"))
-    TOR_CONTROL_PORT = int(os.getenv("TOR_CONTROL_PORT", "9051"))
-    TOR_CONTROL_PASSWORD = os.getenv("TOR_CONTROL_PASSWORD", "")
     
     # Notification Settings
     STATUS_REPORT_INTERVAL = 6  # hours

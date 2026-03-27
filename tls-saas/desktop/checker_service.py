@@ -8,7 +8,6 @@ import json
 import time
 import os
 import sys
-import socket
 import tempfile
 import requests as http_requests
 from datetime import datetime, timedelta, timezone
@@ -174,7 +173,6 @@ class TLSCheckerService:
         self._last_error_email_time = None   # throttle error emails (max 1/hr)
         self._audio_blocked = False            # True after Google blocks audio challenges
         self._warp_enabled = False             # True when WARP is active for this session
-        self._tor_proxy_enabled = False        # True when browser is running via local Tor SOCKS
     
     def _send_error_email_if_needed(self, error_msg: str, force: bool = False):
         now = datetime.now()
@@ -527,10 +525,6 @@ class TLSCheckerService:
                 "download.prompt_for_download": False,
                 "download.directory_upgrade": True,
             }
-            self._tor_proxy_enabled = self._tor_available()
-            tor_proxy_arg = f"--proxy-server={self._tor_proxy_server()}" if self._tor_proxy_enabled else ""
-            if self._tor_proxy_enabled:
-                self._log("🌐 Browser will use Tor proxy")
 
             # Ensure SeleniumBase creates ./downloaded_files inside AppData
             if SELENIUMBASE_AVAILABLE:
@@ -596,8 +590,6 @@ class TLSCheckerService:
                             f",--window-size={_vw},{_vh}"
                         ),
                     }
-                    if tor_proxy_arg:
-                        driver_kwargs["chromium_arg"] += f",{tor_proxy_arg}"
                     
                     # If running as frozen app, explicitly set binary location
                     if getattr(sys, 'frozen', False):
@@ -653,8 +645,6 @@ class TLSCheckerService:
                 options.add_argument('--disable-dev-shm-usage')
                 options.add_argument('--no-sandbox')
                 options.add_argument('--disable-features=CalculateNativeWinOcclusion')
-                if tor_proxy_arg:
-                    options.add_argument(tor_proxy_arg)
                 # Persistent profile — accumulates cookies/history across sessions
                 options.add_argument(f'--user-data-dir={_get_chrome_profile_dir()}')
                 options.add_experimental_option("prefs", download_prefs)
@@ -717,8 +707,6 @@ class TLSCheckerService:
             options.add_argument('--log-level=3')
             options.add_argument('--disable-logging')
             options.add_argument('--disable-features=CalculateNativeWinOcclusion')
-            if tor_proxy_arg:
-                options.add_argument(tor_proxy_arg)
             # Persistent profile — accumulates cookies/history across sessions
             options.add_argument(f'--user-data-dir={_get_chrome_profile_dir()}')
             options.add_experimental_option("prefs", download_prefs)
@@ -840,63 +828,6 @@ class TLSCheckerService:
 
         self._log("⚠️ Failed to rotate to a different IP via WARP")
         return False
-
-    def _tor_proxy_server(self) -> str:
-        return f"socks5://{Config.TOR_SOCKS_HOST}:{Config.TOR_SOCKS_PORT}"
-
-    def _tor_available(self) -> bool:
-        if not getattr(Config, "TOR_ENABLED", True):
-            return False
-        try:
-            with socket.create_connection((Config.TOR_SOCKS_HOST, int(Config.TOR_SOCKS_PORT)), timeout=2):
-                pass
-        except Exception:
-            return False
-        try:
-            with socket.create_connection((Config.TOR_SOCKS_HOST, int(Config.TOR_CONTROL_PORT)), timeout=2):
-                return True
-        except Exception:
-            return False
-
-    def _tor_signal_newnym(self) -> bool:
-        try:
-            with socket.create_connection((Config.TOR_SOCKS_HOST, int(Config.TOR_CONTROL_PORT)), timeout=4) as s:
-                s.settimeout(4)
-                auth_line = "AUTHENTICATE\r\n"
-                if getattr(Config, "TOR_CONTROL_PASSWORD", ""):
-                    auth_line = f'AUTHENTICATE "{Config.TOR_CONTROL_PASSWORD}"\r\n'
-                s.sendall(auth_line.encode("utf-8"))
-                auth_resp = s.recv(1024).decode("utf-8", errors="ignore")
-                if not auth_resp.startswith("250"):
-                    self._log(f"⚠️ Tor control auth failed: {auth_resp.strip()}")
-                    return False
-                s.sendall(b"SIGNAL NEWNYM\r\n")
-                sig_resp = s.recv(1024).decode("utf-8", errors="ignore")
-                s.sendall(b"QUIT\r\n")
-                if sig_resp.startswith("250"):
-                    return True
-                self._log(f"⚠️ Tor NEWNYM failed: {sig_resp.strip()}")
-                return False
-        except Exception as e:
-            self._log(f"⚠️ Tor NEWNYM error: {e}")
-            return False
-
-    def _tor_rotate_ip(self) -> bool:
-        if not self._tor_available():
-            return False
-        self._log("🌐 Rotating IP via Tor (NEWNYM)...")
-        ok = self._tor_signal_newnym()
-        if ok:
-            time.sleep(2)
-            self._log("✅ Tor signaled new identity")
-        return ok
-
-    def _rotate_ip(self) -> bool:
-        """Try Tor first (free), then WARP fallback."""
-        if self._tor_rotate_ip():
-            return True
-        self._log("⚠️ Tor unavailable/failed — trying WARP...")
-        return self._warp_rotate_ip()
 
     def _cleanup_driver(self):
         """Close browser"""
@@ -1118,17 +1049,17 @@ class TLSCheckerService:
             try:
                 page_body = self.driver.find_element(By.TAG_NAME, "body").text.lower()
                 if "automated queries" in page_body or "unusual traffic" in page_body:
-                    self._log("❌ Google rate-limited this IP — rotating IP (Tor/WARP)...")
+                    self._log("❌ Google rate-limited this IP — switching via WARP...")
                     self._audio_blocked = True
                     self.driver.switch_to.default_content()
-                    # Rotate IP and restart browser session
-                    if self._rotate_ip():
+                    # Enable WARP for a fresh Cloudflare IP, then restart
+                    if self._warp_rotate_ip():
                         # Close browser so run_check restarts with the new IP
                         self._cleanup_driver()
                         self._audio_blocked = False
                         self._log("🔄 IP changed — restarting with fresh browser...")
                         return False  # run_check will re-setup driver and retry
-                    # No rotator available — just wait and retry
+                    # WARP not available or already on — just wait and retry
                     if attempt < MAX_ATTEMPTS:
                         wait_time = 10 * attempt
                         self._log(f"🔄 Waiting {wait_time}s before retry (cooldown)...")
@@ -1140,14 +1071,14 @@ class TLSCheckerService:
 
             # ── 5. Switch to audio challenge (fallback) ─────────────
             if self._audio_blocked:
-                # IP still blocked — try rotating before giving up
+                # IP still blocked — try enabling WARP before giving up
                 self.driver.switch_to.default_content()
-                if self._rotate_ip():
+                if self._warp_rotate_ip():
                     self._cleanup_driver()
                     self._audio_blocked = False
                     self._log("🔄 IP changed — restarting with fresh browser...")
                     return False  # run_check will re-setup driver and retry
-                self._log("❌ Audio blocked and no rotator available — cannot solve CAPTCHA")
+                self._log("❌ Audio blocked and WARP unavailable — cannot solve CAPTCHA")
                 return False
 
             try:
@@ -1208,10 +1139,10 @@ class TLSCheckerService:
                 err_el = self.driver.find_element(By.CSS_SELECTOR, ".rc-audiochallenge-error-message, .rc-doscaptcha-header")
                 err_text = err_el.text.lower() if err_el and err_el.is_displayed() else ""
                 if err_text and ("try again" in err_text or "automated" in err_text or "unusual" in err_text):
-                    self._log("❌ Google blocked audio — rotating IP (Tor/WARP)...")
+                    self._log("❌ Google blocked audio — switching IP via WARP...")
                     self._audio_blocked = True
                     self.driver.switch_to.default_content()
-                    if self._rotate_ip():
+                    if self._warp_rotate_ip():
                         self._cleanup_driver()
                         self._audio_blocked = False
                         self._log("🔄 IP changed — restarting with fresh browser...")
