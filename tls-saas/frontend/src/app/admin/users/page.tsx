@@ -77,6 +77,28 @@ function UserDetailModal({
           ))}
         </div>
 
+        {Array.isArray(user.entitlements) && user.entitlements.length > 0 && (
+          <div>
+            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-gray-400" /> Entitlements
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {user.entitlements.map((ent: any, idx: number) => (
+                <div
+                  key={`${ent.source}-${ent.plan_key}-${idx}`}
+                  className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs"
+                >
+                  <span className="text-gray-300">{ent.plan_name || ent.plan_key}</span>
+                  <span className="text-gray-500"> · {ent.source}</span>
+                  <span className={`ml-1 ${ent.status === "active" ? "text-accent-green" : "text-amber-400"}`}>
+                    ({ent.status === "active" ? "active" : "pending"})
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Payment history */}
         <div>
           <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">

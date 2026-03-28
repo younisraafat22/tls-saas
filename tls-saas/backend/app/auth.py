@@ -80,7 +80,7 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db),
 ):
     """Dependency: extracts and validates the current user from JWT."""
-    from app.models import User, Subscription  # avoid circular
+    from app.models import User, Subscription, Payment  # avoid circular
     from sqlalchemy.orm import selectinload
 
     payload = decode_token(credentials.credentials)
@@ -93,7 +93,10 @@ async def get_current_user(
 
     result = await db.execute(
         select(User)
-        .options(selectinload(User.subscriptions).selectinload(Subscription.plan))
+        .options(
+            selectinload(User.subscriptions).selectinload(Subscription.plan),
+            selectinload(User.payments),
+        )
         .where(User.id == int(user_id))
     )
     user = result.scalar_one_or_none()

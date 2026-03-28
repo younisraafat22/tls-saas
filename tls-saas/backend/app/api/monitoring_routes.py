@@ -65,6 +65,19 @@ _DESKTOP_PLAN_DURATION_HOURS: dict[str, int] = {
 }
 
 
+def _desktop_plan_base_type(plan_key: str | None) -> str:
+    pk = (plan_key or "").strip().lower()
+    if pk.startswith("premium"):
+        return "premium"
+    if pk.startswith("all_in_one"):
+        return "all_in_one"
+    if pk.startswith("visa"):
+        return "visa"
+    if pk.startswith("legalization"):
+        return "legalization"
+    return pk or "desktop"
+
+
 def _calc_desktop_expires_at(plan_key: str | None, processed_at: datetime | None) -> datetime | None:
     if not plan_key or processed_at is None:
         return None
@@ -298,23 +311,29 @@ async def monitoring_status(
     is_active = len(active_subs) > 0
     desktop_expires_at: datetime | None = None
 
-    # Desktop license users don't have Subscription rows — treat approved payment as active
-    if not is_active:
-        paid = await db.execute(
-            select(Payment).where(
-                Payment.user_id == user.id,
-                Payment.status == PaymentStatus.APPROVED,
-                Payment.license_key.isnot(None),
-            ).limit(1)
-        )
-        paid_row = paid.scalar_one_or_none()
-        if paid_row:
-            is_active = True
-            desktop_expires_at = _calc_desktop_expires_at(paid_row.plan_key, paid_row.processed_at)
+    # Desktop license entitlements can coexist with website subscriptions.
+    paid = await db.execute(
+        select(Payment).where(
+            Payment.user_id == user.id,
+            Payment.status == PaymentStatus.APPROVED,
+            Payment.license_key.isnot(None),
+        ).order_by(Payment.processed_at.desc())
+    )
+    paid_rows = paid.scalars().all()
+    if paid_rows:
+        is_active = True
+        if desktop_expires_at is None:
+            desktop_expires_at = _calc_desktop_expires_at(paid_rows[0].plan_key, paid_rows[0].processed_at)
 
-    plan_types = list(dict.fromkeys(
-        s.plan.plan_type.value for s in active_subs if s.plan
-    ))
+    plan_types = [s.plan.plan_type.value for s in active_subs if s.plan]
+    plan_types.extend(_desktop_plan_base_type(p.plan_key) for p in paid_rows)
+    plan_types = list(dict.fromkeys(plan_types))
+
+    primary_plan_type = None
+    if "premium" in plan_types:
+        primary_plan_type = "premium"
+    elif plan_types:
+        primary_plan_type = plan_types[0]
 
     # Get monitored branches with latest results
     monitors = await db.execute(
@@ -417,7 +436,7 @@ async def monitoring_status(
 
     return {
         "subscription_active": is_active,
-        "plan_type": sub.plan.plan_type.value if sub and sub.plan else None,
+        "plan_type": primary_plan_type,
         "plan_types": plan_types,
         "payment_pending": pending_payment,
         "maintenance_mode": maintenance_mode,

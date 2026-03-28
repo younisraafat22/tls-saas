@@ -32,6 +32,26 @@ from app.websocket import ws_manager
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
+def _desktop_plan_base_type(plan_key: str | None) -> str:
+    pk = (plan_key or "").strip().lower()
+    if pk.startswith("premium"):
+        return "premium"
+    if pk.startswith("all_in_one"):
+        return "all_in_one"
+    if pk.startswith("visa"):
+        return "visa"
+    if pk.startswith("legalization"):
+        return "legalization"
+    return pk or "desktop"
+
+
+def _desktop_plan_display_name(plan_key: str | None) -> str:
+    raw = (plan_key or "").strip()
+    if not raw:
+        return "Desktop"
+    return raw.replace("_", " ").title()
+
+
 # ── Dashboard Stats ──────────────────────────────────────────────────
 
 @router.get("/dashboard", response_model=DashboardStats)
@@ -180,6 +200,7 @@ async def list_users(
         select(User)
         .options(
             selectinload(User.subscriptions).selectinload(Subscription.plan),
+            selectinload(User.payments),
         )
         .where(
             User.is_admin == False,
@@ -214,22 +235,69 @@ async def list_users(
 
     items = []
     for u in users:
-        # Find best subscription: prefer ACTIVE, then PENDING_PAYMENT
-        active_sub = None
-        pending_sub = None
-        for s in (u.subscriptions or []):
-            if s.status == SubscriptionStatus.ACTIVE:
-                active_sub = s
-            elif s.status == SubscriptionStatus.PENDING_PAYMENT:
-                pending_sub = s
+        now = datetime.now(timezone.utc)
+        active_entitlements: list[dict] = []
+        pending_entitlements: list[dict] = []
 
-        sub = active_sub or pending_sub
-        if active_sub:
+        # Web subscriptions
+        for s in (u.subscriptions or []):
+            if not s.plan:
+                continue
+            exp = s.expires_at
+            if exp and exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if s.status == SubscriptionStatus.ACTIVE and exp and exp > now:
+                active_entitlements.append({
+                    "source": "web",
+                    "status": "active",
+                    "plan_key": s.plan.plan_type.value,
+                    "plan_name": s.plan.display_name,
+                    "expires_at": s.expires_at.isoformat() if s.expires_at else None,
+                })
+            elif s.status == SubscriptionStatus.PENDING_PAYMENT:
+                pending_entitlements.append({
+                    "source": "web",
+                    "status": "pending_payment",
+                    "plan_key": s.plan.plan_type.value,
+                    "plan_name": s.plan.display_name,
+                    "expires_at": s.expires_at.isoformat() if s.expires_at else None,
+                })
+
+        # Desktop license entitlements (approved + license key)
+        for p in (u.payments or []):
+            if p.status == PaymentStatus.APPROVED and p.license_key:
+                active_entitlements.append({
+                    "source": "desktop",
+                    "status": "active",
+                    "plan_key": _desktop_plan_base_type(p.plan_key),
+                    "plan_name": _desktop_plan_display_name(p.plan_key),
+                    "expires_at": None,
+                })
+            elif p.status == PaymentStatus.PENDING and p.hardware_id:
+                pending_entitlements.append({
+                    "source": "desktop",
+                    "status": "pending_payment",
+                    "plan_key": _desktop_plan_base_type(p.plan_key),
+                    "plan_name": _desktop_plan_display_name(p.plan_key),
+                    "expires_at": None,
+                })
+
+        if active_entitlements:
             sub_status = "active"
-        elif pending_sub:
+        elif pending_entitlements:
             sub_status = "pending_payment"
         else:
             sub_status = "none"
+
+        merged = active_entitlements if active_entitlements else pending_entitlements
+        # Deduplicate display names while preserving order
+        seen_names: set[str] = set()
+        plan_names: list[str] = []
+        for ent in merged:
+            name = ent["plan_name"]
+            if name not in seen_names:
+                seen_names.add(name)
+                plan_names.append(name)
 
         items.append({
             "id": u.id,
@@ -241,8 +309,10 @@ async def list_users(
             "created_at": u.created_at.isoformat() if u.created_at else None,
             "last_login": u.last_login.isoformat() if u.last_login else None,
             "subscription_status": sub_status,
-            "plan_name": sub.plan.display_name if sub and sub.plan else None,
-            "subscription_expires": active_sub.expires_at.isoformat() if active_sub and active_sub.expires_at else None,
+            "plan_name": ", ".join(plan_names) if plan_names else None,
+            "plan_names": plan_names,
+            "entitlements": merged,
+            "subscription_expires": None,
         })
 
     return {

@@ -25,6 +25,7 @@ export default function PaymentsPage() {
   const [plans, setPlans] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [activeSub, setActiveSub] = useState<any>(null);
+  const [activeSubs, setActiveSubs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"subscribe" | "history">("subscribe");
   const { t, locale } = useLanguage();
@@ -68,6 +69,7 @@ export default function PaymentsPage() {
       setPlans(plansData);
       setPayments(paymentsData);
       setActiveSub(subData?.subscription || null);
+      setActiveSubs(Array.isArray(subData?.subscriptions) ? subData.subscriptions : (subData?.subscription ? [subData.subscription] : []));
       setBranches(branchesData || []);
     } catch (err) {
       console.error(err);
@@ -216,7 +218,7 @@ export default function PaymentsPage() {
       </div>
 
       {/* Active subscription banner */}
-      {activeSub && activeSub.status === "active" && (
+      {activeSubs.length > 0 && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-5 border-accent-green/20">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -225,9 +227,14 @@ export default function PaymentsPage() {
               </div>
               <div>
                 <div className="font-semibold text-accent-green">{t.payment.activeSubLabel}</div>
-                <div className="text-sm text-gray-400">
-                  {getPlanName(activeSub.plan?.plan_type ?? "", activeSub.plan?.display_name ?? "")} &middot; {(t.payment as any).expiresLabel || 'Expires'} {new Date(activeSub.expires_at).toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', year: 'numeric' })}
-                </div>
+                {activeSubs.map((sub: any) => (
+                  <div key={sub.id} className="text-sm text-gray-400">
+                    {getPlanName(sub.plan?.plan_type ?? "", sub.plan?.display_name ?? "")}
+                    {sub.expires_at ? (
+                      <> &middot; {(t.payment as any).expiresLabel || "Expires"} {new Date(sub.expires_at).toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', year: 'numeric' })}</>
+                    ) : null}
+                  </div>
+                ))}
               </div>
             </div>
           </div>

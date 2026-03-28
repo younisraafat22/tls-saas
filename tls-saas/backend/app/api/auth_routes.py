@@ -10,7 +10,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from sqlalchemy.orm import selectinload
-from app.models import User, Subscription, UserBranchMonitor, ActivityLog
+from app.models import User, Subscription, UserBranchMonitor, ActivityLog, PaymentStatus
 from app.config import settings
 from app.auth import (
     hash_password, verify_password,
@@ -40,10 +40,18 @@ def _normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
+def _desktop_plan_display_name(plan_key: str | None) -> str:
+    raw = (plan_key or "").strip()
+    if not raw:
+        return "Desktop"
+    return raw.replace("_", " ").title()
+
+
 def _user_to_public(user: User) -> UserPublic:
     """Convert a User ORM object to a public schema."""
     active_plan = None
     active_plans: list[str] = []
+    seen_plans: set[str] = set()
     sub_expires = None
     now = datetime.now(timezone.utc)
     for sub in (user.subscriptions or []):
@@ -52,10 +60,22 @@ def _user_to_public(user: User) -> UserPublic:
             if exp and exp.tzinfo is None:
                 exp = exp.replace(tzinfo=timezone.utc)
             if exp and exp > now:
-                active_plans.append(sub.plan.display_name)
+                if sub.plan.display_name not in seen_plans:
+                    seen_plans.add(sub.plan.display_name)
+                    active_plans.append(sub.plan.display_name)
                 if active_plan is None:
                     active_plan = sub.plan.display_name
                     sub_expires = sub.expires_at
+
+    # Desktop licenses can coexist with web subscriptions.
+    for pay in (user.payments or []):
+        if pay.status == PaymentStatus.APPROVED and pay.license_key:
+            name = _desktop_plan_display_name(pay.plan_key)
+            if name not in seen_plans:
+                seen_plans.add(name)
+                active_plans.append(name)
+            if active_plan is None:
+                active_plan = name
     return UserPublic(
         id=user.id,
         email=user.email,
@@ -78,7 +98,10 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     # Check if email exists
     existing = await db.execute(
         select(User)
-        .options(selectinload(User.subscriptions).selectinload(Subscription.plan))
+        .options(
+            selectinload(User.subscriptions).selectinload(Subscription.plan),
+            selectinload(User.payments),
+        )
         .where(func.lower(User.email) == normalized_email)
     )
     if existing.scalar_one_or_none():
@@ -139,7 +162,10 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
 
     result = await db.execute(
         select(User)
-        .options(selectinload(User.subscriptions).selectinload(Subscription.plan))
+        .options(
+            selectinload(User.subscriptions).selectinload(Subscription.plan),
+            selectinload(User.payments),
+        )
         .where(func.lower(User.email) == normalized_email)
     )
     user = result.scalar_one_or_none()
@@ -169,7 +195,10 @@ async def refresh_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)
     user_id = payload.get("sub")
     result = await db.execute(
         select(User)
-        .options(selectinload(User.subscriptions).selectinload(Subscription.plan))
+        .options(
+            selectinload(User.subscriptions).selectinload(Subscription.plan),
+            selectinload(User.payments),
+        )
         .where(User.id == int(user_id))
     )
     user = result.scalar_one_or_none()

@@ -53,7 +53,7 @@ async def active_subscription(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get user's current active subscription, if any."""
+    """Get user's current active subscription(s)."""
     result = await db.execute(
         select(Subscription)
         .options(selectinload(Subscription.plan))
@@ -62,25 +62,36 @@ async def active_subscription(
             Subscription.status == SubscriptionStatus.ACTIVE,
         )
         .order_by(Subscription.expires_at.desc())
-        .limit(1)
     )
-    sub = result.scalar_one_or_none()
-    if not sub:
-        return {"active": False, "subscription": None}
+    subs = result.scalars().all()
+    if not subs:
+        return {"active": False, "subscription": None, "subscriptions": []}
 
-    # Check if expired (handle timezone-naive datetimes from SQLite)
-    if sub.expires_at:
+    now = datetime.now(timezone.utc)
+    changed = False
+    active_valid: list[Subscription] = []
+    for sub in subs:
+        if not sub.expires_at:
+            continue
         exp = sub.expires_at
         if exp.tzinfo is None:
             exp = exp.replace(tzinfo=timezone.utc)
-        if exp < datetime.now(timezone.utc):
+        if exp < now:
             sub.status = SubscriptionStatus.EXPIRED
-            await db.commit()
-            return {"active": False, "subscription": None}
+            changed = True
+        else:
+            active_valid.append(sub)
+
+    if changed:
+        await db.commit()
+
+    if not active_valid:
+        return {"active": False, "subscription": None, "subscriptions": []}
 
     return {
         "active": True,
-        "subscription": SubscriptionPublic.model_validate(sub),
+        "subscription": SubscriptionPublic.model_validate(active_valid[0]),
+        "subscriptions": [SubscriptionPublic.model_validate(s) for s in active_valid],
     }
 
 
