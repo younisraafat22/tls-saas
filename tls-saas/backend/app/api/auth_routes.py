@@ -54,8 +54,18 @@ def _user_to_public(user: User) -> UserPublic:
     seen_plans: set[str] = set()
     sub_expires = None
     now = datetime.now(timezone.utc)
+    # If a subscription was created from a desktop-license payment and that license
+    # is later revoked/rejected, suppress that subscription from active plan display.
+    desktop_payment_status_by_sub: dict[int, PaymentStatus] = {}
+    for pay in (user.payments or []):
+        if pay.subscription_id and pay.hardware_id:
+            desktop_payment_status_by_sub[pay.subscription_id] = pay.status
+
     for sub in (user.subscriptions or []):
         if sub.status.value == "active" and sub.plan:
+            linked_status = desktop_payment_status_by_sub.get(sub.id)
+            if linked_status and linked_status != PaymentStatus.APPROVED:
+                continue
             exp = sub.expires_at
             if exp and exp.tzinfo is None:
                 exp = exp.replace(tzinfo=timezone.utc)

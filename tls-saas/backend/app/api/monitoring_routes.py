@@ -273,6 +273,12 @@ async def license_deactivate(
         return {"success": False, "error": "Hardware ID mismatch"}
 
     payment.status = PaymentStatus.REJECTED
+    # If this license came from a web payment flow, also cancel linked subscription
+    if payment.subscription_id:
+        sub_result = await db.execute(select(Subscription).where(Subscription.id == payment.subscription_id))
+        sub = sub_result.scalar_one_or_none()
+        if sub and sub.status in (SubscriptionStatus.ACTIVE, SubscriptionStatus.PENDING_PAYMENT):
+            sub.status = SubscriptionStatus.CANCELLED
     payment.admin_notes = (payment.admin_notes or "") + f"\nDeactivated by user at {datetime.now(timezone.utc).isoformat()}"
     await db.commit()
 
@@ -297,10 +303,26 @@ async def monitoring_status(
         .order_by(Subscription.expires_at.desc())
     )
     all_subs = subs_result.scalars().all()
+    # Suppress subscriptions linked to desktop-license payments that are no longer approved.
+    desktop_linked_payment_rows = await db.execute(
+        select(Payment.subscription_id, Payment.status).where(
+            Payment.user_id == user.id,
+            Payment.subscription_id.isnot(None),
+            Payment.hardware_id.isnot(None),
+        )
+    )
+    desktop_status_by_sub: dict[int, PaymentStatus] = {
+        int(sub_id): status
+        for sub_id, status in desktop_linked_payment_rows.all()
+        if sub_id is not None
+    }
     # Filter to truly active (not expired)
     now = datetime.now(timezone.utc)
     active_subs = []
     for s in all_subs:
+        linked_status = desktop_status_by_sub.get(s.id)
+        if linked_status and linked_status != PaymentStatus.APPROVED:
+            continue
         exp = s.expires_at
         if exp:
             if exp.tzinfo is None:

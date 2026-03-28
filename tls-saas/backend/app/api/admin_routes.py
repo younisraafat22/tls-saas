@@ -238,10 +238,17 @@ async def list_users(
         now = datetime.now(timezone.utc)
         active_entitlements: list[dict] = []
         pending_entitlements: list[dict] = []
+        desktop_payment_status_by_sub: dict[int, PaymentStatus] = {}
+        for p in (u.payments or []):
+            if p.subscription_id and p.hardware_id:
+                desktop_payment_status_by_sub[p.subscription_id] = p.status
 
         # Web subscriptions
         for s in (u.subscriptions or []):
             if not s.plan:
+                continue
+            linked_status = desktop_payment_status_by_sub.get(s.id)
+            if linked_status and linked_status != PaymentStatus.APPROVED:
                 continue
             exp = s.expires_at
             if exp and exp.tzinfo is None:
@@ -1140,8 +1147,11 @@ async def revoke_license(
     payment.admin_notes = ((payment.admin_notes or "") + " [REVOKED]").strip()
     payment.processed_at = datetime.now(timezone.utc)
 
-    # Also cancel the linked subscription so it disappears from user management
-    if payment.subscription and payment.subscription.status == SubscriptionStatus.ACTIVE:
+    # Also cancel the linked subscription so it disappears from user/dashboard views
+    if payment.subscription and payment.subscription.status in (
+        SubscriptionStatus.ACTIVE,
+        SubscriptionStatus.PENDING_PAYMENT,
+    ):
         payment.subscription.status = SubscriptionStatus.CANCELLED
 
     db.add(ActivityLog(
@@ -1221,13 +1231,13 @@ async def delete_payment(
         else:
             db.add(SystemSetting(key="revoked_license_keys", value=_json.dumps([payment.license_key])))
 
-    # Cancel the linked subscription if it is still pending
-    if payment.subscription_id and payment.status == PaymentStatus.PENDING:
+    # Cancel any linked subscription (pending or active) when deleting payment/license record
+    if payment.subscription_id:
         sub_result = await db.execute(
             select(Subscription).where(Subscription.id == payment.subscription_id)
         )
         sub = sub_result.scalar_one_or_none()
-        if sub and sub.status == SubscriptionStatus.PENDING_PAYMENT:
+        if sub and sub.status in (SubscriptionStatus.PENDING_PAYMENT, SubscriptionStatus.ACTIVE):
             sub.status = SubscriptionStatus.CANCELLED
 
     await db.delete(payment)

@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models import (
     User, Plan, Subscription, Branch, UserBranchMonitor,
-    PlanType, SubscriptionStatus, ServiceType,
+    PlanType, SubscriptionStatus, ServiceType, Payment, PaymentStatus,
 )
 from app.auth import get_current_user
 from app.schemas import (
@@ -67,10 +67,29 @@ async def active_subscription(
     if not subs:
         return {"active": False, "subscription": None, "subscriptions": []}
 
+    desktop_linked_rows = await db.execute(
+        select(Payment.subscription_id, Payment.status).where(
+            Payment.user_id == user.id,
+            Payment.subscription_id.isnot(None),
+            Payment.hardware_id.isnot(None),
+        )
+    )
+    desktop_status_by_sub: dict[int, PaymentStatus] = {
+        int(sub_id): status
+        for sub_id, status in desktop_linked_rows.all()
+        if sub_id is not None
+    }
+
     now = datetime.now(timezone.utc)
     changed = False
     active_valid: list[Subscription] = []
     for sub in subs:
+        linked_status = desktop_status_by_sub.get(sub.id)
+        if linked_status and linked_status != PaymentStatus.APPROVED:
+            if sub.status in (SubscriptionStatus.ACTIVE, SubscriptionStatus.PENDING_PAYMENT):
+                sub.status = SubscriptionStatus.CANCELLED
+                changed = True
+            continue
         if not sub.expires_at:
             continue
         exp = sub.expires_at
