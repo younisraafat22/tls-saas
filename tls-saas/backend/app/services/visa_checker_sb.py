@@ -17,6 +17,7 @@ import sys
 import time
 import json
 import hashlib
+import urllib.request
 from datetime import datetime
 from typing import Optional
 
@@ -41,12 +42,149 @@ class VisaCheckerSB:
     """
 
     STATE_DIR = os.path.join("data", "sb_cookies")
+    COOKIE_REUSE_EVERY_N_CHECKS = 3  # Reuse for first N-1 checks, refresh on Nth.
+    WARP_CLI_WINDOWS = r"C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe"
+    WARP_CLI_LINUX = "/usr/bin/warp-cli"
+
+    def __init__(self):
+        self._warp_enabled = False
 
     def _cookie_state_path(self, service_type: str, branch_url: str, tls_email: str) -> str:
         os.makedirs(self.STATE_DIR, exist_ok=True)
         key = f"{service_type}|{branch_url}|{(tls_email or '').strip().lower()}"
         digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
         return os.path.join(self.STATE_DIR, f"{digest}.json")
+
+    def _cookie_counter_path(self, state_path: str) -> str:
+        return f"{state_path}.counter"
+
+    def _next_check_number(self, state_path: str) -> int:
+        """
+        Persisted per account+branch check counter used to control cookie reuse cadence.
+        """
+        counter_path = self._cookie_counter_path(state_path)
+        current = 0
+        try:
+            if os.path.exists(counter_path):
+                with open(counter_path, "r", encoding="utf-8") as f:
+                    raw = (f.read() or "").strip()
+                    if raw.isdigit():
+                        current = int(raw)
+        except Exception:
+            current = 0
+
+        current += 1
+        try:
+            with open(counter_path, "w", encoding="utf-8") as f:
+                f.write(str(current))
+        except Exception:
+            pass
+        return current
+
+    # -- WARP helpers -----------------------------------------------------
+
+    def _warp_cli_path(self) -> str:
+        if sys.platform == "win32":
+            return self.WARP_CLI_WINDOWS
+        return self.WARP_CLI_LINUX
+
+    def _warp_cmd(self, *args) -> list:
+        cli = self._warp_cli_path()
+        if sys.platform != "win32":
+            return [cli, "--accept-tos"] + list(args)
+        return [cli] + list(args)
+
+    def _warp_available(self) -> bool:
+        cli = self._warp_cli_path()
+        if not os.path.isfile(cli):
+            return False
+        no_win = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        try:
+            r = subprocess.run(
+                self._warp_cmd("status"),
+                capture_output=True, text=True, timeout=5,
+                creationflags=no_win,
+            )
+            output = (r.stdout or "") + (r.stderr or "")
+            if "Registration Missing" in output or "Terms of Service" in output:
+                return False
+            return True
+        except Exception:
+            return False
+
+    def _warp_connect(self, log) -> bool:
+        no_win = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        try:
+            subprocess.run(
+                self._warp_cmd("connect"),
+                capture_output=True, timeout=15,
+                creationflags=no_win,
+            )
+        except Exception as exc:
+            log(f"WARP connect failed: {exc}", "warn")
+            return False
+
+        deadline = time.time() + 25
+        while time.time() < deadline:
+            try:
+                r = subprocess.run(
+                    self._warp_cmd("status"),
+                    capture_output=True, text=True, timeout=5,
+                    creationflags=no_win,
+                )
+                status = r.stdout or ""
+                if "Connected" in status and "Connecting" not in status:
+                    self._warp_enabled = True
+                    return True
+            except Exception:
+                pass
+            time.sleep(1)
+        log("WARP did not reach Connected state in time", "warn")
+        return False
+
+    def _warp_disconnect(self) -> None:
+        if not self._warp_enabled:
+            return
+        no_win = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        try:
+            subprocess.run(
+                self._warp_cmd("disconnect"),
+                capture_output=True, timeout=10,
+                creationflags=no_win,
+            )
+        except Exception:
+            pass
+        self._warp_enabled = False
+
+    def _get_public_ip(self) -> str:
+        try:
+            with urllib.request.urlopen("https://api.ipify.org", timeout=6) as resp:
+                return resp.read().decode().strip()
+        except Exception:
+            return ""
+
+    def _warp_rotate_ip(self, log) -> bool:
+        before_ip = self._get_public_ip()
+        if before_ip:
+            log(f"Public IP before rotation: {before_ip}")
+
+        self._warp_disconnect()
+        time.sleep(2)
+
+        for attempt in range(1, 4):
+            if not self._warp_connect(log):
+                continue
+            after_ip = self._get_public_ip()
+            if after_ip:
+                log(f"Public IP after rotation attempt {attempt}: {after_ip}")
+            if before_ip and after_ip and before_ip == after_ip:
+                log("WARP reconnected but IP did not change; retrying rotation", "warn")
+                self._warp_disconnect()
+                time.sleep(2)
+                continue
+            return True
+        log("Failed to rotate to a different IP via WARP", "warn")
+        return False
 
     def _save_cookies(self, driver, state_path: str, log) -> None:
         try:
@@ -129,6 +267,8 @@ class VisaCheckerSB:
         tls_password: str,
         branch_name: str = "",
         service_type: str = "visa",
+        ip_rotation_retries_left: int = 1,
+        check_no_override: Optional[int] = None,
     ) -> dict:
         result = {
             "slots_available": False,
@@ -153,6 +293,9 @@ class VisaCheckerSB:
         try:
             from seleniumbase import Driver
             state_path = self._cookie_state_path(service_type, branch_url, tls_email)
+            check_no = check_no_override if check_no_override is not None else self._next_check_number(state_path)
+            refresh_every = max(2, int(self.COOKIE_REUSE_EVERY_N_CHECKS))
+            force_fresh_session = (check_no % refresh_every == 0)
 
             # IMPORTANT: UC mode CANNOT bypass Cloudflare/Turnstile in headless=True.
             # Use the real desktop display (:0) if available, otherwise Xvfb.
@@ -196,7 +339,12 @@ class VisaCheckerSB:
 
             # Try to reuse saved authenticated session first.
             reused_session = False
-            if self._load_cookies(driver, state_path, log):
+            if force_fresh_session:
+                log(
+                    f"Cookie policy: check #{check_no} forces fresh session "
+                    f"(refresh every {refresh_every} checks)"
+                )
+            elif self._load_cookies(driver, state_path, log):
                 try:
                     driver.refresh()
                 except Exception:
@@ -264,6 +412,24 @@ class VisaCheckerSB:
                 # Verify login
                 if not self._verify_login(driver, tls_email, log):
                     if self._has_cloudflare(driver):
+                        if ip_rotation_retries_left > 0 and self._warp_available():
+                            log("Cloudflare/captcha blocked login — rotating WARP IP...", "warn")
+                            if self._warp_rotate_ip(log):
+                                log("WARP rotated IP — restarting fresh browser session now", "warn")
+                                try:
+                                    driver.quit()
+                                except Exception:
+                                    pass
+                                driver = None
+                                return self.check(
+                                    branch_url=branch_url,
+                                    tls_email=tls_email,
+                                    tls_password=tls_password,
+                                    branch_name=branch_name,
+                                    service_type=service_type,
+                                    ip_rotation_retries_left=ip_rotation_retries_left - 1,
+                                    check_no_override=check_no,
+                                )
                         result["error"] = "captcha_bypass_failed"
                         log("Login blocked by Cloudflare captcha — will retry later", "warn")
                     else:
