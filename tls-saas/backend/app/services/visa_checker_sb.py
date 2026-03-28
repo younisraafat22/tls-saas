@@ -42,6 +42,7 @@ class VisaCheckerSB:
     """
 
     STATE_DIR = os.path.join("data", "sb_cookies")
+    PROFILE_DIR = os.path.join("data", "sb_profiles")
     COOKIE_REUSE_EVERY_N_CHECKS = 3  # Reuse for first N-1 checks, refresh on Nth.
     WARP_CLI_WINDOWS = r"C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe"
     WARP_CLI_LINUX = "/usr/bin/warp-cli"
@@ -54,6 +55,14 @@ class VisaCheckerSB:
         key = f"{service_type}|{branch_url}|{(tls_email or '').strip().lower()}"
         digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
         return os.path.join(self.STATE_DIR, f"{digest}.json")
+
+    def _profile_dir_for_email(self, service_type: str, tls_email: str) -> str:
+        os.makedirs(self.PROFILE_DIR, exist_ok=True)
+        key = f"{service_type}|{(tls_email or '').strip().lower()}"
+        digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
+        out = os.path.join(self.PROFILE_DIR, digest)
+        os.makedirs(out, exist_ok=True)
+        return out
 
     def _cookie_counter_path(self, state_path: str) -> str:
         return f"{state_path}.counter"
@@ -295,6 +304,7 @@ class VisaCheckerSB:
         try:
             from seleniumbase import Driver
             state_path = self._cookie_state_path(service_type, branch_url, tls_email)
+            profile_dir = self._profile_dir_for_email(service_type, tls_email)
             check_no = check_no_override if check_no_override is not None else self._next_check_number(state_path)
             refresh_every = max(2, int(self.COOKIE_REUSE_EVERY_N_CHECKS))
             force_fresh_session = force_fresh_override or (check_no % refresh_every == 0)
@@ -328,6 +338,7 @@ class VisaCheckerSB:
                 headless=False,   # Must be False — headless is detectable by Cloudflare
                 no_sandbox=True,
                 disable_gpu=True,
+                user_data_dir=profile_dir,
             )
             driver.set_page_load_timeout(90)
             driver.implicitly_wait(3)

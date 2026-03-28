@@ -11,6 +11,7 @@ import sys
 import tempfile
 import requests as http_requests
 from datetime import datetime, timedelta, timezone
+import hashlib
 from selenium import webdriver
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
@@ -95,12 +96,20 @@ _REALISTIC_VIEWPORTS = [
 ]
 
 
-def _get_chrome_profile_dir() -> str:
+def _get_chrome_profile_dir(tls_email: str | None = None, service_type: str | None = None) -> str:
     """Return a persistent Chrome profile dir inside AppData.
     Re-using the same profile across sessions means Google sees accumulated
     browsing history and cookies, making the browser look like a real user."""
     from config import BASE_DIR
-    profile_dir = os.path.join(str(BASE_DIR), "chrome_profile")
+    profile_root = os.path.join(str(BASE_DIR), "chrome_profile")
+    email_norm = (tls_email or "").strip().lower()
+    svc_norm = (service_type or "").strip().lower()
+    if email_norm:
+        key = f"{svc_norm}|{email_norm}" if svc_norm else email_norm
+        digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:20]
+        profile_dir = os.path.join(profile_root, digest)
+    else:
+        profile_dir = os.path.join(profile_root, "default")
     os.makedirs(profile_dir, exist_ok=True)
     return profile_dir
 
@@ -508,9 +517,10 @@ class TLSCheckerService:
         except Exception as e:
             print(f"[Checker] ⚠️ Fingerprint verification failed: {e}")
 
-    def _setup_driver(self):
+    def _setup_driver(self, tls_email: str | None = None, service_type: str | None = None):
         """Setup Selenium driver"""
         try:
+            profile_dir = _get_chrome_profile_dir(tls_email=tls_email, service_type=service_type)
 
             # Record existing Chrome windows BEFORE launch so we can
             # identify the new one afterwards (for the window hider).
@@ -583,7 +593,7 @@ class TLSCheckerService:
                         "driver_version": driver_ver,
                         # user_data_dir: persistent profile so Google sees
                         # accumulated history/cookies (looks like a real user).
-                        "user_data_dir": _get_chrome_profile_dir(),
+                        "user_data_dir": profile_dir,
                         # Comma-separated chromium args accepted by SeleniumBase.
                         "chromium_arg": (
                             "--disable-features=CalculateNativeWinOcclusion"
@@ -646,7 +656,7 @@ class TLSCheckerService:
                 options.add_argument('--no-sandbox')
                 options.add_argument('--disable-features=CalculateNativeWinOcclusion')
                 # Persistent profile — accumulates cookies/history across sessions
-                options.add_argument(f'--user-data-dir={_get_chrome_profile_dir()}')
+                options.add_argument(f'--user-data-dir={profile_dir}')
                 options.add_experimental_option("prefs", download_prefs)
                 # Randomised viewport so device dimensions vary each session
                 _vw_uc, _vh_uc = random.choice(_REALISTIC_VIEWPORTS)
@@ -708,7 +718,7 @@ class TLSCheckerService:
             options.add_argument('--disable-logging')
             options.add_argument('--disable-features=CalculateNativeWinOcclusion')
             # Persistent profile — accumulates cookies/history across sessions
-            options.add_argument(f'--user-data-dir={_get_chrome_profile_dir()}')
+            options.add_argument(f'--user-data-dir={profile_dir}')
             options.add_experimental_option("prefs", download_prefs)
             # Randomised viewport so device dimensions vary each session
             _vw_fb, _vh_fb = random.choice(_REALISTIC_VIEWPORTS)
@@ -2815,7 +2825,7 @@ class TLSCheckerService:
             if not browser_reused and not login_success:
                 # Setup browser (only if we don't already have a live one)
                 if self.driver is None:
-                    if not self._setup_driver():
+                    if not self._setup_driver(tls_email=tls_email, service_type=service_type):
                         return False  # Retry immediately
 
                     # Override document.visibilityState/hidden on every future page so
@@ -2877,7 +2887,7 @@ class TLSCheckerService:
                     self._log("⚠️ Reused session navigation failed — retrying once with fresh login session...")
                     self._cleanup_driver()
                     # Retry once in the same cycle with a clean browser + full login flow.
-                    if not self._setup_driver():
+                    if not self._setup_driver(tls_email=tls_email, service_type=service_type):
                         return False
                     self._inject_visibility_override()
                     self._update_progress("Re-logging with fresh session...", 0.65)
@@ -3127,3 +3137,4 @@ class TLSCheckerService:
 
 # Global checker instance (will be initialized per user)
 checker_service = None
+

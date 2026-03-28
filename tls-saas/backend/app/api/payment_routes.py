@@ -4,15 +4,15 @@ Payment Routes — Submit payment proof, check status
 
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models import (
     User, Plan, Subscription, Payment, Branch,
-    SubscriptionStatus, PaymentStatus, UserCredential, ServiceType, PlanType, AdminNotification,
+    SubscriptionStatus, PaymentStatus, UserCredential, ServiceType, PlanType, AdminNotification, ActivityLog,
 )
-from app.services.checker import encrypt_credential
+from app.services.checker import encrypt_credential, decrypt_credential
 from app.auth import get_current_user
 from app.schemas import (
     PaymentSubmitRequest, PaymentPublic, MessageResponse,
@@ -20,6 +20,7 @@ from app.schemas import (
 from app.websocket import ws_manager
 
 router = APIRouter(prefix="/api/payments", tags=["payments"])
+TLS_EMAIL_CHANGE_LIMIT = 2
 
 
 @router.post("/submit", response_model=MessageResponse)
@@ -131,6 +132,33 @@ async def submit_payment(
                 enc_email = encrypt_credential(body.tls_email.strip())
                 enc_pass = encrypt_credential(body.tls_password.strip())
                 if cred:
+                    action_name = f"tls_credential_email_changed_{svc.value}"
+                    old_email = ""
+                    try:
+                        old_email = (decrypt_credential(cred.email_encrypted) or "").strip().lower()
+                    except Exception:
+                        old_email = ""
+                    new_email = body.tls_email.strip().lower()
+                    if old_email and old_email != new_email:
+                        cnt_result = await db.execute(
+                            select(func.count(ActivityLog.id)).where(
+                                ActivityLog.actor_id == user.id,
+                                ActivityLog.action == action_name,
+                            )
+                        )
+                        change_count = int(cnt_result.scalar() or 0)
+                        if change_count >= TLS_EMAIL_CHANGE_LIMIT:
+                            continue
+                        db.add(ActivityLog(
+                            actor_id=user.id,
+                            action=action_name,
+                            details={
+                                "service_type": svc.value,
+                                "old_email": old_email,
+                                "new_email": new_email,
+                                "source": "payment_submit",
+                            },
+                        ))
                     cred.email_encrypted = enc_email
                     cred.password_encrypted = enc_pass
                     cred.is_active = True

@@ -1058,11 +1058,35 @@ def can_change_tls_email(new_email: str) -> tuple[bool, str]:
             return True, "First TLS email setup allowed"
         
         current_count = settings.tls_email_change_count or 0
-        
+        target_email = (new_email or "").strip().lower()
+
         # Check if same email (no increment needed)
-        if settings.tls_email and settings.tls_email.lower() == new_email.lower():
+        if settings.tls_email and settings.tls_email.lower() == target_email:
             return True, "Same TLS email, no change needed"
-        
+
+        # Enforce max distinct TLS emails allowed for this device.
+        # Example with max=2: user can use at most 2 different TLS emails total.
+        used_emails: set[str] = set()
+        if settings.tls_email:
+            used_emails.add(settings.tls_email.strip().lower())
+        try:
+            history = json.loads(settings.tls_email_history or "[]")
+            if isinstance(history, list):
+                for item in history:
+                    if not isinstance(item, dict):
+                        continue
+                    old_e = (item.get("old_email") or "").strip().lower()
+                    new_e = (item.get("new_email") or "").strip().lower()
+                    if old_e:
+                        used_emails.add(old_e)
+                    if new_e:
+                        used_emails.add(new_e)
+        except Exception:
+            pass
+
+        if target_email and target_email not in used_emails and len(used_emails) >= max_emails:
+            return False, f"TLS email limit reached. Maximum {max_emails} different TLS email(s) allowed per device."
+
         # Check if limit reached
         if current_count >= max_emails:
             return False, f"TLS email change limit reached. Maximum {max_emails} TLS credential email(s) allowed per device."
