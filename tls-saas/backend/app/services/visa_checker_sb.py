@@ -269,6 +269,8 @@ class VisaCheckerSB:
         service_type: str = "visa",
         ip_rotation_retries_left: int = 1,
         check_no_override: Optional[int] = None,
+        force_fresh_override: bool = False,
+        fresh_session_retry_left: int = 1,
     ) -> dict:
         result = {
             "slots_available": False,
@@ -295,7 +297,7 @@ class VisaCheckerSB:
             state_path = self._cookie_state_path(service_type, branch_url, tls_email)
             check_no = check_no_override if check_no_override is not None else self._next_check_number(state_path)
             refresh_every = max(2, int(self.COOKIE_REUSE_EVERY_N_CHECKS))
-            force_fresh_session = (check_no % refresh_every == 0)
+            force_fresh_session = force_fresh_override or (check_no % refresh_every == 0)
 
             # IMPORTANT: UC mode CANNOT bypass Cloudflare/Turnstile in headless=True.
             # Use the real desktop display (:0) if available, otherwise Xvfb.
@@ -446,6 +448,27 @@ class VisaCheckerSB:
 
             # Navigate to booking
             if not self._navigate_to_booking(driver, log, branch_url, service_type=service_type):
+                if reused_session and fresh_session_retry_left > 0:
+                    log(
+                        "Reused session navigation failed — retrying once with fresh login session",
+                        "warn",
+                    )
+                    try:
+                        driver.quit()
+                    except Exception:
+                        pass
+                    driver = None
+                    return self.check(
+                        branch_url=branch_url,
+                        tls_email=tls_email,
+                        tls_password=tls_password,
+                        branch_name=branch_name,
+                        service_type=service_type,
+                        ip_rotation_retries_left=ip_rotation_retries_left,
+                        check_no_override=check_no,
+                        force_fresh_override=True,
+                        fresh_session_retry_left=fresh_session_retry_left - 1,
+                    )
                 # Check logs for specific "no application" error
                 no_app_logs = [l for l in result["logs"] if "no application" in l.get("message", "").lower()]
                 if no_app_logs:

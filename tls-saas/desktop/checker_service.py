@@ -2873,8 +2873,33 @@ class TLSCheckerService:
             # Navigate to booking
             self._update_progress("Opening application...", 0.75)
             if not self._navigate_to_booking(service_type=service_type):
-                self._cleanup_driver()
-                return False  # Retry immediately
+                if browser_reused:
+                    self._log("⚠️ Reused session navigation failed — retrying once with fresh login session...")
+                    self._cleanup_driver()
+                    # Retry once in the same cycle with a clean browser + full login flow.
+                    if not self._setup_driver():
+                        return False
+                    self._inject_visibility_override()
+                    self._update_progress("Re-logging with fresh session...", 0.65)
+                    login_success, login_error = self._login(
+                        settings.tls_email, tls_password,
+                        branch_url=branch_url, service_type=service_type,
+                        is_retry=True,
+                    )
+                    if login_success:
+                        self._hide_chrome_window(force=True)
+                        self._update_progress("Opening application...", 0.75)
+                        if self._navigate_to_booking(service_type=service_type):
+                            pass
+                        else:
+                            self._cleanup_driver()
+                            return False
+                    else:
+                        self._cleanup_driver()
+                        return False
+                else:
+                    self._cleanup_driver()
+                    return False  # Retry immediately
             
             # Check slots
             self._update_progress("Checking months appointments...", 0.95)
