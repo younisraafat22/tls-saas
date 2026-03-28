@@ -54,8 +54,8 @@ def _user_to_public(user: User) -> UserPublic:
     seen_plans: set[str] = set()
     sub_expires = None
     now = datetime.now(timezone.utc)
-    # If a subscription has linked payment rows, require at least one approved payment.
-    # If it has no linked payments, keep legacy/manual subscriptions visible.
+    # Only surface subscriptions that still have at least one approved linked payment.
+    # This hides stale/orphaned subscription rows left behind after payment/license removal.
     payment_statuses_by_sub: dict[int, list[PaymentStatus]] = {}
     for pay in (user.payments or []):
         if pay.subscription_id:
@@ -64,7 +64,7 @@ def _user_to_public(user: User) -> UserPublic:
     for sub in (user.subscriptions or []):
         if sub.status.value == "active" and sub.plan:
             linked_statuses = payment_statuses_by_sub.get(sub.id, [])
-            if linked_statuses and PaymentStatus.APPROVED not in linked_statuses:
+            if not linked_statuses or PaymentStatus.APPROVED not in linked_statuses:
                 continue
             exp = sub.expires_at
             if exp and exp.tzinfo is None:

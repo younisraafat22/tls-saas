@@ -84,7 +84,7 @@ async def active_subscription(
     active_valid: list[Subscription] = []
     for sub in subs:
         linked_statuses = payment_statuses_by_sub.get(sub.id, [])
-        if linked_statuses and PaymentStatus.APPROVED not in linked_statuses:
+        if not linked_statuses or PaymentStatus.APPROVED not in linked_statuses:
             if sub.status in (SubscriptionStatus.ACTIVE, SubscriptionStatus.PENDING_PAYMENT):
                 sub.status = SubscriptionStatus.CANCELLED
                 changed = True

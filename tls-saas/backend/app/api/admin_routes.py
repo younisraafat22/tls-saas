@@ -248,7 +248,7 @@ async def list_users(
             if not s.plan:
                 continue
             linked_statuses = payment_statuses_by_sub.get(s.id, [])
-            if linked_statuses and PaymentStatus.APPROVED not in linked_statuses:
+            if not linked_statuses or PaymentStatus.APPROVED not in linked_statuses:
                 continue
             exp = s.expires_at
             if exp and exp.tzinfo is None:

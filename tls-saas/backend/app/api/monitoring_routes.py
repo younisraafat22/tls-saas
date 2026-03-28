@@ -303,7 +303,7 @@ async def monitoring_status(
         .order_by(Subscription.expires_at.desc())
     )
     all_subs = subs_result.scalars().all()
-    # If a subscription has linked payments, require at least one approved one.
+    # Only keep subscriptions that still have at least one approved linked payment.
     # This hides stale subscriptions after payment/license removal.
     linked_payment_rows = await db.execute(
         select(Payment.subscription_id, Payment.status).where(
@@ -321,7 +321,7 @@ async def monitoring_status(
     active_subs = []
     for s in all_subs:
         linked_statuses = payment_statuses_by_sub.get(s.id, [])
-        if linked_statuses and PaymentStatus.APPROVED not in linked_statuses:
+        if not linked_statuses or PaymentStatus.APPROVED not in linked_statuses:
             continue
         exp = s.expires_at
         if exp:
