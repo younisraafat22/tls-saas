@@ -238,17 +238,17 @@ async def list_users(
         now = datetime.now(timezone.utc)
         active_entitlements: list[dict] = []
         pending_entitlements: list[dict] = []
-        desktop_payment_status_by_sub: dict[int, PaymentStatus] = {}
+        payment_statuses_by_sub: dict[int, list[PaymentStatus]] = {}
         for p in (u.payments or []):
-            if p.subscription_id and p.hardware_id:
-                desktop_payment_status_by_sub[p.subscription_id] = p.status
+            if p.subscription_id:
+                payment_statuses_by_sub.setdefault(p.subscription_id, []).append(p.status)
 
         # Web subscriptions
         for s in (u.subscriptions or []):
             if not s.plan:
                 continue
-            linked_status = desktop_payment_status_by_sub.get(s.id)
-            if linked_status and linked_status != PaymentStatus.APPROVED:
+            linked_statuses = payment_statuses_by_sub.get(s.id, [])
+            if linked_statuses and PaymentStatus.APPROVED not in linked_statuses:
                 continue
             exp = s.expires_at
             if exp and exp.tzinfo is None:

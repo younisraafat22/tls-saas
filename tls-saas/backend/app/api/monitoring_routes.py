@@ -303,25 +303,25 @@ async def monitoring_status(
         .order_by(Subscription.expires_at.desc())
     )
     all_subs = subs_result.scalars().all()
-    # Suppress subscriptions linked to desktop-license payments that are no longer approved.
-    desktop_linked_payment_rows = await db.execute(
+    # If a subscription has linked payments, require at least one approved one.
+    # This hides stale subscriptions after payment/license removal.
+    linked_payment_rows = await db.execute(
         select(Payment.subscription_id, Payment.status).where(
             Payment.user_id == user.id,
             Payment.subscription_id.isnot(None),
-            Payment.hardware_id.isnot(None),
         )
     )
-    desktop_status_by_sub: dict[int, PaymentStatus] = {
-        int(sub_id): status
-        for sub_id, status in desktop_linked_payment_rows.all()
-        if sub_id is not None
-    }
+    payment_statuses_by_sub: dict[int, list[PaymentStatus]] = {}
+    for sub_id, status in linked_payment_rows.all():
+        if sub_id is None:
+            continue
+        payment_statuses_by_sub.setdefault(int(sub_id), []).append(status)
     # Filter to truly active (not expired)
     now = datetime.now(timezone.utc)
     active_subs = []
     for s in all_subs:
-        linked_status = desktop_status_by_sub.get(s.id)
-        if linked_status and linked_status != PaymentStatus.APPROVED:
+        linked_statuses = payment_statuses_by_sub.get(s.id, [])
+        if linked_statuses and PaymentStatus.APPROVED not in linked_statuses:
             continue
         exp = s.expires_at
         if exp:

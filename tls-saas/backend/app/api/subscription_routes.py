@@ -67,25 +67,24 @@ async def active_subscription(
     if not subs:
         return {"active": False, "subscription": None, "subscriptions": []}
 
-    desktop_linked_rows = await db.execute(
+    linked_rows = await db.execute(
         select(Payment.subscription_id, Payment.status).where(
             Payment.user_id == user.id,
             Payment.subscription_id.isnot(None),
-            Payment.hardware_id.isnot(None),
         )
     )
-    desktop_status_by_sub: dict[int, PaymentStatus] = {
-        int(sub_id): status
-        for sub_id, status in desktop_linked_rows.all()
-        if sub_id is not None
-    }
+    payment_statuses_by_sub: dict[int, list[PaymentStatus]] = {}
+    for sub_id, status in linked_rows.all():
+        if sub_id is None:
+            continue
+        payment_statuses_by_sub.setdefault(int(sub_id), []).append(status)
 
     now = datetime.now(timezone.utc)
     changed = False
     active_valid: list[Subscription] = []
     for sub in subs:
-        linked_status = desktop_status_by_sub.get(sub.id)
-        if linked_status and linked_status != PaymentStatus.APPROVED:
+        linked_statuses = payment_statuses_by_sub.get(sub.id, [])
+        if linked_statuses and PaymentStatus.APPROVED not in linked_statuses:
             if sub.status in (SubscriptionStatus.ACTIVE, SubscriptionStatus.PENDING_PAYMENT):
                 sub.status = SubscriptionStatus.CANCELLED
                 changed = True
