@@ -271,11 +271,44 @@ class NotificationService:
             print(f"Windows notification failed: {e}")
             return False
     
-    def send_slots_available_notification(self, user_email: str, notification_types: list, screenshot_path: str = None):
+    def send_slots_available_notification(
+        self,
+        user_email: str,
+        notification_types: list,
+        screenshot_path: str = None,
+        *,
+        tls_disabled_month_booking_tip: bool = False,
+        tls_month_probe_example_url: str | None = None,
+    ):
         """Send notification when slots are available"""
         title = "🎉 TLS Appointments Available!"
         windows_message = "Appointment slots are now available! Log in to the TLS website immediately to book."
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        tip_html = ""
+        if tls_disabled_month_booking_tip:
+            ex_url = (tls_month_probe_example_url or "").strip()
+            ex_block = (
+                f'<p style="color:#8892b0;font-size:12px;margin:10px 0 0 0;word-break:break-all;">Example URL we used: {ex_url}</p>'
+                if ex_url
+                else ""
+            )
+            tip_html = (
+                '<div style="background:#1e2448;border:1px solid #ffaa0040;border-radius:10px;padding:14px 16px;margin:16px 0;">'
+                '<p style="color:#ffcc66;font-weight:600;margin:0 0 8px 0;font-size:14px;">'
+                "Important: TLS calendar may show some months as disabled</p>"
+                '<p style="color:#ccc;font-size:13px;line-height:1.5;margin:0;">'
+                "Slots were detected on a month that can appear greyed out in the website navigation. "
+                "To book, open your appointment booking link and edit the <strong>month=</strong> value in the address bar "
+                "(for example change <code style=\"color:#7dd3fc;\">month=05-26</code> to "
+                "<code style=\"color:#7dd3fc;\">month=06-26</code>) then press Enter to load that month."
+                "</p>"
+                f"{ex_block}"
+                "</div>"
+            )
+            windows_message = (
+                "Slots may be on a month that looks disabled on TLS. Edit month= in the booking URL if needed, then book."
+            )
 
         html = f"""<!DOCTYPE html>
 <html>
@@ -313,6 +346,7 @@ class NotificationService:
         <span class="info-label">Website</span>
         <span class="info-value">{Config.TLS_URL}</span>
       </div>
+      {tip_html}
       <p style="color: #ffaa00; margin-top: 20px; font-size: 16px;">⚡ Act fast — slots fill up within minutes!</p>
       <div style="text-align: center;">
         <a href="{Config.TLS_URL}" class="cta">Book Now →</a>
@@ -469,9 +503,37 @@ class NotificationService:
 </html>"""
         return self.send_email(user_email, subject, html)
 
-    def send_monitoring_reminder(self, user_email: str, slot_details: str = ""):
+    def send_monitoring_reminder(
+        self,
+        user_email: str,
+        slot_details: str = "",
+        *,
+        tls_disabled_month_booking_tip: bool = False,
+        tls_month_probe_example_url: str | None = None,
+    ):
         """Send 12-hour reminder that appointments are still available."""
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        tip_html = ""
+        if tls_disabled_month_booking_tip:
+            ex_url = (tls_month_probe_example_url or "").strip()
+            ex_block = (
+                f'<p style="color:#8892b0;font-size:12px;margin:10px 0 0 0;word-break:break-all;">Example URL we used: {ex_url}</p>'
+                if ex_url
+                else ""
+            )
+            tip_html = (
+                '<div style="background:#1e2448;border:1px solid #ffaa0040;border-radius:10px;padding:14px 16px;margin:16px 0;">'
+                '<p style="color:#ffcc66;font-weight:600;margin:0 0 8px 0;font-size:14px;">'
+                "Important: TLS calendar may show some months as disabled</p>"
+                '<p style="color:#ccc;font-size:13px;line-height:1.5;margin:0;">'
+                "If that month still looks greyed out, edit <strong>month=</strong> in your booking URL "
+                "(e.g. <code style=\"color:#7dd3fc;\">month=05-26</code> → <code style=\"color:#7dd3fc;\">month=06-26</code>) "
+                "and press Enter."
+                "</p>"
+                f"{ex_block}"
+                "</div>"
+            )
+
         html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -496,6 +558,7 @@ class NotificationService:
       <div style="text-align: center;"><span class="badge">REMINDER</span></div>
       <p style="font-size: 16px; margin-top: 16px;">This is a reminder that <strong>appointment slots are still available</strong> on the TLS website. We notified you 12 hours ago and haven't detected any changes.</p>
       <p style="color: #ffaa00; font-size: 15px;">⚡ If you haven't booked yet, now is the time!</p>
+      {tip_html}
       {'<p style="color: #dddddd; font-size: 13px;">Details: ' + slot_details + '</p>' if slot_details else ''}
       <p style="color: #dddddd; font-size: 12px;">Detected at: {now}</p>
       <div style="text-align: center;">

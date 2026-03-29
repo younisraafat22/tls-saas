@@ -28,6 +28,7 @@ from license_service import (
     get_license_status, activate_license, activate_trial,
     get_hardware_id, PLANS, can_check, increment_check_count,
     deactivate_license, _build_backend_urls,
+    read_dev_expiry_override, write_dev_expiry_override,
 )
 from config import Config
 from datetime import datetime, timedelta, timezone
@@ -2805,7 +2806,46 @@ class TLSApp:
                     _write_license_file(data)
                     self._show_info_snack("Dev Tools: Checks reset to 0. Restart or refresh dashboard.", color=ft.Colors.GREEN_400)
                     self.page.update()
-            
+
+            _ov = read_dev_expiry_override()
+            dev_expiry_field = ft.TextField(
+                label="Simulated license expiry (ISO, UTC)",
+                hint_text="2026-05-29T00:00:00+00:00",
+                width=_FIELD_W,
+                dense=True,
+                value=_ov.isoformat() if _ov else "",
+            )
+
+            def dev_apply_expiry(e):
+                raw = (dev_expiry_field.value or "").strip()
+                if not raw:
+                    self._show_info_snack("Enter an ISO datetime first.", color=ft.Colors.AMBER_400)
+                    self.page.update()
+                    return
+                try:
+                    dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    write_dev_expiry_override(dt)
+                    self._show_info_snack("Simulated expiry applied. Refreshing…", color=ft.Colors.GREEN_400)
+                    self.show_monitoring_page()
+                except Exception as ex:
+                    self._show_info_snack(f"Invalid date: {ex}", color=ft.Colors.RED_400)
+                    self.page.update()
+
+            def dev_expiry_plus_30(e):
+                dt = datetime.now(timezone.utc) + timedelta(days=30)
+                write_dev_expiry_override(dt)
+                dev_expiry_field.value = dt.isoformat()
+                self._show_info_snack("Set expiry to now + 30 days. Refreshing…", color=ft.Colors.GREEN_400)
+                self.show_monitoring_page()
+
+            def dev_clear_expiry_override(e):
+                write_dev_expiry_override(None)
+                dev_expiry_field.value = ""
+                self._show_info_snack("Cleared simulated expiry. Refreshing…", color=ft.Colors.GREEN_400)
+                self.show_monitoring_page()
+
             config_children.append(
                 ft.Row(
                     [
@@ -2814,6 +2854,36 @@ class TLSApp:
                         ft.FilledButton("Dev: 0 Checks", on_click=dev_reset_checks, style=ft.ButtonStyle(bgcolor="#00D9FF", color="#0A0E27"))
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                )
+            )
+            config_children.append(
+                ft.Column(
+                    [
+                        ft.Text(
+                            "Dev: test expiry without waiting — overrides displayed expiry only (local file).",
+                            size=12,
+                            color=ft.Colors.GREY_400,
+                        ),
+                        dev_expiry_field,
+                        ft.Row(
+                            [
+                                ft.FilledButton(
+                                    "Apply simulated expiry",
+                                    on_click=dev_apply_expiry,
+                                    style=ft.ButtonStyle(bgcolor="#00D9FF", color="#0A0E27"),
+                                ),
+                                ft.FilledButton(
+                                    "Now + 30 days",
+                                    on_click=dev_expiry_plus_30,
+                                    style=ft.ButtonStyle(bgcolor="#00D9FF", color="#0A0E27"),
+                                ),
+                                ft.OutlinedButton("Clear override", on_click=dev_clear_expiry_override),
+                            ],
+                            wrap=True,
+                            spacing=8,
+                        ),
+                    ],
+                    spacing=6,
                 )
             )
 

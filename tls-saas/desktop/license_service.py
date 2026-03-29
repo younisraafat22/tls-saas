@@ -22,6 +22,7 @@ logger = logging.getLogger("license")
 
 # ---------- constants ----------
 LICENSE_FILE = os.path.join(str(BASE_DIR), ".license")
+DEV_EXPIRY_OVERRIDE_FILE = os.path.join(str(BASE_DIR), ".dev_license_expiry_override")
 DEVICE_ID_FILE = os.path.join(str(BASE_DIR), ".device_id")
 
 # Persistent trial marker (to prevent trial bypass by uninstall/reinstall)
@@ -736,6 +737,36 @@ def _build_backend_urls() -> list[str]:
     return urls
 
 
+def read_dev_expiry_override() -> datetime | None:
+    """Optional dev-only simulated expiry (ISO datetime in .dev_license_expiry_override)."""
+    try:
+        if not os.path.exists(DEV_EXPIRY_OVERRIDE_FILE):
+            return None
+        with open(DEV_EXPIRY_OVERRIDE_FILE, "r", encoding="utf-8") as f:
+            raw = f.read().strip()
+        if not raw:
+            return None
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+def write_dev_expiry_override(dt: datetime | None) -> None:
+    """Set or clear simulated expiry for testing (dashboard expiry / renewal flows)."""
+    try:
+        if dt is None:
+            if os.path.exists(DEV_EXPIRY_OVERRIDE_FILE):
+                os.remove(DEV_EXPIRY_OVERRIDE_FILE)
+            return
+        with open(DEV_EXPIRY_OVERRIDE_FILE, "w", encoding="utf-8") as f:
+            f.write(dt.isoformat())
+    except Exception as exc:
+        logger.warning("[LICENSE] dev expiry override write failed: %s", exc)
+
+
 def get_license_status(force_network: bool = False) -> dict | None:
     """
     Get current license status.
@@ -755,6 +786,9 @@ def get_license_status(force_network: bool = False) -> dict | None:
     # Ensure timezone-aware for comparison (handle legacy naive datetimes)
     if expires.tzinfo is None:
         expires = expires.replace(tzinfo=timezone.utc)
+    dev_sim = read_dev_expiry_override()
+    if dev_sim is not None:
+        expires = dev_sim
     if datetime.now(timezone.utc) > expires:
         return {
             "valid": False,
@@ -847,7 +881,7 @@ def get_license_status(force_network: bool = False) -> dict | None:
     if reg_date == today and reg_count > checks_today:
         checks_today = reg_count
 
-    return {
+    out = {
         "valid": True,
         "expired": False,
         "plan": plan,
@@ -863,6 +897,9 @@ def get_license_status(force_network: bool = False) -> dict | None:
         "service_type": data.get("service_type"),
         "message": f"License: {plan_info['name']}",
     }
+    if dev_sim is not None:
+        out["dev_expiry_override_active"] = True
+    return out
 
 
 def can_check() -> tuple[bool, str]:

@@ -82,6 +82,28 @@ class EmailService:
             elif message:
                 details_html = f'<p style="color: #00d9ff; font-size: 16px;">{message}</p>'
 
+        tip_html = ""
+        if isinstance(slot_details, dict) and slot_details.get("tls_disabled_month_booking_tip"):
+            ex_url = (slot_details.get("tls_month_probe_example_url") or "").strip()
+            ex_block = (
+                f'<p style="color:#8892b0;font-size:12px;margin:10px 0 0 0;word-break:break-all;">Example URL we used: {ex_url}</p>'
+                if ex_url
+                else ""
+            )
+            tip_html = (
+                '<div style="background:#1e2448;border:1px solid #ffaa0040;border-radius:10px;padding:14px 16px;margin:16px 0;">'
+                '<p style="color:#ffcc66;font-weight:600;margin:0 0 8px 0;font-size:14px;">'
+                "Important: TLS calendar may show some months as disabled</p>"
+                '<p style="color:#ccc;font-size:13px;line-height:1.5;margin:0;">'
+                "Slots were detected on a month that can appear greyed out in the website navigation. "
+                "To book, open your appointment booking link and edit the <strong>month=</strong> value in the address bar "
+                "(for example change <code style=\"color:#7dd3fc;\">month=05-26</code> to "
+                "<code style=\"color:#7dd3fc;\">month=06-26</code>) then press Enter to load that month."
+                "</p>"
+                f"{ex_block}"
+                "</div>"
+            )
+
         html = f"""
         <!DOCTYPE html>
         <html>
@@ -111,6 +133,7 @@ class EmailService:
                         <span class="alert-badge">SLOTS OPEN</span>
                     </div>
                     {details_html}
+                    {tip_html}
                     <div class="info-row">
                         <span class="info-label">Branch</span>
                         <span class="info-value">{branch_name}</span>

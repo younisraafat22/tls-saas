@@ -182,7 +182,9 @@ class TLSCheckerService:
         self._last_error_email_time = None   # throttle error emails (max 1/hr)
         self._audio_blocked = False            # True after Google blocks audio challenges
         self._warp_enabled = False             # True when WARP is active for this session
-    
+        self._tls_disabled_month_tip = False
+        self._tls_month_probe_example_url = None  # str | None
+
     def _send_error_email_if_needed(self, error_msg: str, force: bool = False):
         now = datetime.now()
         should_send = force or (self._last_error_email_time is None or (now - self._last_error_email_time).total_seconds() >= 3600)
@@ -2248,6 +2250,8 @@ class TLSCheckerService:
         """
         try:
             self._log("Checking for appointments...")
+            self._tls_disabled_month_tip = False
+            self._tls_month_probe_example_url = None
             wait = WebDriverWait(self.driver, 10)
             any_slots_found = False
             all_results = []
@@ -2390,6 +2394,40 @@ class TLSCheckerService:
                     return self._check_slots_legacy()
 
             months_to_check.extend(initial_months)
+
+            probe_urls: set[str] = set()
+            checked_urls: set[str] = set()
+            try:
+                from tls_month_probe import (
+                    best_seed_url_for_probes_from_list,
+                    collect_month_hrefs_from_driver,
+                    synthetic_future_month_urls,
+                )
+
+                for link in self.driver.find_elements(
+                    By.CSS_SELECTOR, "a.MonthSelector_month-selector_button__An0eF"
+                ):
+                    try:
+                        cls = link.get_attribute("class") or ""
+                        if "--disabled" not in cls:
+                            continue
+                        href = link.get_attribute("href")
+                        name = (link.text or "").strip() or "Month"
+                        if href and "month=" in href:
+                            months_to_check.append((f"{name} (disabled in UI — direct URL)", href))
+                            probe_urls.add(href)
+                    except Exception:
+                        continue
+                hrefs = collect_month_hrefs_from_driver(self.driver)
+                seed = best_seed_url_for_probes_from_list(self.driver.current_url, hrefs)
+                for label, u in synthetic_future_month_urls(seed, max_extra=8):
+                    if u in probe_urls:
+                        continue
+                    months_to_check.append((label, u))
+                    probe_urls.add(u)
+            except Exception as ex:
+                self._log(f"Month probe expansion skipped: {ex}")
+
             self._log(f"📆 Starting with {len(months_to_check)} visible month(s)")
 
             # Process months until no new ones discovered
@@ -2399,8 +2437,12 @@ class TLSCheckerService:
                 # Skip if already checked
                 if month_name in checked_months:
                     continue
-                
+                if month_link and month_link in checked_urls:
+                    continue
+
                 checked_months.add(month_name)
+                if month_link:
+                    checked_urls.add(month_link)
                 self._log(f"🔍 Checking {month_name}...")
                 
                 # Navigate to the month
@@ -2539,6 +2581,10 @@ class TLSCheckerService:
                 self._log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 all_results.append(f"{month_name}: {len(available_buttons)} slots found")
 
+                if month_link and month_link in probe_urls:
+                    self._tls_disabled_month_tip = True
+                    self._tls_month_probe_example_url = month_link
+
                 # Take screenshot (save into AppData so gallery works in installed app)
                 screenshot_path = os.path.join(str(Config.BASE_DIR), f"slots_found_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
                 self.driver.save_screenshot(screenshot_path)
@@ -2553,7 +2599,9 @@ class TLSCheckerService:
                             notification_service.send_slots_available_notification(
                                 settings.notification_email,
                                 settings.get_notification_types(),
-                                screenshot_path
+                                screenshot_path,
+                                tls_disabled_month_booking_tip=self._tls_disabled_month_tip,
+                                tls_month_probe_example_url=self._tls_month_probe_example_url,
                             )
                             self._slots_notif_count = 1
                             self._slots_first_notif_time = datetime.now()
@@ -2946,7 +2994,11 @@ class TLSCheckerService:
                             s = db_n.query(UserSettings).filter(UserSettings.user_id == self.user_id).first()
                             if s and s.notification_email:
                                 notification_service.send_monitoring_reminder(
-                                    s.notification_email, message)
+                                    s.notification_email,
+                                    message,
+                                    tls_disabled_month_booking_tip=self._tls_disabled_month_tip,
+                                    tls_month_probe_example_url=self._tls_month_probe_example_url,
+                                )
                                 self._slots_notif_count = 2
                                 self._log("📧 12h reminder sent!")
                         finally:

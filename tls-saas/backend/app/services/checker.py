@@ -1713,6 +1713,46 @@ class TLSChecker:
                 return legacy_result
 
             months_to_check.extend(initial_months)
+
+            probe_urls: set[str] = set()
+            checked_urls: set[str] = set()
+            found_via_month_probe = False
+            probe_example_url = None
+            try:
+                from app.services.tls_month_probe import (
+                    best_seed_url_for_probes_from_list,
+                    synthetic_future_month_urls,
+                )
+
+                for link in await page.query_selector_all("a.MonthSelector_month-selector_button__An0eF"):
+                    try:
+                        cls = await link.get_attribute("class") or ""
+                        if "--disabled" not in cls:
+                            continue
+                        href = await link.get_attribute("href")
+                        name = ((await link.inner_text()) or "").strip() or "Month"
+                        if href and "month=" in href:
+                            months_to_check.append((f"{name} (disabled in UI — direct URL)", href))
+                            probe_urls.add(href)
+                    except Exception:
+                        continue
+                hrefs = []
+                for link in await page.query_selector_all("a[href*='appointment-booking?month=']"):
+                    try:
+                        h = await link.get_attribute("href")
+                        if h:
+                            hrefs.append(h)
+                    except Exception:
+                        continue
+                seed = best_seed_url_for_probes_from_list(page.url, hrefs)
+                for label, u in synthetic_future_month_urls(seed, max_extra=8):
+                    if u in probe_urls:
+                        continue
+                    months_to_check.append((label, u))
+                    probe_urls.add(u)
+            except Exception as ex:
+                log(f"Month probe expansion skipped: {ex}", "warn")
+
             log(f"Starting with {len(months_to_check)} visible month(s)")
 
             # ── Process each month ────────────────────────────────
@@ -1720,7 +1760,11 @@ class TLSChecker:
                 month_name, month_link = months_to_check.pop(0)
                 if month_name in checked_months:
                     continue
+                if month_link and month_link in checked_urls:
+                    continue
                 checked_months.add(month_name)
+                if month_link:
+                    checked_urls.add(month_link)
 
                 log(f"Checking {month_name}...")
 
@@ -1875,6 +1919,10 @@ class TLSChecker:
                     log(f"  {sd['day']}: {', '.join(sd['times'])}")
                 log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
+                if month_link and month_link in probe_urls:
+                    found_via_month_probe = True
+                    probe_example_url = month_link
+
                 full_slot_details.extend(slot_day_details)
                 all_results.append(f"{month_name}: {slot_count} slots found")
 
@@ -1897,6 +1945,10 @@ class TLSChecker:
                 "slots": full_slot_details,
                 "months_checked": len(checked_months),
             }
+            if found_via_month_probe:
+                details["tls_disabled_month_booking_tip"] = True
+                if probe_example_url:
+                    details["tls_month_probe_example_url"] = probe_example_url
             return True, details, "; ".join(all_results)
 
         except Exception as e:

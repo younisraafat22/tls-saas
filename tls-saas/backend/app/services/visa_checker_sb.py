@@ -27,6 +27,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 from app.config import settings
+from app.services.tls_month_probe import (
+    best_seed_url_for_probes,
+    synthetic_future_month_urls,
+)
 
 logger = logging.getLogger("visa_checker_sb")
 
@@ -957,6 +961,8 @@ class VisaCheckerSB:
 
             # Gather months
             checked_months: set[str] = set()
+            checked_urls: set[str] = set()
+            probe_urls: set[str] = set()  # disabled-UI + synthetic URLs — for email tip
             months_to_check = self._get_months(driver)
 
             # Visa fallback: build month URLs from workflow URL
@@ -979,6 +985,33 @@ class VisaCheckerSB:
                         url = f"{base_wf}/appointment-booking?month={m:02d}-{y}"
                         months_to_check.append((f"{month_names[m-1]} {y}", url))
 
+            # Months marked disabled in the UI may still open via direct URL (month= in href).
+            try:
+                for link in driver.find_elements(
+                    By.CSS_SELECTOR, "a.MonthSelector_month-selector_button__An0eF"
+                ):
+                    cls = link.get_attribute("class") or ""
+                    if "--disabled" not in cls:
+                        continue
+                    href = (link.get_attribute("href") or "").strip()
+                    name = (link.text.strip() or "Month").strip()
+                    if href and "month=" in href:
+                        months_to_check.append((f"{name} (disabled in UI — direct URL)", href))
+                        probe_urls.add(href)
+            except Exception:
+                pass
+
+            # Probe future months beyond the latest visible month=… (e.g. change 05-26 → 06-26).
+            try:
+                seed = best_seed_url_for_probes(driver, driver.current_url)
+                for label, u in synthetic_future_month_urls(seed, max_extra=8):
+                    if u in probe_urls:
+                        continue
+                    months_to_check.append((label, u))
+                    probe_urls.add(u)
+            except Exception as ex:
+                log(f"Month URL probe list skipped: {ex}", "warn")
+
             if not months_to_check:
                 body = driver.execute_script("return document.body.innerText;").lower()
                 if any(p in body for p in ["don't have any", "no slot", "not available"]):
@@ -993,12 +1026,18 @@ class VisaCheckerSB:
 
             log(f"Starting with {len(months_to_check)} month(s)")
             found_slots: list[dict] = []
+            found_via_month_probe = False
+            probe_example_url: str | None = None
 
             while months_to_check:
                 month_name, month_url = months_to_check.pop(0)
                 if month_name in checked_months:
                     continue
+                if month_url and month_url in checked_urls:
+                    continue
                 checked_months.add(month_name)
+                if month_url:
+                    checked_urls.add(month_url)
 
                 log(f"Checking {month_name}...")
 
@@ -1025,6 +1064,9 @@ class VisaCheckerSB:
                     total_times = sum(len(s.get("times", [])) for s in slots)
                     log(f"{month_name}: SLOTS FOUND — {len(slots)} day(s), {total_times} time(s)")
                     found_slots.extend(slots)
+                    if month_url and month_url in probe_urls:
+                        found_via_month_probe = True
+                        probe_example_url = month_url
                 else:
                     log(f"{month_name}: No available dates")
 
@@ -1038,11 +1080,16 @@ class VisaCheckerSB:
                     f"{s['day']}: {', '.join(s['times'][:2])}" for s in found_slots[:3]
                 )
                 msg = f"{len(found_slots)} day(s) with {total_times} slot(s) available — {preview}{'...' if len(found_slots) > 3 else ''}"
-                return True, {
+                details: dict = {
                     "slots": found_slots,
                     "message": msg,
                     "months_checked": len(checked_months),
-                }, msg
+                }
+                if found_via_month_probe:
+                    details["tls_disabled_month_booking_tip"] = True
+                    if probe_example_url:
+                        details["tls_month_probe_example_url"] = probe_example_url
+                return True, details, msg
             return False, None, "No appointments in any checked month"
 
         except Exception as e:
