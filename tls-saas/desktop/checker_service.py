@@ -2397,41 +2397,53 @@ class TLSCheckerService:
 
             probe_urls: set[str] = set()
             checked_urls: set[str] = set()
-            try:
-                from tls_month_probe import (
-                    best_seed_url_for_probes_from_list,
-                    collect_month_hrefs_from_driver,
-                    synthetic_future_month_urls,
-                )
-
-                for link in self.driver.find_elements(
-                    By.CSS_SELECTOR, "a.MonthSelector_month-selector_button__An0eF"
-                ):
-                    try:
-                        cls = link.get_attribute("class") or ""
-                        if "--disabled" not in cls:
-                            continue
-                        href = link.get_attribute("href")
-                        name = (link.text or "").strip() or "Month"
-                        if href and "month=" in href:
-                            months_to_check.append((f"{name} (disabled in UI — direct URL)", href))
-                            probe_urls.add(href)
-                    except Exception:
-                        continue
-                hrefs = collect_month_hrefs_from_driver(self.driver)
-                seed = best_seed_url_for_probes_from_list(self.driver.current_url, hrefs)
-                for label, u in synthetic_future_month_urls(seed, max_extra=8):
-                    if u in probe_urls:
-                        continue
-                    months_to_check.append((label, u))
-                    probe_urls.add(u)
-            except Exception as ex:
-                self._log(f"Month probe expansion skipped: {ex}")
+            phase2_done = False
 
             self._log(f"📆 Starting with {len(months_to_check)} visible month(s)")
 
-            # Process months until no new ones discovered
-            while months_to_check:
+            # Process months (clicks first); URL probes for months 4–5 only after normal queue drains
+            while months_to_check or (not phase2_done and not any_slots_found):
+                if not months_to_check:
+                    if any_slots_found or phase2_done:
+                        break
+                    phase2_done = True
+                    try:
+                        from tls_month_probe import (
+                            collect_month_hrefs_from_driver,
+                            fourth_fifth_probe_entries_from_links,
+                        )
+
+                        ordered_links: list[tuple[str, str, str]] = []
+                        for link in self.driver.find_elements(
+                            By.CSS_SELECTOR, "a.MonthSelector_month-selector_button__An0eF"
+                        ):
+                            try:
+                                ordered_links.append(
+                                    (
+                                        (link.get_attribute("href") or "").strip(),
+                                        link.get_attribute("class") or "",
+                                        (link.text or "").strip(),
+                                    )
+                                )
+                            except Exception:
+                                continue
+                        hrefs = collect_month_hrefs_from_driver(self.driver)
+                        phase2_list, p2 = fourth_fifth_probe_entries_from_links(
+                            ordered_links, self.driver.current_url, hrefs
+                        )
+                        probe_urls |= p2
+                        for item in phase2_list:
+                            months_to_check.append(item)
+                        if phase2_list:
+                            self._log(
+                                f"🔗 Phase 2: months 4–5 via direct URL only ({len(phase2_list)} target(s))"
+                            )
+                    except Exception as ex:
+                        self._log(f"Phase-2 month URL probes skipped: {ex}")
+                    if not months_to_check:
+                        break
+                    continue
+
                 month_name, month_link = months_to_check.pop(0)
                 
                 # Skip if already checked

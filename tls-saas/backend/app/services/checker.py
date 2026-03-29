@@ -1718,45 +1718,59 @@ class TLSChecker:
             checked_urls: set[str] = set()
             found_via_month_probe = False
             probe_example_url = None
-            try:
-                from app.services.tls_month_probe import (
-                    best_seed_url_for_probes_from_list,
-                    synthetic_future_month_urls,
-                )
-
-                for link in await page.query_selector_all("a.MonthSelector_month-selector_button__An0eF"):
-                    try:
-                        cls = await link.get_attribute("class") or ""
-                        if "--disabled" not in cls:
-                            continue
-                        href = await link.get_attribute("href")
-                        name = ((await link.inner_text()) or "").strip() or "Month"
-                        if href and "month=" in href:
-                            months_to_check.append((f"{name} (disabled in UI — direct URL)", href))
-                            probe_urls.add(href)
-                    except Exception:
-                        continue
-                hrefs = []
-                for link in await page.query_selector_all("a[href*='appointment-booking?month=']"):
-                    try:
-                        h = await link.get_attribute("href")
-                        if h:
-                            hrefs.append(h)
-                    except Exception:
-                        continue
-                seed = best_seed_url_for_probes_from_list(page.url, hrefs)
-                for label, u in synthetic_future_month_urls(seed, max_extra=8):
-                    if u in probe_urls:
-                        continue
-                    months_to_check.append((label, u))
-                    probe_urls.add(u)
-            except Exception as ex:
-                log(f"Month probe expansion skipped: {ex}", "warn")
+            phase2_done = False
 
             log(f"Starting with {len(months_to_check)} visible month(s)")
 
-            # ── Process each month ────────────────────────────────
-            while months_to_check:
+            # ── Process each month (click navigation first; URL probes for months 4–5 only after) ──
+            while months_to_check or (not phase2_done and not any_slots_found):
+                if not months_to_check:
+                    if any_slots_found or phase2_done:
+                        break
+                    phase2_done = True
+                    try:
+                        from app.services.tls_month_probe import fourth_fifth_probe_entries_from_links
+
+                        ordered_links: list[tuple[str, str, str]] = []
+                        for link in await page.query_selector_all(
+                            "a.MonthSelector_month-selector_button__An0eF"
+                        ):
+                            try:
+                                ordered_links.append(
+                                    (
+                                        ((await link.get_attribute("href")) or "").strip(),
+                                        (await link.get_attribute("class")) or "",
+                                        ((await link.inner_text()) or "").strip(),
+                                    )
+                                )
+                            except Exception:
+                                continue
+                        hrefs: list[str] = []
+                        for link in await page.query_selector_all(
+                            "a[href*='appointment-booking?month=']"
+                        ):
+                            try:
+                                h = await link.get_attribute("href")
+                                if h:
+                                    hrefs.append(h)
+                            except Exception:
+                                continue
+                        phase2_list, p2 = fourth_fifth_probe_entries_from_links(
+                            ordered_links, page.url, hrefs
+                        )
+                        probe_urls |= p2
+                        for item in phase2_list:
+                            months_to_check.append(item)
+                        if phase2_list:
+                            log(
+                                f"Phase 2: checking months 4–5 via direct URL ({len(phase2_list)} target(s))"
+                            )
+                    except Exception as ex:
+                        log(f"Phase-2 month URL probes skipped: {ex}", "warn")
+                    if not months_to_check:
+                        break
+                    continue
+
                 month_name, month_link = months_to_check.pop(0)
                 if month_name in checked_months:
                     continue

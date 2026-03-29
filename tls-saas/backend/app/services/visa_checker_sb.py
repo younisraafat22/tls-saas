@@ -28,8 +28,8 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 from app.config import settings
 from app.services.tls_month_probe import (
-    best_seed_url_for_probes,
-    synthetic_future_month_urls,
+    collect_month_hrefs_from_driver,
+    fourth_fifth_probe_entries_from_links,
 )
 
 logger = logging.getLogger("visa_checker_sb")
@@ -985,33 +985,6 @@ class VisaCheckerSB:
                         url = f"{base_wf}/appointment-booking?month={m:02d}-{y}"
                         months_to_check.append((f"{month_names[m-1]} {y}", url))
 
-            # Months marked disabled in the UI may still open via direct URL (month= in href).
-            try:
-                for link in driver.find_elements(
-                    By.CSS_SELECTOR, "a.MonthSelector_month-selector_button__An0eF"
-                ):
-                    cls = link.get_attribute("class") or ""
-                    if "--disabled" not in cls:
-                        continue
-                    href = (link.get_attribute("href") or "").strip()
-                    name = (link.text.strip() or "Month").strip()
-                    if href and "month=" in href:
-                        months_to_check.append((f"{name} (disabled in UI — direct URL)", href))
-                        probe_urls.add(href)
-            except Exception:
-                pass
-
-            # Probe future months beyond the latest visible month=… (e.g. change 05-26 → 06-26).
-            try:
-                seed = best_seed_url_for_probes(driver, driver.current_url)
-                for label, u in synthetic_future_month_urls(seed, max_extra=8):
-                    if u in probe_urls:
-                        continue
-                    months_to_check.append((label, u))
-                    probe_urls.add(u)
-            except Exception as ex:
-                log(f"Month URL probe list skipped: {ex}", "warn")
-
             if not months_to_check:
                 body = driver.execute_script("return document.body.innerText;").lower()
                 if any(p in body for p in ["don't have any", "no slot", "not available"]):
@@ -1028,8 +1001,42 @@ class VisaCheckerSB:
             found_slots: list[dict] = []
             found_via_month_probe = False
             probe_example_url: str | None = None
+            phase2_done = False
 
-            while months_to_check:
+            while months_to_check or (not phase2_done and not found_slots):
+                if not months_to_check:
+                    if found_slots or phase2_done:
+                        break
+                    phase2_done = True
+                    try:
+                        ordered_links: list[tuple[str, str, str]] = []
+                        for link in driver.find_elements(
+                            By.CSS_SELECTOR, "a.MonthSelector_month-selector_button__An0eF"
+                        ):
+                            ordered_links.append(
+                                (
+                                    (link.get_attribute("href") or "").strip(),
+                                    link.get_attribute("class") or "",
+                                    (link.text or "").strip(),
+                                )
+                            )
+                        hrefs = collect_month_hrefs_from_driver(driver)
+                        phase2_list, p2 = fourth_fifth_probe_entries_from_links(
+                            ordered_links, driver.current_url, hrefs
+                        )
+                        probe_urls |= p2
+                        for item in phase2_list:
+                            months_to_check.append(item)
+                        if phase2_list:
+                            log(
+                                f"Phase 2: checking months 4–5 via direct URL ({len(phase2_list)} target(s))"
+                            )
+                    except Exception as ex:
+                        log(f"Phase-2 month URL probes skipped: {ex}", "warn")
+                    if not months_to_check:
+                        break
+                    continue
+
                 month_name, month_url = months_to_check.pop(0)
                 if month_name in checked_months:
                     continue

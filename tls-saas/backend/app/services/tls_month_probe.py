@@ -115,6 +115,89 @@ def best_seed_url_for_probes_from_list(current_url: str, hrefs: list[str]) -> st
     return best
 
 
+def earliest_month_url_from_list(current_url: str, hrefs: list[str]) -> str:
+    """Prefer the chronologically earliest month= URL (month 1 in the strip)."""
+    candidates = [current_url] + list(hrefs)
+    best = current_url
+    best_key: tuple[int, int] | None = None
+    for u in candidates:
+        p = parse_month_param(u)
+        if not p:
+            continue
+        mm, y, _ = p
+        key = (y, mm)
+        if best_key is None or key < best_key:
+            best_key = key
+            best = u
+    return best
+
+
+def fourth_and_fifth_month_urls_from_first(first_month_url: str) -> list[tuple[str, str]]:
+    """
+    Months 4 and 5 in sequence (1-based): three and four month-steps after first_month_url's month=.
+    """
+    parsed = parse_month_param(first_month_url)
+    if not parsed:
+        return []
+    mm, y, two_digit = parsed
+    month_names = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December",
+    ]
+    cur_m, cur_y = mm, y
+    out: list[tuple[str, str]] = []
+    for _ in range(3):
+        cur_m, cur_y = increment_month(cur_m, cur_y)
+    param4 = format_month_param(cur_m, cur_y, two_digit)
+    label4 = f"{month_names[cur_m - 1]} {cur_y} (URL probe — month 4)"
+    out.append((label4, replace_month_in_url(first_month_url, param4)))
+    cur_m, cur_y = increment_month(cur_m, cur_y)
+    param5 = format_month_param(cur_m, cur_y, two_digit)
+    label5 = f"{month_names[cur_m - 1]} {cur_y} (URL probe — month 5)"
+    out.append((label5, replace_month_in_url(first_month_url, param5)))
+    return out
+
+
+def fourth_fifth_probe_entries_from_links(
+    ordered_selector_links: list[tuple[str, str, str]],
+    current_url: str,
+    hrefs: list[str],
+) -> tuple[list[tuple[str, str]], set[str]]:
+    """
+    After normal click navigation, build at most two URL probes for months 4 and 5:
+    - Prefer DOM order: 4th and 5th a.MonthSelector_month-selector_button (indices 3 and 4).
+    - If fewer than five buttons, use synthetic month= URLs (+3 / +4 steps from earliest month).
+    ordered_selector_links: (href, class, text) per MonthSelector link in document order.
+    """
+    probe_urls: set[str] = set()
+    out: list[tuple[str, str]] = []
+    if len(ordered_selector_links) >= 5:
+        for idx in (3, 4):
+            href, cls, text = ordered_selector_links[idx]
+            href = (href or "").strip()
+            if not href or "month=" not in href:
+                continue
+            name = (text or "").strip() or f"Month {idx + 1}"
+            tag = (
+                " (disabled in UI — direct URL)"
+                if "--disabled" in (cls or "")
+                else " (URL probe — month 4/5)"
+            )
+            out.append((f"{name}{tag}", href))
+            probe_urls.add(href)
+    if len(out) >= 2:
+        return out[:2], probe_urls
+
+    earliest = earliest_month_url_from_list(current_url, hrefs)
+    for label, u in fourth_and_fifth_month_urls_from_first(earliest):
+        if len(out) >= 2:
+            break
+        if u not in probe_urls:
+            out.append((label, u))
+            probe_urls.add(u)
+    return out[:2], probe_urls
+
+
 def best_seed_url_for_probes(driver, current_url: str) -> str:
     """Prefer the chronologically latest month= URL from page + current location."""
     return best_seed_url_for_probes_from_list(current_url, collect_month_hrefs_from_driver(driver))
