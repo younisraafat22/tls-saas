@@ -353,6 +353,8 @@ class DesktopEmailRecipientCheck(BaseModel):
 class DesktopHardwareRegister(BaseModel):
     """Register a desktop device id so trial builds can use email relay before the first check."""
     hardware_id: str = ""
+    tls_email_change_count: int | None = None
+    tls_emails_used: list[str] | None = None
 
 
 class AppVersionResponse(BaseModel):

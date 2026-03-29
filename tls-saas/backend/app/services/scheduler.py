@@ -1,4 +1,4 @@
-﻿"""
+"""
 Scheduler Service  Manages periodic branch checks using APScheduler.
 
 Logic:
@@ -25,12 +25,12 @@ from apscheduler.triggers.date import DateTrigger
 from sqlalchemy import select
 
 from app.config import settings
-from app.auth import create_unsubscribe_token
+from app.auth import create_unsubscribe_token, create_monitoring_choice_token
 from app.database import async_session
 from app.models import (
     Branch, CheckResult, ServiceAccount, UserBranchMonitor, UserCredential,
     User, NotificationLog, NotificationChannel, NotificationLogStatus,
-    Subscription, SubscriptionStatus, ServiceType,
+    Subscription, SubscriptionStatus, ServiceType, Plan, PlanType,
 )
 from app.services.checker import tls_checker, decrypt_credential
 from app.services.email_service import email_service
@@ -152,6 +152,30 @@ def _is_no_application_error(error: str) -> bool:
     return "no application" in err
 
 
+async def _user_has_active_premium(db, user: User) -> bool:
+    r = await db.execute(
+        select(Subscription, Plan)
+        .join(Plan, Subscription.plan_id == Plan.id)
+        .where(
+            Subscription.user_id == user.id,
+            Subscription.status == SubscriptionStatus.ACTIVE,
+            Plan.plan_type == PlanType.PREMIUM,
+        )
+        .order_by(Subscription.expires_at.desc())
+        .limit(8)
+    )
+    now = datetime.now(timezone.utc)
+    for sub, _plan in r.all():
+        exp = sub.expires_at
+        if not exp:
+            continue
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp > now:
+            return True
+    return False
+
+
 async def _notify_user_check_error(user, branch_name: str, error: str):
     """Send email to user when their check encounters login failure or no-application error."""
     try:
@@ -211,6 +235,16 @@ async def _notify_user_email(db, scheduler, user, check_result, branch, slot_det
         unsubscribe_token = create_unsubscribe_token(user.id, branch.id)
         unsubscribe_url = f"{settings.BACKEND_URL}/api/auth/unsubscribe?token={unsubscribe_token}"
 
+        monitoring_stop_url = ""
+        monitoring_continue_url = ""
+        if await _user_has_active_premium(db, user):
+            base = (settings.BACKEND_URL or "").rstrip("/")
+            if base:
+                t_stop = create_monitoring_choice_token(user.id, branch.id, "stop")
+                t_cont = create_monitoring_choice_token(user.id, branch.id, "continue")
+                monitoring_stop_url = f"{base}/api/monitoring/email-monitoring-choice?token={t_stop}"
+                monitoring_continue_url = f"{base}/api/monitoring/email-monitoring-choice?token={t_cont}"
+
         success = email_service.send_appointment_alert(
             to_email=user.email,
             branch_name=branch.name,
@@ -218,6 +252,8 @@ async def _notify_user_email(db, scheduler, user, check_result, branch, slot_det
             slot_details=slot_details,
             user_name=user.full_name,
             unsubscribe_url=unsubscribe_url,
+            monitoring_stop_url=monitoring_stop_url,
+            monitoring_continue_url=monitoring_continue_url,
         )
         db.add(NotificationLog(
             user_id=user.id,

@@ -1063,6 +1063,7 @@ class VisaCheckerSB:
                     if month_url and month_url in probe_urls:
                         found_via_month_probe = True
                         probe_example_url = month_url
+                    break
                 else:
                     log(f"{month_name}: No available dates")
 

@@ -914,6 +914,102 @@ def can_check() -> tuple[bool, str]:
     return True, ""
 
 
+def _tls_payload_emails_from_settings(settings) -> list[str]:
+    emails: set[str] = set()
+    if getattr(settings, "tls_email", None):
+        emails.add(settings.tls_email.strip().lower())
+    try:
+        history = json.loads(settings.tls_email_history or "[]")
+        if isinstance(history, list):
+            for item in history:
+                if not isinstance(item, dict):
+                    continue
+                for k in ("old_email", "new_email"):
+                    v = (item.get(k) or "").strip().lower()
+                    if v:
+                        emails.add(v)
+    except Exception:
+        pass
+    return sorted(emails)
+
+
+def _apply_tls_usage_from_server_response(data: dict) -> None:
+    """Merge server-side TLS email limits into local UserSettings (reinstall-safe)."""
+    if not data:
+        return
+    tc = data.get("tls_email_change_count")
+    tu = data.get("tls_emails_used")
+    if tc is None and not tu:
+        return
+    from database import SessionLocal, UserSettings
+
+    db = SessionLocal()
+    try:
+        settings = db.query(UserSettings).filter(UserSettings.user_id == 1).first()
+        if not settings:
+            return
+        if tc is not None:
+            settings.tls_email_change_count = max(settings.tls_email_change_count or 0, int(tc))
+        if tu and isinstance(tu, list):
+            try:
+                history = json.loads(settings.tls_email_history or "[]")
+                if not isinstance(history, list):
+                    history = []
+            except Exception:
+                history = []
+            known: set[str] = set()
+            for item in history:
+                if not isinstance(item, dict):
+                    continue
+                for k in ("old_email", "new_email"):
+                    v = (item.get(k) or "").strip().lower()
+                    if v:
+                        known.add(v)
+            if settings.tls_email:
+                known.add(settings.tls_email.strip().lower())
+            changed = False
+            for em in tu:
+                if not isinstance(em, str) or not em.strip():
+                    continue
+                e = em.strip().lower()
+                if e not in known:
+                    history.append({
+                        "old_email": "",
+                        "new_email": e,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "source": "server_sync",
+                    })
+                    known.add(e)
+                    changed = True
+            if changed:
+                settings.tls_email_history = json.dumps(history)
+        db.commit()
+    finally:
+        db.close()
+
+
+def sync_tls_email_usage_from_server() -> None:
+    """Pull TLS email usage counts from hardware_usage (same device id after reinstall)."""
+    try:
+        hw_id = get_hardware_id()
+        if not hw_id or len(str(hw_id).strip()) < 8:
+            return
+        backend_url = (getattr(Config, "BACKEND_URL", "") or "").rstrip("/")
+        if not backend_url:
+            return
+        req = urllib.request.Request(
+            f"{backend_url}/api/monitoring/hardware/{hw_id}/usage",
+            headers={"Accept": "application/json"},
+            method="GET",
+        )
+        with _safe_urlopen(req, timeout=10) as resp:
+            raw = resp.read().decode()
+            if raw:
+                _apply_tls_usage_from_server_response(json.loads(raw))
+    except Exception:
+        pass
+
+
 def register_desktop_hardware_with_backend() -> None:
     """Ensure backend has a hardware_usage row (trial email relay; idempotent)."""
     try:
@@ -923,15 +1019,29 @@ def register_desktop_hardware_with_backend() -> None:
         backend_url = (getattr(Config, "BACKEND_URL", "") or "").rstrip("/")
         if not backend_url:
             return
-        payload = json.dumps({"hardware_id": str(hw_id).strip()}).encode("utf-8")
+        body: dict = {"hardware_id": str(hw_id).strip()}
+        try:
+            from database import SessionLocal, UserSettings
+
+            db = SessionLocal()
+            s = db.query(UserSettings).filter(UserSettings.user_id == 1).first()
+            if s:
+                body["tls_email_change_count"] = s.tls_email_change_count or 0
+                body["tls_emails_used"] = _tls_payload_emails_from_settings(s)
+            db.close()
+        except Exception:
+            pass
+        payload = json.dumps(body).encode("utf-8")
         req = urllib.request.Request(
             f"{backend_url}/api/monitoring/register-desktop-hardware",
             data=payload,
             headers={"Content-Type": "application/json", "Accept": "application/json"},
             method="POST",
         )
-        with _safe_urlopen(req, timeout=10):
-            pass
+        with _safe_urlopen(req, timeout=10) as resp:
+            raw = resp.read().decode()
+            if raw:
+                _apply_tls_usage_from_server_response(json.loads(raw))
     except Exception:
         pass
 
@@ -1080,6 +1190,8 @@ def can_change_tls_email(new_email: str) -> tuple[bool, str]:
     Trial: 1 email allowed, Lifetime: 2 emails allowed.
     Returns (allowed, message)
     """
+    sync_tls_email_usage_from_server()
+
     status = get_license_status()
     if not status or not status.get("valid"):
         return False, "No active license"
@@ -1159,6 +1271,7 @@ def record_tls_email_change(old_email: str, new_email: str):
             db.commit()
     finally:
         db.close()
+    register_desktop_hardware_with_backend()
 
 
 # =====================================================================

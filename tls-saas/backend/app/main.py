@@ -234,6 +234,22 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass  # Column already exists
 
+    # hardware_usage.extra — TLS email usage JSON (Postgres JSONB, SQLite TEXT fallback)
+    async with async_session() as db:
+        try:
+            await db.execute(text("ALTER TABLE hardware_usage ADD COLUMN extra JSONB"))
+            await db.commit()
+            logger.info("Migration: added extra to hardware_usage")
+        except Exception:
+            pass
+    async with async_session() as db:
+        try:
+            await db.execute(text("ALTER TABLE hardware_usage ADD COLUMN extra TEXT"))
+            await db.commit()
+            logger.info("Migration: added extra (TEXT) to hardware_usage")
+        except Exception:
+            pass
+
     # Create user_credentials table if not exists (handled by create_tables, but add migration safety)
     async with async_session() as db:
         try:

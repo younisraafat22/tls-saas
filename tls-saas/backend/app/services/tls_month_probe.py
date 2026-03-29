@@ -68,7 +68,7 @@ def synthetic_future_month_urls(seed_url: str, max_extra: int = 8) -> list[tuple
     for _ in range(max_extra):
         cur_m, cur_y = increment_month(cur_m, cur_y)
         param = format_month_param(cur_m, cur_y, two_digit)
-        label = f"{month_names[cur_m - 1]} {cur_y} (URL probe)"
+        label = f"{month_names[cur_m - 1]} {cur_y}"
         out.append((label, replace_month_in_url(seed_url, param)))
     return out
 
@@ -131,7 +131,7 @@ def next_two_month_urls_from_seed(seed_url: str) -> list[tuple[str, str]]:
     for step in (1, 2):
         cur_m, cur_y = increment_month(cur_m, cur_y)
         param = format_month_param(cur_m, cur_y, two_digit)
-        label = f"{month_names[cur_m - 1]} {cur_y} (URL probe +{step})"
+        label = f"{month_names[cur_m - 1]} {cur_y}"
         out.append((label, replace_month_in_url(seed_url, param)))
     return out
 

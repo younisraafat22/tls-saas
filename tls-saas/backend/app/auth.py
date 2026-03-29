@@ -64,6 +64,19 @@ def create_unsubscribe_token(user_id: int, branch_id: int) -> str:
     return jwt.encode(data, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
+def create_monitoring_choice_token(user_id: int, branch_id: int, action: str) -> str:
+    """Signed link for Premium users: stop or confirm continued server monitoring after slots are found."""
+    expire = datetime.now(timezone.utc) + timedelta(days=30)
+    data = {
+        "sub": str(user_id),
+        "branch_id": branch_id,
+        "exp": expire,
+        "type": "monitoring_choice",
+        "action": action,
+    }
+    return jwt.encode(data, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+
+
 def create_password_reset_token(user_id: int) -> str:
     """Create a signed 15-minute token for password reset."""
     expire = datetime.now(timezone.utc) + timedelta(minutes=15)

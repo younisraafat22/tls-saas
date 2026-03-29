@@ -25,6 +25,7 @@ from notification_service import notification_service
 from auth_service import auth_service
 from license_service import can_check, increment_check_count
 import random
+import re
 
 # ── Audio CAPTCHA solving engines ──────────────────────────────────
 # Audio transcription
@@ -86,6 +87,13 @@ except ImportError:
 
 # Realistic viewport sizes — one is chosen randomly per session so the
 # browser reports a non-uniform device dimension to fingerprinters.
+def _month_label_short(name: str) -> str:
+    """Strip trailing parentheticals from month labels (e.g. probes) for user-facing summaries."""
+    n = (name or "").strip()
+    n = re.sub(r"\s*\([^)]*\)\s*$", "", n)
+    return n.strip() or name
+
+
 _REALISTIC_VIEWPORTS = [
     (1366, 768),
     (1440, 900),
@@ -2509,7 +2517,7 @@ class TLSCheckerService:
 
                 if no_slots:
                     self._log(f"📅 {month_name}: No appointments available")
-                    all_results.append(f"{month_name}: No slots")
+                    all_results.append(f"{_month_label_short(month_name)}: No slots")
                     # Wait for SPA to render month selectors before scanning
                     try:
                         WebDriverWait(self.driver, 10).until(
@@ -2531,7 +2539,7 @@ class TLSCheckerService:
 
                 if not available_buttons:
                     self._log(f"📅 {month_name}: No appointments available")
-                    all_results.append(f"{month_name}: No slots")
+                    all_results.append(f"{_month_label_short(month_name)}: No slots")
                     # Wait for SPA to render month selectors before scanning
                     try:
                         WebDriverWait(self.driver, 10).until(
@@ -2577,7 +2585,7 @@ class TLSCheckerService:
                 for detail in slot_details:
                     self._log(detail)
                 self._log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                all_results.append(f"{month_name}: {len(available_buttons)} slots found")
+                all_results.append(f"{_month_label_short(month_name)}: {len(available_buttons)} slots found")
 
                 if month_link and month_link in probe_urls:
                     self._tls_disabled_month_tip = True
@@ -2609,12 +2617,8 @@ class TLSCheckerService:
                 else:
                     self._log("📧 Notification already sent — skipping duplicate")
 
-                # Discover new months that may have appeared after navigating to this month
-                newly_available = self._get_available_months()
-                for new_month, new_link in newly_available:
-                    if new_month not in checked_months and (new_month, new_link) not in months_to_check:
-                        months_to_check.append((new_month, new_link))
-                        self._log(f"🗓️ Discovered new month via CSS: {new_month}")
+                # First month with slots wins — stop so the browser (and screenshot) stay on that month
+                break
 
             if not any_slots_found:
                 self._log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

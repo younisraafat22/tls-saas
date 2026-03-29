@@ -46,6 +46,8 @@ class EmailService:
         slot_details: dict | str | None = None,
         user_name: str = "",
         unsubscribe_url: str = "",
+        monitoring_stop_url: str = "",
+        monitoring_continue_url: str = "",
     ) -> bool:
         """Send a formatted appointment availability alert."""
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -150,6 +152,17 @@ class EmailService:
                     <div style="text-align: center;">
                         <a href="{booking_url}" class="cta">Book Now →</a>
                     </div>
+                    {(
+                        '<div style="margin-top:24px;padding:16px;background:#1a1f3a;border-radius:12px;border:1px solid #2a3358;">'
+                        '<p style="color:#aab4d6;font-size:13px;margin:0 0 12px 0;text-align:center;">'
+                        "Premium: After you book (or if you want to pause), choose what happens next:</p>"
+                        '<div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;">'
+                        f'<a href="{monitoring_stop_url}" style="display:inline-block;background:#ff4444;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;">Stop server monitoring</a>'
+                        f'<a href="{monitoring_continue_url}" style="display:inline-block;background:#2d4059;color:#e8ecff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;">Keep monitoring</a>'
+                        "</div></div>"
+                    )
+                    if monitoring_stop_url and monitoring_continue_url
+                    else ""}
                 </div>
                 <div class="footer">
                     <p style="color:#8892b0;">TLS Appointment Checker — You received this because you subscribed to monitoring alerts.</p>

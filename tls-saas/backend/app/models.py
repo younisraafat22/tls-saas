@@ -328,6 +328,8 @@ class HardwareUsage(Base):
     hardware_id = Column(String(255), unique=True, index=True, nullable=False)
     checks_today = Column(Integer, default=0)
     last_reset_date = Column(String(20), nullable=True) # YYYY-MM-DD
+    # Server-side TLS email usage (survives app reinstall when hardware_id is stable)
+    extra = Column(JSON, nullable=True)
 
 
 class AdminNotification(Base):

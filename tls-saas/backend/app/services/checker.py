@@ -1926,11 +1926,8 @@ class TLSChecker:
                 full_slot_details.extend(slot_day_details)
                 all_results.append(f"{month_name}: {slot_count} slots found")
 
-                # Discover new months
-                newly = await self._get_available_months(page)
-                for nm, nl in newly:
-                    if nm not in checked_months:
-                        months_to_check.append((nm, nl))
+                # First month with slots wins — keep browser on that month for screenshots
+                break
 
             # ── Summary ───────────────────────────────────────────
             if not any_slots_found:

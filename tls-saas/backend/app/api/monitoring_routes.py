@@ -6,6 +6,8 @@ and license verification / deactivation for the desktop app.
 import logging
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from jose import jwt
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -35,6 +37,27 @@ from app.schemas import (
 logger = logging.getLogger("monitoring")
 
 router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
+
+
+def _merge_hw_tls_extra(
+    existing: dict | None,
+    client_count: int | None,
+    client_emails: list[str] | None,
+) -> dict:
+    """Merge TLS email usage onto server-side hardware_usage.extra (survives reinstall)."""
+    ex = dict(existing or {})
+    emails = {e.strip().lower() for e in (ex.get("tls_emails_used") or []) if isinstance(e, str) and e.strip()}
+    if client_emails:
+        for e in client_emails:
+            if isinstance(e, str) and e.strip():
+                emails.add(e.strip().lower())
+    sc = int(ex.get("tls_email_change_count") or 0)
+    if client_count is not None:
+        sc = max(sc, int(client_count))
+    ex["tls_email_change_count"] = sc
+    ex["tls_emails_used"] = sorted(emails)
+    return ex
+
 
 # For desktop-app purchases, users can be "active" based on an approved
 # Payment row, without a Subscription row.
@@ -168,7 +191,6 @@ async def _total_checks_for_source(
                 UserBranchMonitor.user_id == user.id,
                 UserBranchMonitor.branch_id == CheckResult.branch_id,
                 UserBranchMonitor.is_active == True,
-                CheckResult.checked_at >= UserBranchMonitor.created_at,
             ),
         )
         .where(and_(*conds))
@@ -497,7 +519,7 @@ async def monitoring_status(
     next_run_setting = next_run_result.scalar_one_or_none()
     worker_next_run = next_run_setting.value if next_run_setting else None
 
-    # Total checks for this user, scoped to their active monitors and monitor start time.
+    # Total checks for this user, scoped to branches they actively monitor.
     total_checks_result = await db.execute(
         select(func.count(func.distinct(CheckResult.id)))
         .select_from(CheckResult)
@@ -507,7 +529,6 @@ async def monitoring_status(
                 UserBranchMonitor.user_id == user.id,
                 UserBranchMonitor.branch_id == CheckResult.branch_id,
                 UserBranchMonitor.is_active == True,
-                CheckResult.checked_at >= UserBranchMonitor.created_at,
             ),
         )
         .where(
@@ -588,7 +609,6 @@ async def check_results(
                 UserBranchMonitor.user_id == user.id,
                 UserBranchMonitor.branch_id == CheckResult.branch_id,
                 UserBranchMonitor.is_active == True,
-                CheckResult.checked_at >= UserBranchMonitor.created_at,
             ),
         )
         .where(
@@ -634,6 +654,68 @@ async def check_results(
         ))
 
     return {"total": total, "results": rows}
+
+
+@router.get("/email-monitoring-choice", response_class=HTMLResponse)
+async def email_monitoring_choice(token: str, db: AsyncSession = Depends(get_db)):
+    """
+    Premium appointment email: user chooses to stop server monitoring or keep monitoring.
+    Signed token (type monitoring_choice, action stop|continue).
+    """
+    _err = """
+    <!DOCTYPE html><html><head><title>TLS — Link error</title>
+    <style>body{font-family:Arial,sans-serif;background:#0a0e27;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+    .box{background:#141832;padding:40px;border-radius:16px;max-width:480px;text-align:center}
+    h2{color:#ff4444}p{color:#8892b0}</style></head>
+    <body><div class="box"><h2>Invalid or expired link</h2>
+    <p>This link may have expired (30 days) or is invalid.</p></div></body></html>
+    """
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        if payload.get("type") != "monitoring_choice":
+            raise ValueError("wrong token type")
+        user_id = int(payload["sub"])
+        branch_id = int(payload["branch_id"])
+        action = (payload.get("action") or "").strip().lower()
+    except Exception:
+        return HTMLResponse(_err, status_code=400)
+
+    if action == "stop":
+        result = await db.execute(
+            select(UserBranchMonitor).where(
+                UserBranchMonitor.user_id == user_id,
+                UserBranchMonitor.branch_id == branch_id,
+            )
+        )
+        monitor = result.scalar_one_or_none()
+        if monitor and monitor.is_active:
+            monitor.is_active = False
+            await db.commit()
+        return HTMLResponse(
+            """
+    <!DOCTYPE html><html><head><title>Monitoring stopped</title>
+    <style>body{font-family:Arial,sans-serif;background:#0a0e27;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+    .box{background:#141832;padding:40px;border-radius:16px;max-width:480px;text-align:center}
+    h2{color:#00ff88}p{color:#8892b0}</style></head>
+    <body><div class="box"><h2>Monitoring stopped</h2>
+    <p>Server-side monitoring for this branch has been turned off.</p>
+    <p>You can turn it back on anytime from your dashboard.</p></div></body></html>
+    """
+        )
+
+    if action == "continue":
+        return HTMLResponse(
+            """
+    <!DOCTYPE html><html><head><title>Monitoring continues</title>
+    <style>body{font-family:Arial,sans-serif;background:#0a0e27;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+    .box{background:#141832;padding:40px;border-radius:16px;max-width:480px;text-align:center}
+    h2{color:#00d9ff}p{color:#8892b0}</style></head>
+    <body><div class="box"><h2>We'll keep monitoring</h2>
+    <p>Your Premium server checks for this branch will continue as before.</p></div></body></html>
+    """
+        )
+
+    return HTMLResponse(_err, status_code=400)
 
 
 @router.get("/notifications")
@@ -958,19 +1040,46 @@ async def register_desktop_hardware(
 ):
     """
     Idempotent: ensure hardware_usage has a row for this device (trial email relay, metrics).
+    Merges TLS email usage into extra so limits survive reinstall when hardware_id is unchanged.
     """
     hw = (body.hardware_id or "").strip()
     if len(hw) < 8:
         raise HTTPException(400, "hardware_id is required")
 
     result = await db.execute(select(HardwareUsage).where(HardwareUsage.hardware_id == hw))
-    if result.scalar_one_or_none():
-        return {"status": "ok", "registered": False}
-
+    row = result.scalar_one_or_none()
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    db.add(HardwareUsage(hardware_id=hw, checks_today=0, last_reset_date=today))
+    merged = _merge_hw_tls_extra(
+        row.extra if row else None,
+        body.tls_email_change_count,
+        body.tls_emails_used,
+    )
+
+    if row:
+        row.extra = merged
+        await db.commit()
+        return {
+            "status": "ok",
+            "registered": False,
+            "tls_email_change_count": merged.get("tls_email_change_count", 0),
+            "tls_emails_used": merged.get("tls_emails_used", []),
+        }
+
+    db.add(
+        HardwareUsage(
+            hardware_id=hw,
+            checks_today=0,
+            last_reset_date=today,
+            extra=merged,
+        )
+    )
     await db.commit()
-    return {"status": "ok", "registered": True}
+    return {
+        "status": "ok",
+        "registered": True,
+        "tls_email_change_count": merged.get("tls_email_change_count", 0),
+        "tls_emails_used": merged.get("tls_emails_used", []),
+    }
 
 
 @router.post("/desktop-email-relay")
@@ -1283,17 +1392,26 @@ async def worker_post_result(
 @router.get("/hardware/{hardware_id}/usage")
 @limiter.limit("30/minute")
 async def get_hardware_usage(request: Request, hardware_id: str, db: AsyncSession = Depends(get_db)):
-    "Fetch usage counts for a hardware id."
+    "Fetch usage counts and TLS email usage for a hardware id."
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     from sqlalchemy import select
     from app.models import HardwareUsage
     result = await db.execute(select(HardwareUsage).where(HardwareUsage.hardware_id == hardware_id))
     usage = result.scalar_one_or_none()
-    
+
+    checks = 0
     if usage and usage.last_reset_date == today:
-        return {"checks_today": usage.checks_today}
-    else:
-        return {"checks_today": 0}
+        checks = usage.checks_today or 0
+
+    extra = (usage.extra or {}) if usage else {}
+    tls_email_change_count = int(extra.get("tls_email_change_count") or 0)
+    tls_emails_used = list(extra.get("tls_emails_used") or [])
+
+    return {
+        "checks_today": checks,
+        "tls_email_change_count": tls_email_change_count,
+        "tls_emails_used": tls_emails_used,
+    }
 
 @router.post("/hardware/{hardware_id}/increment")
 @limiter.limit("10/minute")

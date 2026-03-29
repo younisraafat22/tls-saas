@@ -1118,6 +1118,42 @@ class TLSApp:
             border=ft.Border.all(1, ft.Colors.with_opacity(0.1, icon_color)),
         )
 
+    def _merge_server_recent_checks_into_list(self):
+        """When logged in, show Premium/server check history above local log lines."""
+        try:
+            from api_client import api_client
+            if not api_client.is_logged_in or not getattr(self, "status_list", None):
+                return
+            resp = api_client.get_check_results(limit=15)
+            if not isinstance(resp, dict):
+                return
+            results = resp.get("results") or []
+            if not results:
+                return
+            if not self._log_history:
+                self.status_list.controls.clear()
+            for cr in reversed(results):
+                branch_name = cr.get("branch_name") or "Branch"
+                slots = cr.get("slots_available")
+                checked_at = cr.get("checked_at") or ""
+                try:
+                    from datetime import datetime as _dt
+                    cs = str(checked_at).replace("Z", "+00:00")
+                    if "T" in cs:
+                        dt = _dt.fromisoformat(cs)
+                        pretty = dt.strftime("%d/%m/%Y, %H:%M")
+                    else:
+                        pretty = (cs[:16] if len(cs) >= 16 else cs) or "—"
+                except Exception:
+                    pretty = str(checked_at)[:19] if checked_at else "—"
+                status_lbl = "Slots available!" if slots else "No slots"
+                msg = f"\U0001F50D Check at {pretty} \u2014 {branch_name}: {status_lbl}"
+                self.status_list.controls.insert(0, self._create_log_entry(msg, pretty))
+            while len(self.status_list.controls) > 40:
+                self.status_list.controls.pop()
+        except Exception:
+            pass
+
     # ==================================================================
     #  CLOUD MONITORING HELPERS
     # ==================================================================
@@ -1904,6 +1940,8 @@ class TLSApp:
                 self.status_list.controls.append(self._create_log_entry(msg, ts))
         else:
             self.status_list.controls.append(initial_msg)
+
+        self._merge_server_recent_checks_into_list()
 
         self.status_text = ft.Text(
             "Ready to start monitoring...", size=12, color=ft.Colors.GREY_400,
