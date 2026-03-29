@@ -147,6 +147,11 @@ export default function PaymentsPage() {
       setTimeout(() => setToast(null), 4000);
       return;
     }
+    if (selectedPlanType !== "premium" && !hardwareId.trim()) {
+      setToast({ type: "error", msg: t.payment.deviceIdRequired });
+      setTimeout(() => setToast(null), 5000);
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -413,13 +418,17 @@ export default function PaymentsPage() {
                 </div>
                 <p className="text-xs text-gray-400" dangerouslySetInnerHTML={{ __html: t.payment.deviceIdDesc }} />
                 <div>
-                  <label className="text-xs text-gray-500 mb-1.5 block">{t.payment.deviceIdLabel}</label>
+                  <label className="text-xs text-gray-500 mb-1.5 block">
+                    {t.payment.deviceIdLabel}
+                    {!isPremium ? <span className="text-red-400 ml-0.5">*</span> : null}
+                  </label>
                   <input
                     type="text"
                     value={hardwareId}
                     onChange={(e) => setHardwareId(e.target.value)}
                     placeholder="e.g. A1B2C3D4E5F6..."
                     className="input-field font-mono"
+                    required={!isPremium}
                   />
                 </div>
               </div>

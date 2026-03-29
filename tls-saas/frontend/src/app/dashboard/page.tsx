@@ -51,7 +51,8 @@ export default function DashboardPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [licenseKey, setLicenseKey] = useState<string | null>(null);
   const [licensePlan, setLicensePlan] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [desktopLicenses, setDesktopLicenses] = useState<{ license_key: string; plan_key?: string }[]>([]);
+  const [copied, setCopied] = useState<string | null>(null);
   const [resultsPage, setResultsPage] = useState(0);
   const [apiBase, setApiBase] = useState("");
   const [downloadUrl, setDownloadUrl] = useState<string>("");
@@ -124,11 +125,11 @@ export default function DashboardPage() {
     };
   }, []);
 
-  const copyLicenseKey = async () => {
-    if (!licenseKey) return;
-    await navigator.clipboard.writeText(licenseKey);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyLicenseKey = async (key: string) => {
+    if (!key) return;
+    await navigator.clipboard.writeText(key);
+    setCopied(key);
+    setTimeout(() => setCopied(null), 2000);
   };
 
   const loadResults = async () => {
@@ -147,14 +148,25 @@ export default function DashboardPage() {
         paymentApi.getMyPayments().catch(() => null),
       ]);
       setStatus(statusData);
-      if (paymentsData !== null) {
+      const ov = statusData?.overview;
+      const fromOverview = ov?.desktop?.licenses;
+      if (Array.isArray(fromOverview) && fromOverview.length > 0) {
+        setDesktopLicenses(fromOverview);
+        setLicenseKey(fromOverview[0].license_key);
+        setLicensePlan(fromOverview[0].plan_key ?? null);
+      } else if (paymentsData !== null) {
         const approvedPayment = Array.isArray(paymentsData)
           ? paymentsData.find((p: any) => p.license_key && p.status === "approved")
           : null;
         if (approvedPayment?.license_key) {
+          setDesktopLicenses([{ license_key: approvedPayment.license_key, plan_key: approvedPayment.plan_key }]);
           setLicenseKey(approvedPayment.license_key);
           setLicensePlan(approvedPayment.plan_key ?? null);
+        } else {
+          setDesktopLicenses([]);
         }
+      } else {
+        setDesktopLicenses([]);
       }
     } catch (err) {
       console.error("Failed to load data:", err);
@@ -180,6 +192,87 @@ export default function DashboardPage() {
   const isPremium = planTypes.some((p: string) => p.toUpperCase() === "PREMIUM");
   const totalChecks: number = status?.total_checks ?? 0;
   const totalPages = Math.ceil(resultsData.total / PAGE_SIZE);
+
+  const ov = status?.overview;
+  const serverOn = ov?.server?.active;
+  const deskOn = ov?.desktop?.active;
+  const splitOverview = !!(serverOn && deskOn);
+
+  const primaryBranches = splitOverview
+    ? monitoredBranches
+    : serverOn
+    ? (ov?.server?.monitored_branches ?? monitoredBranches)
+    : deskOn
+    ? (ov?.desktop?.monitored_branches ?? monitoredBranches)
+    : monitoredBranches;
+
+  const primaryTotalChecks = splitOverview
+    ? totalChecks
+    : serverOn
+    ? (ov?.server?.total_checks ?? totalChecks)
+    : deskOn
+    ? (ov?.desktop?.total_checks ?? totalChecks)
+    : totalChecks;
+
+  const primaryExpires =
+    splitOverview
+      ? status?.expires_at
+      : serverOn
+      ? ov?.server?.expires_at
+      : deskOn
+      ? ov?.desktop?.expires_at
+      : status?.expires_at;
+
+  const serverBranches = ov?.server?.monitored_branches ?? [];
+  const desktopBranches = ov?.desktop?.monitored_branches ?? [];
+
+  const renderBranchRows = (branches: any[]) =>
+    branches.map((branch: any) => {
+      const lastCheckDate = branch.last_check
+        ? new Date(branch.last_check.includes("Z") || branch.last_check.includes("+") ? branch.last_check : branch.last_check + "Z")
+        : null;
+      const ageMs = lastCheckDate ? Date.now() - lastCheckDate.getTime() : Infinity;
+      const isStale = ageMs > 60 * 60 * 1000;
+      const checkTimeStr = lastCheckDate ? lastCheckDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null;
+      return (
+        <div key={branch.branch_id} className="p-4 hover:bg-white/[0.02] transition-colors">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  branch.last_slots_available && !isStale
+                    ? "bg-accent-green shadow-lg shadow-accent-green/50"
+                    : branch.last_slots_available
+                    ? "bg-yellow-400"
+                    : "bg-gray-500"
+                }`}
+              />
+              <div>
+                <div className="font-medium text-sm">{(t.branchNames as Record<string, string>)[branch.branch_name] ?? branch.branch_name}</div>
+                <div className="text-xs text-gray-500">{(t.serviceTypes as Record<string, string>)[branch.service_type] ?? branch.service_type}</div>
+              </div>
+            </div>
+            <div className="text-right">
+              {branch.last_slots_available && !isStale ? (
+                <span className="text-accent-green text-sm font-semibold flex items-center gap-1">
+                  <Sparkles className="w-4 h-4" /> {td.slotsAvailable}
+                </span>
+              ) : branch.last_slots_available && isStale ? (
+                <span className="text-yellow-400 text-xs font-medium flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" /> {td.slotsFoundAs} {checkTimeStr})
+                </span>
+              ) : checkTimeStr ? (
+                <span className="text-gray-500 text-xs">
+                  {td.lastCheckAt} {checkTimeStr}
+                </span>
+              ) : (
+                <span className="text-gray-600 text-xs">{td.pendingFirstCheck}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    });
 
   return (
     <div className="space-y-6">
@@ -270,8 +363,8 @@ export default function DashboardPage() {
         </motion.div>
       )}
 
-      {/* License Key + Download Card */}
-      {licenseKey && (
+      {/* License Key + Download Card (hidden when split overview — keys appear under Desktop section) */}
+      {licenseKey && !splitOverview && (
         <motion.div initial={fadeUp.hidden} animate={fadeUp.visible} className="glass-card p-6 border-accent-green/30 bg-accent-green/5">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-xl bg-accent-green/10 flex items-center justify-center">
@@ -284,21 +377,24 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3 bg-black/30 rounded-xl px-4 py-3 border border-white/10 mb-4">
-            <Key className="w-4 h-4 text-accent-green shrink-0" />
-            <code className="flex-1 text-sm font-mono text-accent-green tracking-wider break-all">{licenseKey}</code>
-            <button
-              onClick={copyLicenseKey}
-              className="ml-2 p-1.5 rounded-lg hover:bg-white/10 transition-colors shrink-0"
-              title="Copy license key"
-            >
-              {copied ? (
-                <Check className="w-4 h-4 text-accent-green" />
-              ) : (
-                <Copy className="w-4 h-4 text-gray-400" />
-              )}
-            </button>
-          </div>
+          {(desktopLicenses.length > 0 ? desktopLicenses : licenseKey ? [{ license_key: licenseKey, plan_key: licensePlan ?? undefined }] : []).map((lic) => (
+            <div key={lic.license_key} className="flex items-center gap-3 bg-black/30 rounded-xl px-4 py-3 border border-white/10 mb-3 last:mb-4">
+              <Key className="w-4 h-4 text-accent-green shrink-0" />
+              <code className="flex-1 text-sm font-mono text-accent-green tracking-wider break-all">{lic.license_key}</code>
+              <button
+                type="button"
+                onClick={() => copyLicenseKey(lic.license_key)}
+                className="ml-2 p-1.5 rounded-lg hover:bg-white/10 transition-colors shrink-0"
+                title="Copy license key"
+              >
+                {copied === lic.license_key ? (
+                  <Check className="w-4 h-4 text-accent-green" />
+                ) : (
+                  <Copy className="w-4 h-4 text-gray-400" />
+                )}
+              </button>
+            </div>
+          ))}
           {downloadUrl ? (
             <a
               href={apiBase ? `${apiBase}/api/app/download` : downloadUrl}
@@ -334,7 +430,109 @@ export default function DashboardPage() {
         </motion.div>
       )}
 
-      {/* Status cards */}
+      {/* Split overview: Premium server + Desktop app */}
+      {splitOverview && (
+        <div className="space-y-6">
+          <motion.div initial={fadeUp.hidden} animate={fadeUp.visible} className="glass-card overflow-hidden border-primary-500/20">
+            <div className="p-4 border-b border-white/5 bg-primary-500/5">
+              <h2 className="font-display font-semibold text-lg">{(td as any).overviewServerTitle}</h2>
+              <p className="text-xs text-gray-500 mt-0.5">{(td as any).overviewServerSubtitle}</p>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 border-b border-white/5">
+              <div className="stat-card">
+                <div className="flex items-center gap-2 text-gray-400 text-xs mb-1">{td.branchesLabel}</div>
+                <div className="text-xl font-bold">{serverBranches.length.toLocaleString(locale === "ar" ? "ar-EG" : locale === "de" ? "de-DE" : "en-US")}</div>
+              </div>
+              <div className="stat-card">
+                <div className="flex items-center gap-2 text-gray-400 text-xs mb-1">{td.totalChecksLabel}</div>
+                <div className="text-xl font-bold">{(ov?.server?.total_checks ?? 0).toLocaleString(locale === "ar" ? "ar-EG" : locale === "de" ? "de-DE" : "en-US")}</div>
+              </div>
+              <div className="stat-card">
+                <div className="flex items-center gap-2 text-gray-400 text-xs mb-1">{td.expiresLabel}</div>
+                <div className="text-sm font-medium">
+                  {ov?.server?.expires_at
+                    ? new Date(ov.server.expires_at.includes("Z") || ov.server.expires_at.includes("+") ? ov.server.expires_at : ov.server.expires_at + "Z").toLocaleDateString(dateLocale, { day: "numeric", month: "short", year: "numeric" })
+                    : "—"}
+                </div>
+              </div>
+              <div className="stat-card">
+                <div className="flex items-center gap-2 text-gray-400 text-xs mb-1">{td.nextCheckLabel}</div>
+                <div className="text-lg font-bold tabular-nums text-accent-green">{countdown}</div>
+              </div>
+            </div>
+            {serverBranches.length > 0 ? (
+              <div className="divide-y divide-white/5">{renderBranchRows(serverBranches)}</div>
+            ) : (
+              <div className="p-6 text-sm text-gray-500 text-center">{td.noBranchTitle}</div>
+            )}
+            {hasActiveSubscription && serverOn && (
+              <div className="px-4 py-3 border-t border-white/5 bg-accent-green/5">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-accent-green animate-pulse" />
+                  <span className="text-xs text-accent-green font-medium">{(td as any).monitoringActiveSubtitle || "Monitoring active"}</span>
+                </div>
+              </div>
+            )}
+          </motion.div>
+
+          <motion.div initial={fadeUp.hidden} animate={fadeUp.visible} className="glass-card overflow-hidden border-accent-green/25">
+            <div className="p-4 border-b border-white/5 bg-accent-green/5">
+              <h2 className="font-display font-semibold text-lg text-accent-green">{(td as any).overviewDesktopTitle}</h2>
+              <p className="text-xs text-gray-500 mt-0.5">{(td as any).overviewDesktopSubtitle}</p>
+            </div>
+            {desktopLicenses.length > 0 && (
+              <div className="p-4 border-b border-white/5 space-y-3">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{td.licenseKeyTitle}</div>
+                {desktopLicenses.map((lic) => (
+                  <div key={lic.license_key} className="flex items-center gap-2 bg-black/30 rounded-xl px-3 py-2 border border-white/10">
+                    <code className="flex-1 text-xs font-mono text-accent-green break-all">{lic.license_key}</code>
+                    <button type="button" onClick={() => copyLicenseKey(lic.license_key)} className="p-1.5 rounded-lg hover:bg-white/10 shrink-0">
+                      {copied === lic.license_key ? <Check className="w-4 h-4 text-accent-green" /> : <Copy className="w-4 h-4 text-gray-400" />}
+                    </button>
+                  </div>
+                ))}
+                {downloadUrl && (
+                  <a
+                    href={apiBase ? `${apiBase}/api/app/download` : downloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-accent-green/10 border border-accent-green/30 text-accent-green text-xs font-medium"
+                  >
+                    <Download className="w-4 h-4" /> {td.downloadDesktop}
+                  </a>
+                )}
+              </div>
+            )}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 border-b border-white/5">
+              <div className="stat-card">
+                <div className="text-gray-400 text-xs mb-1">{td.branchesLabel}</div>
+                <div className="text-xl font-bold">{desktopBranches.length.toLocaleString(locale === "ar" ? "ar-EG" : locale === "de" ? "de-DE" : "en-US")}</div>
+              </div>
+              <div className="stat-card">
+                <div className="text-gray-400 text-xs mb-1">{td.totalChecksLabel}</div>
+                <div className="text-xl font-bold">{(ov?.desktop?.total_checks ?? 0).toLocaleString(locale === "ar" ? "ar-EG" : locale === "de" ? "de-DE" : "en-US")}</div>
+              </div>
+              <div className="stat-card">
+                <div className="text-gray-400 text-xs mb-1">{td.expiresLabel}</div>
+                <div className="text-sm font-medium">
+                  {ov?.desktop?.expires_at
+                    ? new Date(ov.desktop.expires_at.includes("Z") || ov.desktop.expires_at.includes("+") ? ov.desktop.expires_at : ov.desktop.expires_at + "Z").toLocaleDateString(dateLocale, { day: "numeric", month: "short", year: "numeric" })
+                    : "—"}
+                </div>
+              </div>
+            </div>
+            {desktopBranches.length > 0 ? (
+              <div className="divide-y divide-white/5">{renderBranchRows(desktopBranches)}</div>
+            ) : (
+              <div className="p-6 text-sm text-gray-500 text-center">{td.desktopMonitorBody}</div>
+            )}
+          </motion.div>
+        </div>
+      )}
+
+      {/* Status cards (single entitlement) */}
+      {!splitOverview && (
+        <>
       <motion.div
         initial="hidden"
         animate="visible"
@@ -355,14 +553,14 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2 text-gray-400 text-sm mb-2">
             <Globe className="w-4 h-4" /> {td.branchesLabel}
           </div>
-          <div className="text-2xl font-bold">{monitoredBranches.length.toLocaleString(locale === "ar" ? "ar-EG" : locale === "de" ? "de-DE" : "en-US")}</div>
+          <div className="text-2xl font-bold">{primaryBranches.length.toLocaleString(locale === "ar" ? "ar-EG" : locale === "de" ? "de-DE" : "en-US")}</div>
         </motion.div>
 
         <motion.div variants={fadeUp} className="stat-card">
           <div className="flex items-center gap-2 text-gray-400 text-sm mb-2">
             <Hash className="w-4 h-4" /> {td.totalChecksLabel}
           </div>
-          <div className="text-2xl font-bold">{totalChecks.toLocaleString(locale === "ar" ? "ar-EG" : locale === "de" ? "de-DE" : "en-US")}</div>
+          <div className="text-2xl font-bold">{primaryTotalChecks.toLocaleString(locale === "ar" ? "ar-EG" : locale === "de" ? "de-DE" : "en-US")}</div>
         </motion.div>
 
         {hasActiveSubscription && isPremium && (
@@ -379,62 +577,21 @@ export default function DashboardPage() {
             <Calendar className="w-4 h-4" /> {td.expiresLabel}
           </div>
           <div className="text-sm font-medium">
-            {status?.expires_at
-              ? new Date(status.expires_at.includes('Z') || status.expires_at.includes('+') ? status.expires_at : status.expires_at + 'Z').toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', year: 'numeric' })
+            {primaryExpires
+              ? new Date(primaryExpires.includes('Z') || primaryExpires.includes('+') ? primaryExpires : primaryExpires + 'Z').toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', year: 'numeric' })
               : "—"}
           </div>
         </motion.div>
       </motion.div>
 
       {/* Monitored branches */}
-      {monitoredBranches.length > 0 && (
+      {primaryBranches.length > 0 && (
         <div className="glass-card overflow-hidden">
           <div className="p-4 border-b border-white/5 flex items-center justify-between">
             <h2 className="font-semibold">{td.monitoredBranches}</h2>
           </div>
           <div className="divide-y divide-white/5">
-            {monitoredBranches.map((branch: any) => {
-              const lastCheckDate = branch.last_check ? new Date(branch.last_check.includes('Z') || branch.last_check.includes('+') ? branch.last_check : branch.last_check + 'Z') : null;
-              const ageMs = lastCheckDate ? Date.now() - lastCheckDate.getTime() : Infinity;
-              const isStale = ageMs > 60 * 60 * 1000;
-              const checkTimeStr = lastCheckDate
-                ? lastCheckDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                : null;
-              return (
-                <div key={branch.branch_id} className="p-4 hover:bg-white/[0.02] transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${
-                        branch.last_slots_available && !isStale
-                          ? "bg-accent-green shadow-lg shadow-accent-green/50"
-                          : branch.last_slots_available
-                          ? "bg-yellow-400"
-                          : "bg-gray-500"
-                      }`} />
-                      <div>
-                        <div className="font-medium text-sm">{(t.branchNames as Record<string, string>)[branch.branch_name] ?? branch.branch_name}</div>
-                        <div className="text-xs text-gray-500">{(t.serviceTypes as Record<string, string>)[branch.service_type] ?? branch.service_type}</div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      {branch.last_slots_available && !isStale ? (
-                        <span className="text-accent-green text-sm font-semibold flex items-center gap-1">
-                          <Sparkles className="w-4 h-4" /> {td.slotsAvailable}
-                        </span>
-                      ) : branch.last_slots_available && isStale ? (
-                        <span className="text-yellow-400 text-xs font-medium flex items-center gap-1">
-                          <Sparkles className="w-3 h-3" /> {td.slotsFoundAs} {checkTimeStr})
-                        </span>
-                      ) : checkTimeStr ? (
-                        <span className="text-gray-500 text-xs">{td.lastCheckAt} {checkTimeStr}</span>
-                      ) : (
-                        <span className="text-gray-600 text-xs">{td.pendingFirstCheck}</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {renderBranchRows(primaryBranches)}
           </div>
           {hasActiveSubscription && (
             <div className="px-4 py-3 border-t border-white/5 bg-accent-green/5">
@@ -446,6 +603,8 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+      )}
+        </>
       )}
 
       {/* Recent check results */}
@@ -534,7 +693,7 @@ export default function DashboardPage() {
       )}
 
       {/* Empty state — active subscription but no branch assigned yet */}
-      {hasActiveSubscription && monitoredBranches.length === 0 && (
+      {hasActiveSubscription && primaryBranches.length === 0 && !splitOverview && (
         <div className="glass-card p-12 text-center">
           {isPremium ? (
             <>

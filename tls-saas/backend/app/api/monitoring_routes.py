@@ -11,7 +11,7 @@ from slowapi.util import get_remote_address
 
 limiter = Limiter(key_func=get_remote_address)
 from pydantic import BaseModel
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.database import get_db
@@ -20,7 +20,7 @@ from app.models import (
     User, Branch, CheckResult, UserBranchMonitor,
     NotificationLog, NotificationLogStatus, NotificationChannel,
     SubscriptionStatus, Subscription, Payment, PaymentStatus,
-    SystemSetting, ServiceType, HardwareUsage,
+    SystemSetting, ServiceType, HardwareUsage, PlanType,
 )
 from app.auth import get_current_user
 from app.schemas import (
@@ -96,6 +96,84 @@ def _calc_desktop_expires_at(plan_key: str | None, processed_at: datetime | None
         return base + timedelta(days=days)
 
     return None
+
+
+async def _branch_row_for_source(
+    db: AsyncSession,
+    user: User,
+    branch: Branch,
+    source_mode: str | None,
+) -> dict:
+    """
+    Build monitored-branch snapshot. source_mode: None = latest check any origin;
+    'server' = latest server job (source server or null); 'desktop' = desktop app only.
+    """
+    conds = [
+        CheckResult.branch_id == branch.id,
+        CheckResult.user_id == user.id,
+    ]
+    if source_mode == "server":
+        conds.append(or_(CheckResult.source == "server", CheckResult.source.is_(None)))
+    elif source_mode == "desktop":
+        conds.append(CheckResult.source == "desktop")
+
+    latest = await db.execute(
+        select(CheckResult)
+        .where(and_(*conds))
+        .order_by(CheckResult.checked_at.desc())
+        .limit(1)
+    )
+    check = latest.scalar_one_or_none()
+
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_conds = [*conds, CheckResult.checked_at >= today_start]
+    checks_today_result = await db.execute(
+        select(func.count(CheckResult.id)).where(and_(*today_conds))
+    )
+    checks_today = checks_today_result.scalar() or 0
+
+    return {
+        "branch_id": branch.id,
+        "branch_name": branch.name,
+        "service_type": branch.service_type.value,
+        "is_active": branch.is_active,
+        "last_check": check.checked_at.isoformat() if check else None,
+        "last_slots_available": check.slots_available if check else None,
+        "last_slot_details": check.slot_details if check else None,
+        "checks_today": checks_today,
+    }
+
+
+async def _total_checks_for_source(
+    db: AsyncSession,
+    user: User,
+    source_mode: str | None,
+) -> int:
+    conds = [
+        CheckResult.user_id == user.id,
+        CheckResult.user_id.isnot(None),
+        CheckResult.checked_at >= user.created_at,
+    ]
+    if source_mode == "server":
+        conds.append(or_(CheckResult.source == "server", CheckResult.source.is_(None)))
+    elif source_mode == "desktop":
+        conds.append(CheckResult.source == "desktop")
+
+    total_checks_result = await db.execute(
+        select(func.count(func.distinct(CheckResult.id)))
+        .select_from(CheckResult)
+        .join(
+            UserBranchMonitor,
+            and_(
+                UserBranchMonitor.user_id == user.id,
+                UserBranchMonitor.branch_id == CheckResult.branch_id,
+                UserBranchMonitor.is_active == True,
+                CheckResult.checked_at >= UserBranchMonitor.created_at,
+            ),
+        )
+        .where(and_(*conds))
+    )
+    return total_checks_result.scalar() or 0
 
 
 # ── License verification / deactivation (public, no auth) ────────────
@@ -357,7 +435,19 @@ async def monitoring_status(
     elif plan_types:
         primary_plan_type = plan_types[0]
 
-    # Get monitored branches with latest results
+    has_premium_sub = any(s.plan and s.plan.plan_type == PlanType.PREMIUM for s in active_subs)
+    premium_expires_at: datetime | None = None
+    if has_premium_sub:
+        exp_candidates = [
+            s.expires_at for s in active_subs
+            if s.plan and s.plan.plan_type == PlanType.PREMIUM and s.expires_at
+        ]
+        if exp_candidates:
+            premium_expires_at = max(exp_candidates)
+            if premium_expires_at.tzinfo is None:
+                premium_expires_at = premium_expires_at.replace(tzinfo=timezone.utc)
+
+    # Get monitored branches with latest results (combined + per-entitlement for dashboard split)
     monitors = await db.execute(
         select(UserBranchMonitor, Branch)
         .join(Branch, UserBranchMonitor.branch_id == Branch.id)
@@ -365,41 +455,14 @@ async def monitoring_status(
     )
 
     branches = []
-    for monitor, branch in monitors.all():
-        # Latest check for this user on this branch
-        latest = await db.execute(
-            select(CheckResult)
-            .where(
-                CheckResult.branch_id == branch.id,
-                CheckResult.user_id == user.id,
-            )
-            .order_by(CheckResult.checked_at.desc())
-            .limit(1)
-        )
-        check = latest.scalar_one_or_none()
-
-        # Checks today
-        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        checks_today_result = await db.execute(
-            select(func.count(CheckResult.id))
-            .where(
-                CheckResult.branch_id == branch.id,
-                CheckResult.user_id == user.id,
-                CheckResult.checked_at >= today_start,
-            )
-        )
-        checks_today = checks_today_result.scalar() or 0
-
-        branches.append({
-            "branch_id": branch.id,
-            "branch_name": branch.name,
-            "service_type": branch.service_type.value,
-            "is_active": branch.is_active,
-            "last_check": check.checked_at.isoformat() if check else None,
-            "last_slots_available": check.slots_available if check else None,
-            "last_slot_details": check.slot_details if check else None,
-            "checks_today": checks_today,
-        })
+    branches_server = []
+    branches_desktop = []
+    for _monitor, branch in monitors.all():
+        branches.append(await _branch_row_for_source(db, user, branch, None))
+        if has_premium_sub:
+            branches_server.append(await _branch_row_for_source(db, user, branch, "server"))
+        if paid_rows:
+            branches_desktop.append(await _branch_row_for_source(db, user, branch, "desktop"))
 
     # Check for pending payment (user submitted but admin hasn't approved yet)
     pending_payment_result = await db.execute(
@@ -435,7 +498,6 @@ async def monitoring_status(
     worker_next_run = next_run_setting.value if next_run_setting else None
 
     # Total checks for this user, scoped to their active monitors and monitor start time.
-    # This avoids counting orphan/legacy rows that can leak into newly created accounts.
     total_checks_result = await db.execute(
         select(func.count(func.distinct(CheckResult.id)))
         .select_from(CheckResult)
@@ -456,17 +518,53 @@ async def monitoring_status(
     )
     total_checks = total_checks_result.scalar() or 0
 
+    total_checks_server = await _total_checks_for_source(db, user, "server") if has_premium_sub else 0
+    total_checks_desktop = await _total_checks_for_source(db, user, "desktop") if paid_rows else 0
+
+    exp_candidates: list[datetime] = []
+    if premium_expires_at:
+        exp_candidates.append(premium_expires_at)
+    if sub and sub.expires_at:
+        se = sub.expires_at
+        if se.tzinfo is None:
+            se = se.replace(tzinfo=timezone.utc)
+        exp_candidates.append(se)
+    if desktop_expires_at:
+        exp_candidates.append(desktop_expires_at)
+    expires_at_top = max(exp_candidates) if exp_candidates else None
+
+    overview = {
+        "server": {
+            "active": has_premium_sub,
+            "expires_at": premium_expires_at.isoformat() if premium_expires_at else None,
+            "monitored_branches": branches_server,
+            "total_checks": total_checks_server,
+        },
+        "desktop": {
+            "active": bool(paid_rows),
+            "expires_at": desktop_expires_at.isoformat() if desktop_expires_at else None,
+            "monitored_branches": branches_desktop,
+            "total_checks": total_checks_desktop,
+            "licenses": [
+                {"license_key": p.license_key, "plan_key": p.plan_key or ""}
+                for p in paid_rows
+                if p.license_key
+            ],
+        },
+    }
+
     return {
         "subscription_active": is_active,
         "plan_type": primary_plan_type,
         "plan_types": plan_types,
         "payment_pending": pending_payment,
         "maintenance_mode": maintenance_mode,
-        "expires_at": sub.expires_at.isoformat() if sub and sub.expires_at else desktop_expires_at.isoformat() if desktop_expires_at else None,
+        "expires_at": expires_at_top.isoformat() if expires_at_top else None,
         "monitored_branches": branches,
         "total_branches_monitored": len(branches),
         "worker_next_run": worker_next_run,
         "total_checks": total_checks,
+        "overview": overview,
     }
 
 

@@ -38,6 +38,12 @@ async def submit_payment(
     if not plan:
         raise HTTPException(400, "Invalid plan")
 
+    # Device ID is required for all plans that issue a desktop license (not server-only Premium).
+    hw = (body.hardware_id or "").strip()
+    if plan.plan_type != PlanType.PREMIUM:
+        if not hw:
+            raise HTTPException(400, "Device ID is required. Copy it from the desktop app and paste it here.")
+
     # Validate branch exists (optional — branches are now configured in the desktop app)
     branch = None
     if body.branch_id:
@@ -60,6 +66,46 @@ async def submit_payment(
         if dup.scalar_one_or_none():
             raise HTTPException(400, "This payment reference has already been submitted")
 
+    # Premium: enforce TLS email change limit before creating payment (same rules as credential sync below).
+    if plan.plan_type == PlanType.PREMIUM and body.tls_email and body.tls_password:
+        new_email = body.tls_email.strip().lower()
+        service_types = [ServiceType.VISA, ServiceType.LEGALIZATION]
+        creds_map = {}
+        for svc in service_types:
+            existing = await db.execute(
+                select(UserCredential).where(
+                    UserCredential.user_id == user.id,
+                    UserCredential.service_type == svc,
+                )
+            )
+            creds_map[svc] = existing.scalar_one_or_none()
+        change_needed = False
+        old_sample = ""
+        for svc in service_types:
+            c = creds_map[svc]
+            if not c:
+                continue
+            try:
+                old_e = (decrypt_credential(c.email_encrypted) or "").strip().lower()
+            except Exception:
+                old_e = ""
+            if old_e and old_e != new_email:
+                change_needed = True
+                old_sample = old_e
+                break
+        if change_needed:
+            cnt_result = await db.execute(
+                select(func.count(ActivityLog.id)).where(
+                    ActivityLog.actor_id == user.id,
+                    ActivityLog.action == "tls_credential_email_changed_premium_sync",
+                )
+            )
+            if int(cnt_result.scalar() or 0) >= TLS_EMAIL_CHANGE_LIMIT:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"TLS email change limit reached. Maximum {TLS_EMAIL_CHANGE_LIMIT} change(s) allowed.",
+                )
+
     # Create pending subscription
     subscription = Subscription(
         user_id=user.id,
@@ -80,7 +126,7 @@ async def submit_payment(
         reference=body.reference.strip(),
         screenshot_data=body.screenshot_data,
         status=PaymentStatus.PENDING,
-        hardware_id=body.hardware_id.strip() if body.hardware_id else None,
+        hardware_id=hw if hw else None,
         plan_key=body.plan_type.value,
         submitter_name=user.full_name or user.email,
         submitter_email=user.email,
@@ -117,10 +163,16 @@ async def submit_payment(
         "branch": branch.name if branch else None,
     })
 
-    # Save TLS credentials for Premium plans (server-monitored)
+    # Save TLS credentials for Premium plans (server-monitored) — both Visa + Legalization rows stay in sync.
+    # One ActivityLog per email change (not per service) so the 2-change limit applies to both slots together.
     if plan.plan_type == PlanType.PREMIUM and body.tls_email and body.tls_password:
         try:
             service_types = [ServiceType.VISA, ServiceType.LEGALIZATION]
+            new_email = body.tls_email.strip().lower()
+            enc_email = encrypt_credential(body.tls_email.strip())
+            enc_pass = encrypt_credential(body.tls_password.strip())
+
+            creds_map: dict = {}
             for svc in service_types:
                 existing = await db.execute(
                     select(UserCredential).where(
@@ -128,37 +180,37 @@ async def submit_payment(
                         UserCredential.service_type == svc,
                     )
                 )
-                cred = existing.scalar_one_or_none()
-                enc_email = encrypt_credential(body.tls_email.strip())
-                enc_pass = encrypt_credential(body.tls_password.strip())
+                creds_map[svc] = existing.scalar_one_or_none()
+
+            change_needed = False
+            old_sample = ""
+            for svc in service_types:
+                c = creds_map[svc]
+                if not c:
+                    continue
+                try:
+                    old_e = (decrypt_credential(c.email_encrypted) or "").strip().lower()
+                except Exception:
+                    old_e = ""
+                if old_e and old_e != new_email:
+                    change_needed = True
+                    old_sample = old_e
+                    break
+
+            if change_needed:
+                db.add(ActivityLog(
+                    actor_id=user.id,
+                    action="tls_credential_email_changed_premium_sync",
+                    details={
+                        "old_email": old_sample,
+                        "new_email": new_email,
+                        "source": "payment_submit",
+                    },
+                ))
+
+            for svc in service_types:
+                cred = creds_map[svc]
                 if cred:
-                    action_name = f"tls_credential_email_changed_{svc.value}"
-                    old_email = ""
-                    try:
-                        old_email = (decrypt_credential(cred.email_encrypted) or "").strip().lower()
-                    except Exception:
-                        old_email = ""
-                    new_email = body.tls_email.strip().lower()
-                    if old_email and old_email != new_email:
-                        cnt_result = await db.execute(
-                            select(func.count(ActivityLog.id)).where(
-                                ActivityLog.actor_id == user.id,
-                                ActivityLog.action == action_name,
-                            )
-                        )
-                        change_count = int(cnt_result.scalar() or 0)
-                        if change_count >= TLS_EMAIL_CHANGE_LIMIT:
-                            continue
-                        db.add(ActivityLog(
-                            actor_id=user.id,
-                            action=action_name,
-                            details={
-                                "service_type": svc.value,
-                                "old_email": old_email,
-                                "new_email": new_email,
-                                "source": "payment_submit",
-                            },
-                        ))
                     cred.email_encrypted = enc_email
                     cred.password_encrypted = enc_pass
                     cred.is_active = True
