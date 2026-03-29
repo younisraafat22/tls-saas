@@ -1722,7 +1722,7 @@ class TLSChecker:
 
             log(f"Starting with {len(months_to_check)} visible month(s)")
 
-            # ── Process each month (click navigation first; URL probes for months 4–5 only after) ──
+            # ── Process each month (clicks first; then URL probes: month= +1 and +2 from latest) ──
             while months_to_check or (not phase2_done and not any_slots_found):
                 if not months_to_check:
                     if any_slots_found or phase2_done:
@@ -1731,20 +1731,6 @@ class TLSChecker:
                     try:
                         from app.services.tls_month_probe import fourth_fifth_probe_entries_from_links
 
-                        ordered_links: list[tuple[str, str, str]] = []
-                        for link in await page.query_selector_all(
-                            "a.MonthSelector_month-selector_button__An0eF"
-                        ):
-                            try:
-                                ordered_links.append(
-                                    (
-                                        ((await link.get_attribute("href")) or "").strip(),
-                                        (await link.get_attribute("class")) or "",
-                                        ((await link.inner_text()) or "").strip(),
-                                    )
-                                )
-                            except Exception:
-                                continue
                         hrefs: list[str] = []
                         for link in await page.query_selector_all(
                             "a[href*='appointment-booking?month=']"
@@ -1756,14 +1742,14 @@ class TLSChecker:
                             except Exception:
                                 continue
                         phase2_list, p2 = fourth_fifth_probe_entries_from_links(
-                            ordered_links, page.url, hrefs
+                            page.url, hrefs
                         )
                         probe_urls |= p2
                         for item in phase2_list:
                             months_to_check.append(item)
                         if phase2_list:
                             log(
-                                f"Phase 2: checking months 4–5 via direct URL ({len(phase2_list)} target(s))"
+                                f"Phase 2: next two months via month= only ({len(phase2_list)} URL(s))"
                             )
                     except Exception as ex:
                         log(f"Phase-2 month URL probes skipped: {ex}", "warn")

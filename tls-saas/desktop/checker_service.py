@@ -2401,7 +2401,7 @@ class TLSCheckerService:
 
             self._log(f"📆 Starting with {len(months_to_check)} visible month(s)")
 
-            # Process months (clicks first); URL probes for months 4–5 only after normal queue drains
+            # Process months (clicks first); then URL probes: month= +1 and +2 from latest on page
             while months_to_check or (not phase2_done and not any_slots_found):
                 if not months_to_check:
                     if any_slots_found or phase2_done:
@@ -2413,30 +2413,16 @@ class TLSCheckerService:
                             fourth_fifth_probe_entries_from_links,
                         )
 
-                        ordered_links: list[tuple[str, str, str]] = []
-                        for link in self.driver.find_elements(
-                            By.CSS_SELECTOR, "a.MonthSelector_month-selector_button__An0eF"
-                        ):
-                            try:
-                                ordered_links.append(
-                                    (
-                                        (link.get_attribute("href") or "").strip(),
-                                        link.get_attribute("class") or "",
-                                        (link.text or "").strip(),
-                                    )
-                                )
-                            except Exception:
-                                continue
                         hrefs = collect_month_hrefs_from_driver(self.driver)
                         phase2_list, p2 = fourth_fifth_probe_entries_from_links(
-                            ordered_links, self.driver.current_url, hrefs
+                            self.driver.current_url, hrefs
                         )
                         probe_urls |= p2
                         for item in phase2_list:
                             months_to_check.append(item)
                         if phase2_list:
                             self._log(
-                                f"🔗 Phase 2: months 4–5 via direct URL only ({len(phase2_list)} target(s))"
+                                f"🔗 Phase 2: next two months via month= only ({len(phase2_list)} URL(s))"
                             )
                     except Exception as ex:
                         self._log(f"Phase-2 month URL probes skipped: {ex}")

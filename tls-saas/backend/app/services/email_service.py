@@ -96,9 +96,9 @@ class EmailService:
                 "Important: TLS calendar may show some months as disabled</p>"
                 '<p style="color:#ccc;font-size:13px;line-height:1.5;margin:0;">'
                 "Slots were detected on a month that can appear greyed out in the website navigation. "
-                "To book, open your appointment booking link and edit the <strong>month=</strong> value in the address bar "
-                "(for example change <code style=\"color:#7dd3fc;\">month=05-26</code> to "
-                "<code style=\"color:#7dd3fc;\">month=06-26</code>) then press Enter to load that month."
+                "To book, open your appointment booking link and edit only the <strong>month=</strong> numbers in the address bar "
+                "(for example <code style=\"color:#7dd3fc;\">month=05-2026</code> → <code style=\"color:#7dd3fc;\">month=06-2026</code>, "
+                "or <code style=\"color:#7dd3fc;\">month=05-26</code> → <code style=\"color:#7dd3fc;\">month=06-26</code>) then press Enter."
                 "</p>"
                 f"{ex_block}"
                 "</div>"

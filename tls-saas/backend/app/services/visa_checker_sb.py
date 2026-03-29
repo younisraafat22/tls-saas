@@ -1009,27 +1009,16 @@ class VisaCheckerSB:
                         break
                     phase2_done = True
                     try:
-                        ordered_links: list[tuple[str, str, str]] = []
-                        for link in driver.find_elements(
-                            By.CSS_SELECTOR, "a.MonthSelector_month-selector_button__An0eF"
-                        ):
-                            ordered_links.append(
-                                (
-                                    (link.get_attribute("href") or "").strip(),
-                                    link.get_attribute("class") or "",
-                                    (link.text or "").strip(),
-                                )
-                            )
                         hrefs = collect_month_hrefs_from_driver(driver)
                         phase2_list, p2 = fourth_fifth_probe_entries_from_links(
-                            ordered_links, driver.current_url, hrefs
+                            driver.current_url, hrefs
                         )
                         probe_urls |= p2
                         for item in phase2_list:
                             months_to_check.append(item)
                         if phase2_list:
                             log(
-                                f"Phase 2: checking months 4–5 via direct URL ({len(phase2_list)} target(s))"
+                                f"Phase 2: next two months via month= only ({len(phase2_list)} URL(s))"
                             )
                     except Exception as ex:
                         log(f"Phase-2 month URL probes skipped: {ex}", "warn")
