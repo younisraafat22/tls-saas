@@ -1025,8 +1025,12 @@ def _apply_tls_usage_from_server_response(data: dict) -> None:
         db.close()
 
 
-def sync_tls_email_usage_from_server(force: bool = False) -> None:
-    """Pull TLS email usage counts from backend, preferring subscription-user scope via license key."""
+def sync_tls_email_usage_from_server(force: bool = False, require_server_for_paid: bool = False) -> bool:
+    """Pull TLS email usage counts from backend and return True when sync succeeds.
+
+    For paid licenses, caller may require a successful server sync to enforce limits
+    across reinstalls/devices.
+    """
     try:
         now = time.time()
         if (
@@ -1034,45 +1038,58 @@ def sync_tls_email_usage_from_server(force: bool = False) -> None:
             and _TLS_USAGE_SYNC_CACHE["time"] is not None
             and now - float(_TLS_USAGE_SYNC_CACHE["time"]) < _TLS_USAGE_SYNC_TTL
         ):
-            return
+            return True
 
         lic = _read_license_file() or {}
         lic_key = str(lic.get("key") or "").strip()
-        backend_url = (getattr(Config, "BACKEND_URL", "") or "").rstrip("/")
-        if not backend_url:
-            return
+        is_paid_license = bool(lic_key and lic_key.upper() != "TRIAL")
+
+        urls_to_try = _build_backend_urls()
+        if not urls_to_try:
+            return False if (is_paid_license and require_server_for_paid) else True
 
         # Paid licenses: usage is tied to subscription user, not device.
-        if lic_key and lic_key.upper() != "TRIAL":
+        if is_paid_license:
             encoded = urllib.parse.quote(lic_key, safe="")
-            req = urllib.request.Request(
-                f"{backend_url}/api/monitoring/license/{encoded}/tls-email-usage",
-                headers={"Accept": "application/json"},
-                method="GET",
-            )
-            with _safe_urlopen(req, timeout=3) as resp:
-                raw = resp.read().decode()
-                if raw:
-                    _apply_tls_usage_from_server_response(json.loads(raw))
-                    _TLS_USAGE_SYNC_CACHE["time"] = now
-                    return
+            for backend_url in urls_to_try:
+                try:
+                    req = urllib.request.Request(
+                        f"{backend_url}/api/monitoring/license/{encoded}/tls-email-usage",
+                        headers={"Accept": "application/json"},
+                        method="GET",
+                    )
+                    with _safe_urlopen(req, timeout=3) as resp:
+                        raw = resp.read().decode()
+                        if raw:
+                            _apply_tls_usage_from_server_response(json.loads(raw))
+                            _TLS_USAGE_SYNC_CACHE["time"] = now
+                            return True
+                except Exception:
+                    continue
+            return False if require_server_for_paid else True
 
         # Trial fallback: still device-scoped.
         hw_id = get_hardware_id()
         if not hw_id or len(str(hw_id).strip()) < 8:
-            return
-        req = urllib.request.Request(
-            f"{backend_url}/api/monitoring/hardware/{hw_id}/usage",
-            headers={"Accept": "application/json"},
-            method="GET",
-        )
-        with _safe_urlopen(req, timeout=3) as resp:
-            raw = resp.read().decode()
-            if raw:
-                _apply_tls_usage_from_server_response(json.loads(raw))
-                _TLS_USAGE_SYNC_CACHE["time"] = now
+            return True
+        for backend_url in urls_to_try:
+            try:
+                req = urllib.request.Request(
+                    f"{backend_url}/api/monitoring/hardware/{hw_id}/usage",
+                    headers={"Accept": "application/json"},
+                    method="GET",
+                )
+                with _safe_urlopen(req, timeout=3) as resp:
+                    raw = resp.read().decode()
+                    if raw:
+                        _apply_tls_usage_from_server_response(json.loads(raw))
+                        _TLS_USAGE_SYNC_CACHE["time"] = now
+                        return True
+            except Exception:
+                continue
+        return True
     except Exception:
-        pass
+        return False
 
 
 def register_desktop_hardware_with_backend() -> None:
@@ -1081,8 +1098,8 @@ def register_desktop_hardware_with_backend() -> None:
         hw_id = get_hardware_id()
         if not hw_id or len(str(hw_id).strip()) < 8:
             return
-        backend_url = (getattr(Config, "BACKEND_URL", "") or "").rstrip("/")
-        if not backend_url:
+        urls_to_try = _build_backend_urls()
+        if not urls_to_try:
             return
         body: dict = {"hardware_id": str(hw_id).strip()}
         lic = _read_license_file() or {}
@@ -1101,16 +1118,21 @@ def register_desktop_hardware_with_backend() -> None:
         except Exception:
             pass
         payload = json.dumps(body).encode("utf-8")
-        req = urllib.request.Request(
-            f"{backend_url}/api/monitoring/register-desktop-hardware",
-            data=payload,
-            headers={"Content-Type": "application/json", "Accept": "application/json"},
-            method="POST",
-        )
-        with _safe_urlopen(req, timeout=10) as resp:
-            raw = resp.read().decode()
-            if raw:
-                _apply_tls_usage_from_server_response(json.loads(raw))
+        for backend_url in urls_to_try:
+            try:
+                req = urllib.request.Request(
+                    f"{backend_url}/api/monitoring/register-desktop-hardware",
+                    data=payload,
+                    headers={"Content-Type": "application/json", "Accept": "application/json"},
+                    method="POST",
+                )
+                with _safe_urlopen(req, timeout=10) as resp:
+                    raw = resp.read().decode()
+                    if raw:
+                        _apply_tls_usage_from_server_response(json.loads(raw))
+                return
+            except Exception:
+                continue
     except Exception:
         pass
 
@@ -1259,11 +1281,15 @@ def can_change_tls_email(new_email: str) -> tuple[bool, str]:
     Trial: 1 email allowed, Lifetime: 2 emails allowed.
     Returns (allowed, message)
     """
-    sync_tls_email_usage_from_server()
-
     status = get_license_status()
     if not status or not status.get("valid"):
         return False, "No active license"
+
+    lic_key = str(status.get("key") or "").strip()
+    is_paid_license = bool(lic_key and lic_key.upper() != "TRIAL")
+    sync_ok = sync_tls_email_usage_from_server(force=True, require_server_for_paid=is_paid_license)
+    if is_paid_license and not sync_ok:
+        return False, "Could not verify TLS email limit from server. Please check internet and try again."
     
     plan_info = status.get("plan_info", {})
     max_emails = plan_info.get("max_emails", 1)
@@ -1306,7 +1332,7 @@ def can_change_tls_email(new_email: str) -> tuple[bool, str]:
             return True, f"TLS email already approved ({len(used_emails)}/{max_emails} used)."
 
         if target_email and target_email not in used_emails and len(used_emails) >= max_emails:
-            return False, f"TLS email limit reached. Maximum {max_emails} different TLS email(s) allowed per device."
+            return False, f"TLS email limit reached. Maximum {max_emails} different TLS email(s) allowed for this subscription."
 
         next_used = len(used_emails) + (1 if target_email else 0)
         return True, f"TLS email change allowed ({min(next_used, max_emails)}/{max_emails} used)."

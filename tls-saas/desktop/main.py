@@ -39,6 +39,7 @@ import socket
 import asyncio
 import queue
 import json
+import time
 import urllib.request
 import urllib.error
 import subprocess
@@ -2633,6 +2634,7 @@ class TLSApp:
 
         def save_configuration(e):
             _set_save_state(True)
+            _save_started_at = time.time()
             try:
                 print("[UI] save_configuration clicked")
                 db = SessionLocal()
@@ -2727,8 +2729,10 @@ class TLSApp:
                 # Check if TLS credential email change is allowed
                 old_tls_email = settings_obj.tls_email or ""
                 did_show_error = False
+                old_tls_norm = old_tls_email.strip().lower()
+                new_tls_norm = new_tls_email.strip().lower()
 
-                if old_tls_email and new_tls_email and old_tls_email.lower() != new_tls_email.lower():
+                if new_tls_norm and old_tls_norm != new_tls_norm:
                     try:
                         from license_service import can_change_tls_email, record_tls_email_change
                         can_change, message = can_change_tls_email(new_tls_email)
@@ -2796,6 +2800,12 @@ class TLSApp:
                 print(f"[UI] EXCEPTION in save_configuration: {exc}")
                 import traceback; traceback.print_exc()
             finally:
+                try:
+                    elapsed = time.time() - _save_started_at
+                    if elapsed < 0.6:
+                        time.sleep(0.6 - elapsed)
+                except Exception:
+                    pass
                 _set_save_state(False)
 
         # Build config card children dynamically

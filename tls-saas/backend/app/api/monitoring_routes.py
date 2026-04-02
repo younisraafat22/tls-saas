@@ -4,6 +4,7 @@ and license verification / deactivation for the desktop app.
 """
 
 import logging
+import json
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
