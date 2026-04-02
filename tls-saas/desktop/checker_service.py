@@ -215,7 +215,7 @@ class TLSCheckerService:
         """Fire-and-forget: report check result to backend so the web dashboard can show it."""
         def _do_report():
             try:
-                from license_service import _read_license_file, _safe_urlopen
+                from license_service import _read_license_file, _safe_urlopen, _build_backend_urls
                 import json as _json, urllib.request
 
                 # Read key directly from file (avoid get_license_status network call)
@@ -232,12 +232,29 @@ class TLSCheckerService:
                     "error": error,
                 }).encode("utf-8")
 
-                url = f"{Config.BACKEND_URL.rstrip('/')}/api/monitoring/report-desktop-license"
-                req = urllib.request.Request(url, data=payload,
-                                            headers={"Content-Type": "application/json"},
-                                            method="POST")
-                with _safe_urlopen(req, timeout=15) as resp:
-                    response_data = _json.loads(resp.read().decode() or "{}")
+                response_data = {}
+                reported = False
+                urls_to_try = _build_backend_urls()
+                if not urls_to_try:
+                    bu = (Config.BACKEND_URL or "").rstrip("/")
+                    if bu:
+                        urls_to_try = [bu]
+
+                for base in urls_to_try:
+                    try:
+                        url = f"{base.rstrip('/')}/api/monitoring/report-desktop-license"
+                        req = urllib.request.Request(url, data=payload,
+                                                    headers={"Content-Type": "application/json"},
+                                                    method="POST")
+                        with _safe_urlopen(req, timeout=15) as resp:
+                            response_data = _json.loads(resp.read().decode() or "{}")
+                        reported = True
+                        break
+                    except Exception:
+                        continue
+
+                if not reported:
+                    raise RuntimeError("all backend report URLs failed")
 
                 desktop_total_checks = response_data.get("desktop_total_checks")
                 desktop_last_check_at = response_data.get("desktop_last_check_at")
@@ -2625,7 +2642,7 @@ class TLSCheckerService:
                                 settings.notification_email,
                                 settings.get_notification_types(),
                                 screenshot_path,
-                                slot_details=message,
+                                slot_details="\n".join(slot_details),
                                 tls_disabled_month_booking_tip=self._tls_disabled_month_tip,
                                 tls_month_probe_example_url=self._tls_month_probe_example_url,
                             )
