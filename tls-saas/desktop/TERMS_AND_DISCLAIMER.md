@@ -1,13 +1,13 @@
-﻿# TLS Appointment Checker  Terms & Disclaimer
+﻿# TLS Appointment Checker Terms & Disclaimer
 
-**Version:** 2.0.0
-**Last Updated:** March 2026
+**Version:** 1.0.0
+**Last Updated:** April 2026
 
 ---
 
-##  EARLY ACCESS NOTICE
+## EARLY ACCESS NOTICE
 
-**This application is in early access.** By using this software you acknowledge:
+**This application is version 1 and remains in early access.** By using this software you acknowledge:
 
 - This is an early release and may contain bugs or incomplete features
 - The software is provided **"AS IS"** without warranty

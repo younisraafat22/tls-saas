@@ -2598,7 +2598,7 @@ class TLSApp:
                         method="POST",
                     )
                     try:
-                        with urllib.request.urlopen(req, timeout=12) as resp:
+                        with urllib.request.urlopen(req, timeout=4) as resp:
                             if int(getattr(resp, "status", 200)) < 400:
                                 return True, ""
                     except urllib.error.HTTPError as he:
@@ -2616,7 +2616,23 @@ class TLSApp:
             except Exception as ex:
                 return False, f"Notification email validation failed: {ex}"
 
+        _save_btn_icon = ft.Icon(ft.Icons.SAVE, size=16, color="#0A0E27")
+        _save_btn_spinner = ft.ProgressRing(width=14, height=14, stroke_width=2, color="#0A0E27", visible=False)
+        _save_btn_text = ft.Text("Save Configuration", size=13, weight=ft.FontWeight.W_600, color="#0A0E27")
+
+        def _set_save_state(is_saving: bool):
+            _save_btn_icon.visible = not is_saving
+            _save_btn_spinner.visible = is_saving
+            _save_btn_text.value = "Saving..." if is_saving else "Save Configuration"
+            try:
+                save_btn.disabled = is_saving
+                save_btn.update()
+                self.page.update()
+            except Exception:
+                pass
+
         def save_configuration(e):
+            _set_save_state(True)
             try:
                 print("[UI] save_configuration clicked")
                 db = SessionLocal()
@@ -2630,6 +2646,7 @@ class TLSApp:
                     )
                     db.add(settings_obj)
 
+                old_notification_email = (settings_obj.notification_email or "").strip()
                 new_email = (config_notification_field.value or "").strip()
                 new_tls_email = (config_email_field.value or "").strip()
                 new_password = (config_password_field.value or "").strip()
@@ -2673,38 +2690,39 @@ class TLSApp:
                         pass
                     return
 
-                ok_email, email_msg = _validate_notification_email_for_license(new_email)
-                if not ok_email:
-                    raw_msg = (
-                        email_msg
-                        or "Notification email must be your account email or the email used when purchasing the desktop license"
-                    )
-                    err_text = raw_msg.replace(
-                        "Recipient",
-                        "Notification email",
-                    ).replace(
-                        "recipient",
-                        "Notification email",
-                    )
-                    config_notification_field.error_text = err_text
-                    self.page.update()
-                    db.close()
-                    try:
-                        if self.page:
-                            self.page.show_dialog(
-                                ft.SnackBar(
-                                    content=ft.Text(
-                                        err_text,
-                                        size=14,
-                                        color=ft.Colors.WHITE,
-                                    ),
-                                    bgcolor=ft.Colors.RED_400,
-                                    duration=8000,
+                if not old_notification_email or old_notification_email.lower() != new_email.lower():
+                    ok_email, email_msg = _validate_notification_email_for_license(new_email)
+                    if not ok_email:
+                        raw_msg = (
+                            email_msg
+                            or "Notification email must be your account email or the email used when purchasing the desktop license"
+                        )
+                        err_text = raw_msg.replace(
+                            "Recipient",
+                            "Notification email",
+                        ).replace(
+                            "recipient",
+                            "Notification email",
+                        )
+                        config_notification_field.error_text = err_text
+                        self.page.update()
+                        db.close()
+                        try:
+                            if self.page:
+                                self.page.show_dialog(
+                                    ft.SnackBar(
+                                        content=ft.Text(
+                                            err_text,
+                                            size=14,
+                                            color=ft.Colors.WHITE,
+                                        ),
+                                        bgcolor=ft.Colors.RED_400,
+                                        duration=8000,
+                                    )
                                 )
-                            )
-                    except Exception:
-                        pass
-                    return
+                        except Exception:
+                            pass
+                        return
 
                 # Check if TLS credential email change is allowed
                 old_tls_email = settings_obj.tls_email or ""
@@ -2777,6 +2795,8 @@ class TLSApp:
             except Exception as exc:
                 print(f"[UI] EXCEPTION in save_configuration: {exc}")
                 import traceback; traceback.print_exc()
+            finally:
+                _set_save_state(False)
 
         # Build config card children dynamically
         # Startup Configuration
@@ -2926,16 +2946,23 @@ class TLSApp:
             )
 
         # Save button
+        save_btn = ft.FilledButton(
+            content=ft.Row(
+                [_save_btn_icon, _save_btn_spinner, _save_btn_text],
+                spacing=8,
+                tight=True,
+                alignment=ft.MainAxisAlignment.CENTER,
+            ),
+            width=_FIELD_W,
+            height=40,
+            on_click=save_configuration,
+            style=ft.ButtonStyle(bgcolor="#00D9FF", color="#0A0E27"),
+        )
+
         config_children.append(
             ft.Row(
                 [
-                    ft.FilledButton(
-                        "Save Configuration",
-                        icon=ft.Icons.SAVE,
-                        width=_FIELD_W, height=40,
-                        on_click=save_configuration,
-                        style=ft.ButtonStyle(bgcolor="#00D9FF", color="#0A0E27"),
-                    ),
+                    save_btn,
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
             )

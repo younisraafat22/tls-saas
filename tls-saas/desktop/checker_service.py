@@ -237,7 +237,26 @@ class TLSCheckerService:
                                             headers={"Content-Type": "application/json"},
                                             method="POST")
                 with _safe_urlopen(req, timeout=15) as resp:
-                    pass  # 200 OK is enough
+                    response_data = _json.loads(resp.read().decode() or "{}")
+
+                desktop_total_checks = response_data.get("desktop_total_checks")
+                desktop_last_check_at = response_data.get("desktop_last_check_at")
+                if desktop_total_checks is not None or desktop_last_check_at:
+                    db = SessionLocal()
+                    try:
+                        settings = db.query(UserSettings).filter(UserSettings.user_id == self.user_id).first()
+                        if settings:
+                            if desktop_total_checks is not None:
+                                settings.total_checks = int(desktop_total_checks)
+                            if desktop_last_check_at:
+                                try:
+                                    settings.last_check_at = datetime.fromisoformat(str(desktop_last_check_at).replace("Z", "+00:00"))
+                                except Exception:
+                                    settings.last_check_at = datetime.now(timezone.utc)
+                            settings.last_slots_found = bool(slots_available)
+                            db.commit()
+                    finally:
+                        db.close()
             except Exception as e:
                 print(f"[Checker] Backend report failed (non-fatal): {e}")
 
@@ -2606,6 +2625,7 @@ class TLSCheckerService:
                                 settings.notification_email,
                                 settings.get_notification_types(),
                                 screenshot_path,
+                                slot_details=message,
                                 tls_disabled_month_booking_tip=self._tls_disabled_month_tip,
                                 tls_month_probe_example_url=self._tls_month_probe_example_url,
                             )
@@ -2753,7 +2773,11 @@ class TLSCheckerService:
                         settings = db.query(UserSettings).filter(UserSettings.user_id == self.user_id).first()
                         if settings:
                             notification_service.send_slots_available_notification(
-                                settings.notification_email, settings.get_notification_types(), screenshot_path)
+                                settings.notification_email,
+                                settings.get_notification_types(),
+                                screenshot_path,
+                                slot_details=message,
+                            )
                             self._slots_notif_count = 1
                             self._slots_first_notif_time = datetime.now()
                             self._log("📧 Notification sent!")

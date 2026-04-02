@@ -59,6 +59,53 @@ def _merge_hw_tls_extra(
     return ex
 
 
+def _merge_tls_usage_payload(
+    existing: dict | None,
+    client_count: int | None,
+    client_emails: list[str] | None,
+) -> dict:
+    ex = dict(existing or {})
+    emails = {e.strip().lower() for e in (ex.get("tls_emails_used") or []) if isinstance(e, str) and e.strip()}
+    if client_emails:
+        for e in client_emails:
+            if isinstance(e, str) and e.strip():
+                emails.add(e.strip().lower())
+    sc = int(ex.get("tls_email_change_count") or 0)
+    if client_count is not None:
+        sc = max(sc, int(client_count))
+    ex["tls_email_change_count"] = sc
+    ex["tls_emails_used"] = sorted(emails)
+    return ex
+
+
+def _tls_usage_setting_key(user_id: int) -> str:
+    return f"tls_email_usage_user_{user_id}"
+
+
+async def _load_user_tls_usage(db: AsyncSession, user_id: int) -> dict:
+    key = _tls_usage_setting_key(user_id)
+    row_result = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
+    row = row_result.scalar_one_or_none()
+    if not row or not (row.value or "").strip():
+        return {"tls_email_change_count": 0, "tls_emails_used": []}
+    try:
+        data = json.loads(row.value)
+        return _merge_tls_usage_payload(data, None, None)
+    except Exception:
+        return {"tls_email_change_count": 0, "tls_emails_used": []}
+
+
+async def _save_user_tls_usage(db: AsyncSession, user_id: int, usage: dict) -> None:
+    key = _tls_usage_setting_key(user_id)
+    row_result = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
+    row = row_result.scalar_one_or_none()
+    payload = json.dumps(_merge_tls_usage_payload(usage, None, None), ensure_ascii=False)
+    if row:
+        row.value = payload
+    else:
+        db.add(SystemSetting(key=key, value=payload))
+
+
 # For desktop-app purchases, users can be "active" based on an approved
 # Payment row, without a Subscription row.
 # The website dashboard still needs an `expires_at` value, so we derive it from:
@@ -930,6 +977,24 @@ async def report_desktop_check_by_license(
         db.add(nl)
         await db.commit()
 
+        desktop_total_checks_result = await db.execute(
+            select(func.count(CheckResult.id)).where(
+                CheckResult.user_id == payment.user_id,
+                CheckResult.user_id.isnot(None),
+                CheckResult.source == "desktop",
+            )
+        )
+        desktop_total_checks = desktop_total_checks_result.scalar() or 0
+
+        desktop_last_check_result = await db.execute(
+            select(func.max(CheckResult.checked_at)).where(
+                CheckResult.user_id == payment.user_id,
+                CheckResult.user_id.isnot(None),
+                CheckResult.source == "desktop",
+            )
+        )
+        desktop_last_check_at = desktop_last_check_result.scalar()
+
     # Error emails are sent by the desktop app via /desktop-email-relay (or local SMTP when .env is present).
     # Avoid duplicating the same alert here.
 
@@ -961,7 +1026,13 @@ async def report_desktop_check_by_license(
         except Exception as e:
             logger.warning(f"Failed to send desktop alert email: {e}")
 
-    return {"status": "ok", "check_result_id": cr.id, "slots_available": body.slots_available}
+    return {
+        "status": "ok",
+        "check_result_id": cr.id,
+        "slots_available": body.slots_available,
+        "desktop_total_checks": desktop_total_checks,
+        "desktop_last_check_at": desktop_last_check_at.isoformat() if desktop_last_check_at else None,
+    }
 
 
 def _simple_email_ok(addr: str) -> bool:
@@ -1046,6 +1117,34 @@ async def register_desktop_hardware(
     if len(hw) < 8:
         raise HTTPException(400, "hardware_id is required")
 
+    lk = (body.license_key or "").strip()
+    if lk and lk.upper() != "TRIAL":
+        pay_result = await db.execute(
+            select(Payment).where(
+                Payment.license_key.isnot(None),
+                Payment.license_key != "",
+                func.upper(Payment.license_key) == lk.upper(),
+                Payment.status == PaymentStatus.APPROVED,
+            ).limit(1)
+        )
+        payment = pay_result.scalar_one_or_none()
+        if payment:
+            current = await _load_user_tls_usage(db, payment.user_id)
+            merged = _merge_tls_usage_payload(
+                current,
+                body.tls_email_change_count,
+                body.tls_emails_used,
+            )
+            await _save_user_tls_usage(db, payment.user_id, merged)
+            await db.commit()
+            return {
+                "status": "ok",
+                "registered": False,
+                "scope": "subscription_user",
+                "tls_email_change_count": merged.get("tls_email_change_count", 0),
+                "tls_emails_used": merged.get("tls_emails_used", []),
+            }
+
     result = await db.execute(select(HardwareUsage).where(HardwareUsage.hardware_id == hw))
     row = result.scalar_one_or_none()
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -1077,8 +1176,35 @@ async def register_desktop_hardware(
     return {
         "status": "ok",
         "registered": True,
+        "scope": "hardware",
         "tls_email_change_count": merged.get("tls_email_change_count", 0),
         "tls_emails_used": merged.get("tls_emails_used", []),
+    }
+
+
+@router.get("/license/{license_key}/tls-email-usage")
+async def get_license_tls_email_usage(license_key: str, db: AsyncSession = Depends(get_db)):
+    lk = (license_key or "").strip()
+    if not lk:
+        raise HTTPException(400, "license_key is required")
+
+    pay_result = await db.execute(
+        select(Payment).where(
+            Payment.license_key.isnot(None),
+            Payment.license_key != "",
+            func.upper(Payment.license_key) == lk.upper(),
+            Payment.status == PaymentStatus.APPROVED,
+        ).limit(1)
+    )
+    payment = pay_result.scalar_one_or_none()
+    if not payment:
+        raise HTTPException(404, "License not found")
+
+    usage = await _load_user_tls_usage(db, payment.user_id)
+    return {
+        "scope": "subscription_user",
+        "tls_email_change_count": usage.get("tls_email_change_count", 0),
+        "tls_emails_used": usage.get("tls_emails_used", []),
     }
 
 

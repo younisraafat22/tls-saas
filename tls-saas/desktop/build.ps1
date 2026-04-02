@@ -1,6 +1,6 @@
 # TLS Appointment Checker - Build Script
 # Step 1: PyInstaller  →  dist/TLSAppointmentChecker/
-# Step 2: Inno Setup   →  installer_output/TLS_Appointment_Checker_v2.0.0_Setup.exe
+# Step 2: Inno Setup   →  installer_output/TLS_Appointment_Checker_v1.0.0_Setup.exe
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot

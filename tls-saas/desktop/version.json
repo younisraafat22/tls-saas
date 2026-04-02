@@ -1,5 +1,5 @@
 {
   "version": "1.0.0",
   "download_url": "https://tls-saas.vercel.app/download",
-  "release_notes": "v2.0.0: Per-user check results, contact support form, branch locked by license plan, updated plan descriptions"
+  "release_notes": "v1.0.0: Initial early-access release with local TLS appointment monitoring"
 }

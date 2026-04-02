@@ -12,9 +12,11 @@ import ssl
 import uuid
 import platform
 import subprocess
+import threading
 import time
 import urllib.request
 import urllib.error
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 from config import Config, BASE_DIR
 
@@ -693,6 +695,8 @@ _REVOKE_CACHE_TTL = 300  # 5 minutes
 _VERCEL_URL = "https://tls-saas.vercel.app"
 _BACKEND_URL_CACHE: dict = {"time": None, "url": None}
 _BACKEND_URL_TTL = 3600  # 1 hour
+_TLS_USAGE_SYNC_CACHE: dict = {"time": None}
+_TLS_USAGE_SYNC_TTL = 120  # 2 minutes
 
 
 def _fetch_current_backend_url() -> str | None:
@@ -754,15 +758,35 @@ def read_dev_expiry_override() -> datetime | None:
         return None
 
 
+def _set_license_revocation_state(revoked: bool, reason: str = "") -> None:
+    """Persist or clear a local revoked marker without changing the core license identity."""
+    data = _read_license_file()
+    if not data:
+        return
+    if revoked:
+        data["revoked_at"] = datetime.now(timezone.utc).isoformat()
+        if reason:
+            data["revoked_reason"] = reason
+    else:
+        data.pop("revoked_at", None)
+        data.pop("revoked_reason", None)
+    _write_license_file(data)
+
+
 def write_dev_expiry_override(dt: datetime | None) -> None:
     """Set or clear simulated expiry for testing (dashboard expiry / renewal flows)."""
     try:
         if dt is None:
             if os.path.exists(DEV_EXPIRY_OVERRIDE_FILE):
                 os.remove(DEV_EXPIRY_OVERRIDE_FILE)
+            _set_license_revocation_state(False)
             return
         with open(DEV_EXPIRY_OVERRIDE_FILE, "w", encoding="utf-8") as f:
             f.write(dt.isoformat())
+        if dt <= datetime.now(timezone.utc):
+            _set_license_revocation_state(True, "simulated expiry")
+        else:
+            _set_license_revocation_state(False)
     except Exception as exc:
         logger.warning("[LICENSE] dev expiry override write failed: %s", exc)
 
@@ -787,15 +811,28 @@ def get_license_status(force_network: bool = False) -> dict | None:
     if expires.tzinfo is None:
         expires = expires.replace(tzinfo=timezone.utc)
     dev_sim = read_dev_expiry_override()
+    revoked_at = data.get("revoked_at")
+    if revoked_at:
+        try:
+            revoked_dt = datetime.fromisoformat(str(revoked_at).replace("Z", "+00:00"))
+            if revoked_dt.tzinfo is None:
+                revoked_dt = revoked_dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            revoked_dt = datetime.now(timezone.utc)
+    else:
+        revoked_dt = None
     if dev_sim is not None:
         expires = dev_sim
-    if datetime.now(timezone.utc) > expires:
+    is_expired = datetime.now(timezone.utc) > expires
+    if revoked_dt is not None or is_expired:
         return {
             "valid": False,
             "expired": True,
             "plan": data["plan"],
             "plan_info": PLANS.get(data["plan"], PLANS["trial"]),
             "expires_at": expires,
+            "days_remaining": 0,
+            "revoked_at": revoked_dt,
             "message": "License expired",
         }
 
@@ -887,7 +924,7 @@ def get_license_status(force_network: bool = False) -> dict | None:
         "plan": plan,
         "plan_info": plan_info,
         "expires_at": expires,
-        "days_remaining": (expires - datetime.now(timezone.utc)).days,
+        "days_remaining": max(0, (expires - datetime.now(timezone.utc)).days),
         "checks_today": checks_today,
         "checks_limit": plan_info["checks_per_day"],
         "min_interval": plan_info["min_interval"],
@@ -988,24 +1025,52 @@ def _apply_tls_usage_from_server_response(data: dict) -> None:
         db.close()
 
 
-def sync_tls_email_usage_from_server() -> None:
-    """Pull TLS email usage counts from hardware_usage (same device id after reinstall)."""
+def sync_tls_email_usage_from_server(force: bool = False) -> None:
+    """Pull TLS email usage counts from backend, preferring subscription-user scope via license key."""
     try:
-        hw_id = get_hardware_id()
-        if not hw_id or len(str(hw_id).strip()) < 8:
+        now = time.time()
+        if (
+            not force
+            and _TLS_USAGE_SYNC_CACHE["time"] is not None
+            and now - float(_TLS_USAGE_SYNC_CACHE["time"]) < _TLS_USAGE_SYNC_TTL
+        ):
             return
+
+        lic = _read_license_file() or {}
+        lic_key = str(lic.get("key") or "").strip()
         backend_url = (getattr(Config, "BACKEND_URL", "") or "").rstrip("/")
         if not backend_url:
+            return
+
+        # Paid licenses: usage is tied to subscription user, not device.
+        if lic_key and lic_key.upper() != "TRIAL":
+            encoded = urllib.parse.quote(lic_key, safe="")
+            req = urllib.request.Request(
+                f"{backend_url}/api/monitoring/license/{encoded}/tls-email-usage",
+                headers={"Accept": "application/json"},
+                method="GET",
+            )
+            with _safe_urlopen(req, timeout=3) as resp:
+                raw = resp.read().decode()
+                if raw:
+                    _apply_tls_usage_from_server_response(json.loads(raw))
+                    _TLS_USAGE_SYNC_CACHE["time"] = now
+                    return
+
+        # Trial fallback: still device-scoped.
+        hw_id = get_hardware_id()
+        if not hw_id or len(str(hw_id).strip()) < 8:
             return
         req = urllib.request.Request(
             f"{backend_url}/api/monitoring/hardware/{hw_id}/usage",
             headers={"Accept": "application/json"},
             method="GET",
         )
-        with _safe_urlopen(req, timeout=10) as resp:
+        with _safe_urlopen(req, timeout=3) as resp:
             raw = resp.read().decode()
             if raw:
                 _apply_tls_usage_from_server_response(json.loads(raw))
+                _TLS_USAGE_SYNC_CACHE["time"] = now
     except Exception:
         pass
 
@@ -1020,6 +1085,10 @@ def register_desktop_hardware_with_backend() -> None:
         if not backend_url:
             return
         body: dict = {"hardware_id": str(hw_id).strip()}
+        lic = _read_license_file() or {}
+        lic_key = str(lic.get("key") or "").strip()
+        if lic_key:
+            body["license_key"] = lic_key
         try:
             from database import SessionLocal, UserSettings
 
@@ -1206,7 +1275,6 @@ def can_change_tls_email(new_email: str) -> tuple[bool, str]:
         if not settings:
             return True, "First TLS email setup allowed"
         
-        current_count = settings.tls_email_change_count or 0
         target_email = (new_email or "").strip().lower()
 
         # Check if same email (no increment needed)
@@ -1233,14 +1301,15 @@ def can_change_tls_email(new_email: str) -> tuple[bool, str]:
         except Exception:
             pass
 
+        # If this email was already used on this device, allow switching back to it.
+        if target_email and target_email in used_emails:
+            return True, f"TLS email already approved ({len(used_emails)}/{max_emails} used)."
+
         if target_email and target_email not in used_emails and len(used_emails) >= max_emails:
             return False, f"TLS email limit reached. Maximum {max_emails} different TLS email(s) allowed per device."
 
-        # Check if limit reached
-        if current_count >= max_emails:
-            return False, f"TLS email change limit reached. Maximum {max_emails} TLS credential email(s) allowed per device."
-        
-        return True, f"TLS email change allowed ({current_count + 1}/{max_emails})"
+        next_used = len(used_emails) + (1 if target_email else 0)
+        return True, f"TLS email change allowed ({min(next_used, max_emails)}/{max_emails} used)."
     finally:
         db.close()
 
@@ -1254,16 +1323,34 @@ def record_tls_email_change(old_email: str, new_email: str):
     try:
         settings = db.query(UserSettings).filter(UserSettings.user_id == 1).first()
         if settings:
-            settings.tls_email_change_count = (settings.tls_email_change_count or 0) + 1
-            
+            old_norm = (old_email or "").strip().lower()
+            new_norm = (new_email or "").strip().lower()
+
             try:
                 history = json.loads(settings.tls_email_history or "[]")
             except:
                 history = []
+
+            used_emails: set[str] = set()
+            if settings.tls_email:
+                used_emails.add((settings.tls_email or "").strip().lower())
+            for item in history:
+                if not isinstance(item, dict):
+                    continue
+                old_e = (item.get("old_email") or "").strip().lower()
+                new_e = (item.get("new_email") or "").strip().lower()
+                if old_e:
+                    used_emails.add(old_e)
+                if new_e:
+                    used_emails.add(new_e)
+
+            # Only consume quota when introducing a brand-new TLS email on this device.
+            if new_norm and new_norm not in used_emails:
+                settings.tls_email_change_count = (settings.tls_email_change_count or 0) + 1
             
             history.append({
-                "old_email": old_email,
-                "new_email": new_email,
+                "old_email": old_norm,
+                "new_email": new_norm,
                 "timestamp": datetime.now(timezone.utc).isoformat()
             })
             settings.tls_email_history = json.dumps(history)
@@ -1271,7 +1358,8 @@ def record_tls_email_change(old_email: str, new_email: str):
             db.commit()
     finally:
         db.close()
-    register_desktop_hardware_with_backend()
+    # Keep Save Configuration responsive: persist server sync in background.
+    threading.Thread(target=register_desktop_hardware_with_backend, daemon=True).start()
 
 
 # =====================================================================

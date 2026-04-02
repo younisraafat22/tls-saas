@@ -7,6 +7,7 @@ import smtplib
 import json
 import urllib.request
 import urllib.error
+from html import escape
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -277,6 +278,7 @@ class NotificationService:
         notification_types: list,
         screenshot_path: str = None,
         *,
+        slot_details: str = "",
         tls_disabled_month_booking_tip: bool = False,
         tls_month_probe_example_url: str | None = None,
     ):
@@ -284,6 +286,16 @@ class NotificationService:
         title = "🎉 TLS Appointments Available!"
         windows_message = "Appointment slots are now available! Log in to the TLS website immediately to book."
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        details_html = ""
+        if slot_details:
+            safe_details = escape(str(slot_details).strip()).replace("\n", "<br>")
+            details_html = (
+                '<div style="background:#1a1f3a;border:1px solid #00d9ff40;border-radius:10px;padding:14px 16px;margin:16px 0;">'
+                '<p style="color:#00d9ff;font-weight:600;margin:0 0 8px 0;font-size:14px;">Detected slot details</p>'
+                f'<p style="color:#ddd;font-size:13px;line-height:1.5;margin:0;word-break:break-word;">{safe_details}</p>'
+                '</div>'
+            )
 
         tip_html = ""
         if tls_disabled_month_booking_tip:
@@ -338,6 +350,7 @@ class NotificationService:
         <span class="badge">SLOTS OPEN NOW</span>
       </div>
       <p style="color: #fff; font-size: 16px; margin-top: 16px;">Great news! Our monitoring detected <strong>available appointment slots</strong> on the TLS website.</p>
+      {details_html}
       <div class="info-row">
         <span class="info-label">Detected At</span>
         <span class="info-value">{now}</span>
