@@ -1012,20 +1012,8 @@ async def report_desktop_check_by_license(
     except Exception as e:
         logger.warning(f"WebSocket broadcast failed (non-fatal): {e}")
 
-    # If slots found, notify via backend email too
-    if body.slots_available and user:
-        try:
-            from app.services.email_service import EmailService
-            email_svc = EmailService()
-            email_svc.send_appointment_alert(
-                to_email=user.email,
-                user_name=user.full_name or user.email,
-                branch_name=branch.name,
-                service_type=branch.service_type.value,
-                slot_details=body.slot_details or "Slots detected by desktop app",
-            )
-        except Exception as e:
-            logger.warning(f"Failed to send desktop alert email: {e}")
+    # Desktop app already sends slot notifications (relay/local SMTP).
+    # Do not send another backend alert here to avoid duplicate emails.
 
     return {
         "status": "ok",
