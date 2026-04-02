@@ -116,6 +116,7 @@ async def _save_user_tls_usage(db: AsyncSession, user_id: int, usage: dict) -> N
 # so this is an approximation used to fix missing dashboard expiry (shows `—`).
 _DESKTOP_PLAN_DURATION_DAYS: dict[str, int] = {
     "trial": 1,
+    "test_1d": 1,
     "legalization": 30,
     "visa": 30,
     "legalization_monthly": 30,

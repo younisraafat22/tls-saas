@@ -713,22 +713,50 @@ async def _find_existing_license_key_for_renewal(db: AsyncSession, payment: Paym
 async def generate_test_license(
     body: dict,
     admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
 ):
     """
-    Generate a 2-hour test license for a specific hardware_id.
+    Generate a 1-day test license for a specific hardware_id.
     Admin-only. Use this to verify that license expiry logic works
-    without waiting the full plan duration.
+    without waiting the full monthly plan duration.
     """
     hardware_id = (body.get("hardware_id") or "").strip()
     if not hardware_id:
         raise HTTPException(status_code=400, detail="hardware_id is required")
 
-    license_key = _generate_license_key("test_2h", hardware_id)
+    license_key = _generate_license_key("test_1d", hardware_id)
+    now = datetime.now(timezone.utc)
+
+    payment = Payment(
+        user_id=admin.id,
+        amount=0,
+        currency="EGP",
+        method=PaymentMethod.OTHER,
+        reference="admin-test-1d",
+        status=PaymentStatus.APPROVED,
+        admin_notes="Generated 1-day test license",
+        processed_at=now,
+        hardware_id=hardware_id,
+        plan_key="test_1d",
+        submitter_name="Test License",
+        submitter_email=admin.email,
+        license_key=license_key,
+    )
+    db.add(payment)
+    db.add(ActivityLog(
+        actor_id=admin.id,
+        action="test_license_generated",
+        details={"plan_key": "test_1d", "hardware_id": hardware_id, "license_key": license_key},
+    ))
+    await db.commit()
+    await db.refresh(payment)
+
     return {
         "license_key": license_key,
-        "plan": "test_2h",
-        "duration": "2 hours",
-        "note": "Activate this key in the desktop app. The license will expire 2 hours after activation.",
+        "plan": "test_1d",
+        "payment_id": payment.id,
+        "duration": "1 day",
+        "note": "Activate this key in the desktop app. The license will expire 1 day after activation and is now visible in Admin > Licenses.",
     }
 
 

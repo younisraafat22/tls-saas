@@ -203,6 +203,15 @@ PLANS = {
         "currency": "EGP",
         "max_emails": 2,
     },
+    "test_1d": {
+        "name": "Test (1 Day)",
+        "checks_per_day": 24,
+        "min_interval": 30,
+        "duration_days": 1,
+        "price": 0,
+        "currency": "EGP",
+        "max_emails": 2,
+    },
 }
 
 

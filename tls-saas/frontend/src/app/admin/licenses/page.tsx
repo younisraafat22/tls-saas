@@ -35,6 +35,7 @@ const PLAN_OPTIONS = [
   { value: "visa", label: "Visa" },
   { value: "all_in_one", label: "Legalization + Visa" },
   { value: "premium", label: "Premium" },
+  { value: "test_1d", label: "Test (1 Day)" },
 ];
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
@@ -503,7 +504,7 @@ function TestLicenseModal({ onClose }: { onClose: () => void }) {
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold flex items-center gap-2">
             <Clock className="w-5 h-5 text-amber-400" />
-            Generate Test License (2h)
+            Generate Test License (1 Day)
           </h2>
           <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
             <X className="w-4 h-4" />
@@ -513,7 +514,7 @@ function TestLicenseModal({ onClose }: { onClose: () => void }) {
         {result ? (
           <div className="space-y-4">
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-center">
-              <div className="text-xs text-amber-400 font-medium mb-2">TEST LICENSE — expires in 2 hours</div>
+              <div className="text-xs text-amber-400 font-medium mb-2">TEST LICENSE — expires in 1 day</div>
               <code className="font-mono text-sm text-amber-300 break-all">{result.license_key}</code>
             </div>
             {result.note && <div className="text-xs text-center text-gray-500">{result.note}</div>}
@@ -532,7 +533,7 @@ function TestLicenseModal({ onClose }: { onClose: () => void }) {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-300 flex gap-2">
               <Info className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>Generates a temporary license valid for 2 hours. Use this to let a user test the app before purchasing.</span>
+              <span>Generates a temporary license valid for 1 day. Use this to verify expiry behavior quickly.</span>
             </div>
             <div>
               <label className="block text-sm text-gray-400 mb-1.5">
@@ -895,7 +896,7 @@ export default function AdminLicensesPage() {
             <Mail className="w-4 h-4" /> Recover by Email
           </button>
           <button onClick={() => setShowTest(true)} className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl text-sm font-medium hover:bg-amber-500/20 transition-colors">
-            <Clock className="w-4 h-4" /> Test (2h)
+            <Clock className="w-4 h-4" /> Test (1 Day)
           </button>
           <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 text-gray-300 rounded-xl text-sm font-medium hover:bg-white/10 transition-colors">
             <Shield className="w-4 h-4" /> Import Key
