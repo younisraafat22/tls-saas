@@ -98,7 +98,6 @@ These values were already present in local env files before cleanup and should b
 - `desktop/main.py`
 - `desktop/TLSAppointmentChecker.spec`
 - `desktop/monitoring_server.py`
-- `desktop/license_manager.py`
 - `frontend/src/lib/api.ts`
 - `frontend/src/app/admin/licenses/page.tsx`
 - `.gitignore`
@@ -113,7 +112,7 @@ These values were already present in local env files before cleanup and should b
 
 - Python files compile with `py_compile`
 - Backend config imports with the new secure env flow
-- Desktop monitoring server and license manager import with env loading
+- Desktop monitoring server imports with env loading
 
 ---
 

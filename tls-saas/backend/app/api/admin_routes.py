@@ -1013,7 +1013,7 @@ async def import_existing_license(
     """
     Import an externally-generated license key into the management system.
     Use this for any key that exists on a device but has no Payment record
-    (e.g. keys issued before the database, or via the desktop license_manager).
+    (e.g. keys issued before the database, or from a legacy offline workflow).
     The key's HMAC signature is validated before importing.
     """
     import hashlib, hmac as _hmac

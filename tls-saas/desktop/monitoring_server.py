@@ -959,7 +959,7 @@ def main():
             public_url = tunnel.public_url
             print(f"  🌐 Public URL:  {public_url}")
             print(f"     Use this URL in your app's LICENSE_SERVER_URL setting")
-            print(f"     and in license_manager.py LICENSE_SERVER_URL")
+            print(f"     and in the website admin panel / backend LICENSE_SERVER_URL")
         except ImportError:
             print("  ⚠️  pyngrok not installed. Run: pip install pyngrok")
             print("     Falling back to local-only mode.")
@@ -969,7 +969,7 @@ def main():
     print()
     print("  📋 Quick Start:")
     print("  1. Set LICENSE_SERVER_URL in your .env or config to this server's URL")
-    print("  2. In license_manager.py, set LICENSE_SERVER_URL and ADMIN_API_KEY")
+    print("  2. In the website admin panel / backend env, set LICENSE_SERVER_URL and ADMIN_API_KEY")
     print("  3. Users start monitoring from the app → server handles everything")
     print("=" * 60)
     print()
