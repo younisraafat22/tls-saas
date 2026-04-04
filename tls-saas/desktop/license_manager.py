@@ -33,6 +33,8 @@ import hmac
 import hashlib
 import secrets
 
+ACTIVE_LICENSE_PLANS = ["legalization", "visa", "all_in_one", "premium", "test_1d"]
+
 SECRET = os.environ.get("LICENSE_HMAC_SECRET", "")
 
 
@@ -833,13 +835,14 @@ class ServerManagerApp:
     #  PAGE: Generate License
     # ══════════════════════════════════════════════════════════════════
     def _page_generate(self):
+        allowed_plans = [k for k in ACTIVE_LICENSE_PLANS if k in PLANS]
         plan_dd = ft.Dropdown(
             label="License Type", width=350, border_radius=12,
             options=[
-                ft.dropdown.Option(k, f"{v['name']}  —  {v.get('price', 0):,} EGP")
-                for k, v in PLANS.items() if k != "trial"
+                ft.dropdown.Option(k, PLANS[k]["name"])
+                for k in allowed_plans
             ],
-            value="lifetime",
+            value=allowed_plans[0] if allowed_plans else None,
         )
         device_field = ft.TextField(
             label="Customer Device ID (full 32-char hash)",
