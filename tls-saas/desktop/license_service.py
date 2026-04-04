@@ -192,17 +192,6 @@ PLANS = {
         "currency": "EGP",
         "max_emails": 2,
     },
-    # Internal test plan — 2-hour expiry for verifying expiry logic without waiting 30 days
-    "test_2h": {
-        "name": "Test (2 Hours)",
-        "checks_per_day": 24,
-        "min_interval": 30,
-        "duration_days": 0,
-        "duration_hours": 2,
-        "price": 0,
-        "currency": "EGP",
-        "max_emails": 2,
-    },
     "test_1d": {
         "name": "Test (1 Day)",
         "checks_per_day": 24,

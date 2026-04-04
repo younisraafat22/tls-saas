@@ -133,7 +133,6 @@ _DESKTOP_PLAN_DURATION_DAYS: dict[str, int] = {
 }
 
 _DESKTOP_PLAN_DURATION_HOURS: dict[str, int] = {
-    "test_2h": 2,
 }
 
 
