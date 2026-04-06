@@ -52,6 +52,49 @@ def _desktop_plan_display_name(plan_key: str | None) -> str:
     return raw.replace("_", " ").title()
 
 
+_DESKTOP_PLAN_DURATION_DAYS: dict[str, int] = {
+    "trial": 1,
+    "test_1d": 1,
+    "legalization": 30,
+    "visa": 30,
+    "legalization_monthly": 30,
+    "visa_monthly": 30,
+    "all_in_one": 30,
+    "all_in_one_monthly": 30,
+    "premium": 30,
+    "premium_monthly": 30,
+    "legalization_quarterly": 90,
+    "visa_quarterly": 90,
+    "all_in_one_quarterly": 90,
+    "premium_quarterly": 90,
+    "premium_annual": 365,
+}
+
+
+def _desktop_payment_expires_at(payment: Payment) -> datetime | None:
+    plan_key = (payment.plan_key or "").strip().lower()
+    days = _DESKTOP_PLAN_DURATION_DAYS.get(plan_key)
+    if days is None:
+        return None
+    base = payment.processed_at or payment.created_at
+    if base is None:
+        return None
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=timezone.utc)
+    return base + timedelta(days=days)
+
+
+def _effective_license_status(payment: Payment, now: datetime) -> str:
+    raw_status = (payment.status.value if hasattr(payment.status, "value") else str(payment.status)).lower()
+    if raw_status != PaymentStatus.APPROVED.value:
+        return raw_status
+    exp = _desktop_payment_expires_at(payment)
+    if exp and exp <= now:
+        # Keep DB row immutable for audit; expose effective status for admin UI.
+        return PaymentStatus.REJECTED.value
+    return PaymentStatus.APPROVED.value
+
+
 # ── Dashboard Stats ──────────────────────────────────────────────────
 
 @router.get("/dashboard", response_model=DashboardStats)
@@ -1094,17 +1137,15 @@ async def list_all_licenses(
     db: AsyncSession = Depends(get_db),
 ):
     """List all license records (payments with hardware_id, ordered newest first)."""
-    query = (
+    base_query = (
         select(Payment)
         .where(Payment.hardware_id != None)
         .order_by(Payment.created_at.desc())
     )
-    if status:
-        query = query.where(Payment.status == status)
     if search:
         search_lower = f"%{search.lower()}%"
         from sqlalchemy import or_
-        query = query.where(
+        base_query = base_query.where(
             or_(
                 Payment.submitter_email.ilike(search_lower),
                 Payment.submitter_name.ilike(search_lower),
@@ -1114,13 +1155,22 @@ async def list_all_licenses(
             )
         )
 
-    count_q = select(func.count(Payment.id)).where(Payment.hardware_id != None)
-    if status:
-        count_q = count_q.where(Payment.status == status)
-    total = (await db.execute(count_q)).scalar() or 0
+    result = await db.execute(base_query)
+    all_payments = result.scalars().all()
+    now = datetime.now(timezone.utc)
+    wanted_status = (status or "").strip().lower()
 
-    result = await db.execute(query.offset((page - 1) * per_page).limit(per_page))
-    payments = result.scalars().all()
+    filtered_payments = []
+    for p in all_payments:
+        effective_status = _effective_license_status(p, now)
+        if wanted_status and effective_status != wanted_status:
+            continue
+        filtered_payments.append((p, effective_status))
+
+    total = len(filtered_payments)
+    start = max(0, (page - 1) * per_page)
+    end = start + per_page
+    page_rows = filtered_payments[start:end]
 
     items = [
         {
@@ -1135,14 +1185,16 @@ async def list_all_licenses(
             "reference": p.reference or "",
             "has_screenshot": bool(p.screenshot_data),
             "screenshot_data": p.screenshot_data,
-            "status": p.status,
+            "status": effective_status,
+            "raw_status": p.status.value if hasattr(p.status, "value") else str(p.status),
             "admin_notes": p.admin_notes or "",
             "license_key": p.license_key or "",
             "created_at": p.created_at.isoformat() if p.created_at else None,
             "processed_at": p.processed_at.isoformat() if p.processed_at else None,
+            "expires_at": (_desktop_payment_expires_at(p).isoformat() if _desktop_payment_expires_at(p) else None),
             "direct_issue": p.reference == "admin-direct",
         }
-        for p in payments
+        for p, effective_status in page_rows
     ]
 
     return {
