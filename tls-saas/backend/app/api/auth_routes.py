@@ -2,7 +2,7 @@
 Auth API Routes — Register, Login, Refresh, Profile
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse
 from jose import JWTError, jwt
@@ -30,6 +30,46 @@ from app.websocket import ws_manager
 from app.services.email_service import EmailService
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
+
+_DESKTOP_PLAN_DURATION_DAYS: dict[str, int] = {
+    "trial": 1,
+    "test_1d": 1,
+    "legalization": 30,
+    "visa": 30,
+    "legalization_monthly": 30,
+    "visa_monthly": 30,
+    "all_in_one": 30,
+    "all_in_one_monthly": 30,
+    "premium": 30,
+    "premium_monthly": 30,
+    "legalization_quarterly": 90,
+    "visa_quarterly": 90,
+    "all_in_one_quarterly": 90,
+    "premium_quarterly": 90,
+    "premium_annual": 365,
+}
+
+
+def _desktop_payment_expires_at(pay) -> datetime | None:
+    plan_key = (getattr(pay, "plan_key", "") or "").strip().lower()
+    days = _DESKTOP_PLAN_DURATION_DAYS.get(plan_key)
+    if days is None:
+        return None
+    base = getattr(pay, "processed_at", None) or getattr(pay, "created_at", None)
+    if base is None:
+        return None
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=timezone.utc)
+    return base + timedelta(days=days)
+
+
+def _is_desktop_payment_active(pay, now: datetime) -> bool:
+    if pay.status != PaymentStatus.APPROVED:
+        return False
+    exp = _desktop_payment_expires_at(pay)
+    if exp is None:
+        return True
+    return exp > now
 
 _email_executor = ThreadPoolExecutor(max_workers=2)
 
@@ -79,7 +119,10 @@ def _user_to_public(user: User) -> UserPublic:
 
     # Desktop licenses can coexist with web subscriptions.
     for pay in (user.payments or []):
-        if pay.status == PaymentStatus.APPROVED and pay.license_key:
+        if not pay.license_key:
+            continue
+        if not _is_desktop_payment_active(pay, now):
+            continue
             name = _desktop_plan_display_name(pay.plan_key)
             if name not in seen_plans:
                 seen_plans.add(name)

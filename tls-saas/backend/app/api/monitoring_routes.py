@@ -169,6 +169,29 @@ def _calc_desktop_expires_at(plan_key: str | None, processed_at: datetime | None
     return None
 
 
+def _payment_started_at(payment: Payment) -> datetime | None:
+    base = payment.processed_at or payment.created_at
+    if base is None:
+        return None
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=timezone.utc)
+    return base
+
+
+def _payment_license_expires_at(payment: Payment) -> datetime | None:
+    return _calc_desktop_expires_at(payment.plan_key, _payment_started_at(payment))
+
+
+def _is_payment_license_active(payment: Payment, now: datetime | None = None) -> bool:
+    if payment.status != PaymentStatus.APPROVED:
+        return False
+    exp = _payment_license_expires_at(payment)
+    if exp is None:
+        return True
+    cur = now or datetime.now(timezone.utc)
+    return exp > cur
+
+
 async def _branch_row_for_source(
     db: AsyncSession,
     user: User,
@@ -342,14 +365,18 @@ async def license_verify(
         # Backward compatibility: some already-installed desktop builds did not send
         # hardware_id during periodic status/revocation checks. Keep them functional
         # while newer clients enforce full hardware-bound verification.
+        now = datetime.now(timezone.utc)
+        is_active = _is_payment_license_active(payment, now)
+        expires_at = _payment_license_expires_at(payment)
+
         if payment.hardware_id and not (body.hardware_id or "").strip():
-            is_active = payment.status == PaymentStatus.APPROVED
             return {
                 "found": True,
                 "is_active": is_active,
                 "plan": payment.plan_key or parsed["plan"],
                 "license_key": payment.license_key,
                 "legacy_client": True,
+                "expires_at": expires_at.isoformat() if expires_at else None,
             }
 
         if not _hardware_matches(payment.hardware_id, body.hardware_id):
@@ -360,12 +387,13 @@ async def license_verify(
                 "error": "Hardware ID mismatch",
             }
 
-        is_active = payment.status == PaymentStatus.APPROVED
         return {
             "found": True,
             "is_active": is_active,
             "plan": payment.plan_key or parsed["plan"],
             "license_key": payment.license_key,
+            "expires_at": expires_at.isoformat() if expires_at else None,
+            "error": "License expired" if not is_active else None,
         }
 
     # ── Case 2: Look up by hardware_id (payment polling) ───────────
@@ -384,11 +412,15 @@ async def license_verify(
         )
         payment = result.scalar_one_or_none()
         if payment:
+            is_active = _is_payment_license_active(payment)
+            expires_at = _payment_license_expires_at(payment)
             return {
                 "found": True,
-                "is_active": True,
+                "is_active": is_active,
                 "license_key": payment.license_key,
                 "plan": payment.plan_key or "",
+                "expires_at": expires_at.isoformat() if expires_at else None,
+                "error": "License expired" if not is_active else None,
             }
         return {"found": False}
 
@@ -490,13 +522,17 @@ async def monitoring_status(
         ).order_by(Payment.processed_at.desc())
     )
     paid_rows = paid.scalars().all()
-    if paid_rows:
+    active_paid_rows = [p for p in paid_rows if _is_payment_license_active(p, now)]
+    if active_paid_rows:
         is_active = True
         if desktop_expires_at is None:
-            desktop_expires_at = _calc_desktop_expires_at(paid_rows[0].plan_key, paid_rows[0].processed_at)
+            exp_candidates = [_payment_license_expires_at(p) for p in active_paid_rows]
+            exp_candidates = [exp for exp in exp_candidates if exp is not None]
+            if exp_candidates:
+                desktop_expires_at = max(exp_candidates)
 
     plan_types = [s.plan.plan_type.value for s in active_subs if s.plan]
-    plan_types.extend(_desktop_plan_base_type(p.plan_key) for p in paid_rows)
+    plan_types.extend(_desktop_plan_base_type(p.plan_key) for p in active_paid_rows)
     plan_types = list(dict.fromkeys(plan_types))
 
     primary_plan_type = None
@@ -531,7 +567,7 @@ async def monitoring_status(
         branches.append(await _branch_row_for_source(db, user, branch, None))
         if has_premium_sub:
             branches_server.append(await _branch_row_for_source(db, user, branch, "server"))
-        if paid_rows:
+        if active_paid_rows:
             branches_desktop.append(await _branch_row_for_source(db, user, branch, "desktop"))
 
     # Check for pending payment (user submitted but admin hasn't approved yet)
@@ -588,7 +624,7 @@ async def monitoring_status(
     total_checks = total_checks_result.scalar() or 0
 
     total_checks_server = await _total_checks_for_source(db, user, "server") if has_premium_sub else 0
-    total_checks_desktop = await _total_checks_for_source(db, user, "desktop") if paid_rows else 0
+    total_checks_desktop = await _total_checks_for_source(db, user, "desktop") if active_paid_rows else 0
 
     exp_candidates: list[datetime] = []
     if premium_expires_at:
@@ -610,13 +646,13 @@ async def monitoring_status(
             "total_checks": total_checks_server,
         },
         "desktop": {
-            "active": bool(paid_rows),
+            "active": bool(active_paid_rows),
             "expires_at": desktop_expires_at.isoformat() if desktop_expires_at else None,
             "monitored_branches": branches_desktop,
             "total_checks": total_checks_desktop,
             "licenses": [
                 {"license_key": p.license_key, "plan_key": p.plan_key or ""}
-                for p in paid_rows
+                for p in active_paid_rows
                 if p.license_key
             ],
         },
