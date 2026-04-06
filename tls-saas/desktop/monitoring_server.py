@@ -35,6 +35,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import signal
 import smtplib
@@ -89,6 +90,8 @@ SMTP_SERVER  = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT    = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER    = os.environ.get("ADMIN_EMAIL", "")
 SMTP_PASS    = os.environ.get("ADMIN_EMAIL_PASSWORD", "")
+
+SLOTS_FOLLOWUP_HOURS = 12
 
 
 def _ensure_secure_config():
@@ -151,6 +154,10 @@ def init_db():
             last_status       TEXT,
             total_checks      INTEGER DEFAULT 0,
             slots_found_total INTEGER DEFAULT 0,
+            min_appointment_date TEXT,
+            alert_cycle_date  TEXT,
+            alert_first_sent_at TEXT,
+            alert_followup_sent INTEGER DEFAULT 0,
             error_count       INTEGER DEFAULT 0,
             created_at        TEXT NOT NULL,
             updated_at        TEXT
@@ -168,6 +175,19 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_jobs_active ON monitoring_jobs(is_active);
         CREATE INDEX IF NOT EXISTS idx_logs_job ON monitoring_logs(job_id);
     """)
+
+    # Lightweight migrations for existing SQLite files.
+    for sql in [
+        "ALTER TABLE monitoring_jobs ADD COLUMN min_appointment_date TEXT",
+        "ALTER TABLE monitoring_jobs ADD COLUMN alert_cycle_date TEXT",
+        "ALTER TABLE monitoring_jobs ADD COLUMN alert_first_sent_at TEXT",
+        "ALTER TABLE monitoring_jobs ADD COLUMN alert_followup_sent INTEGER DEFAULT 0",
+    ]:
+        try:
+            conn.execute(sql)
+        except sqlite3.OperationalError:
+            pass
+
     conn.commit()
     conn.close()
 
@@ -175,6 +195,39 @@ def init_db():
 
 def _now_iso():
     return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_iso_datetime(value: str | None):
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+def _parse_iso_date(value: str | None):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(str(value)[:10], "%Y-%m-%d").date()
+    except Exception:
+        return None
+
+
+def _extract_earliest_date_from_summary(summary: str | None):
+    """Best-effort parser for YYYY-MM-DD in slot summary text."""
+    if not summary:
+        return None
+    found = []
+    for m in re.findall(r"\b(\d{4}-\d{2}-\d{2})\b", summary):
+        d = _parse_iso_date(m)
+        if d:
+            found.append(d)
+    return min(found) if found else None
 
 def _add_log(job_id: int, message: str, level: str = "info"):
     """Append a log entry for a monitoring job."""
@@ -554,6 +607,15 @@ def monitoring_status():
         "last_status": job["last_status"],
         "total_checks": job["total_checks"],
         "slots_found_total": job["slots_found_total"],
+        "min_appointment_date": job["min_appointment_date"],
+        "alert_cycle_date": job["alert_cycle_date"],
+        "alert_first_sent_at": job["alert_first_sent_at"],
+        "alert_followup_sent": bool(job["alert_followup_sent"] or 0),
+        "alert_followup_due_at": (
+            (_parse_iso_datetime(job["alert_first_sent_at"]) + timedelta(hours=SLOTS_FOLLOWUP_HOURS)).isoformat()
+            if job["alert_first_sent_at"] and not bool(job["alert_followup_sent"] or 0) and _parse_iso_datetime(job["alert_first_sent_at"])
+            else None
+        ),
         "check_interval": job["check_interval"],
         "error_count": job["error_count"],
         "logs": [{"timestamp": l["timestamp"], "message": l["message"], "level": l["level"]} for l in reversed(list(logs))],
@@ -757,7 +819,7 @@ class MonitoringWorker:
                         branch_url=job["branch_url"] or "",
                         notification_email=job["notification_email"],
                         check_interval=job["check_interval"] or 60,
-                        enable_email_notifications=True,
+                        enable_email_notifications=False,
                         enable_windows_notifications=False,
                         headless_mode=True,
                         first_check_done=True,
@@ -772,6 +834,7 @@ class MonitoringWorker:
                     settings.branch_url = job["branch_url"] or ""
                     settings.notification_email = job["notification_email"]
                     settings.check_interval = job["check_interval"] or 60
+                    settings.enable_email_notifications = False
                     settings.headless_mode = True
                     settings.first_check_done = True
                     settings.is_monitoring = True
@@ -809,6 +872,7 @@ class MonitoringWorker:
 
             # Check if slots were found (read from CheckHistory)
             slots_found = False
+            found_earliest_date = None
             db = SessionLocal()
             try:
                 last_history = db.query(CheckHistory).filter(
@@ -816,12 +880,59 @@ class MonitoringWorker:
                 ).order_by(CheckHistory.id.desc()).first()
                 if last_history and last_history.slots_available:
                     slots_found = True
-                    # Also send notification from server directly
-                    _send_slots_email(job["notification_email"], job["branch"])
+                    # Prefer exact parsed date from checker; fallback to message parsing.
+                    checker_date = _parse_iso_date(getattr(checker, "last_found_earliest_date", None))
+                    history_date = _extract_earliest_date_from_summary(last_history.message)
+                    found_earliest_date = checker_date or history_date
             except Exception:
                 pass
             finally:
                 db.close()
+
+            # Notification rules (per job, persisted):
+            # 1) First found slots => immediate email + start 12h follow-up timer
+            # 2) New earlier appointment date => immediate email + reset timer
+            # 3) Same cycle date => send one follow-up after 12h (only once)
+            now_utc = datetime.now(timezone.utc)
+            cycle_date = _parse_iso_date(job.get("alert_cycle_date"))
+            first_sent_at = _parse_iso_datetime(job.get("alert_first_sent_at"))
+            followup_sent = bool(job.get("alert_followup_sent") or 0)
+            min_seen_date = _parse_iso_date(job.get("min_appointment_date"))
+
+            notif_updates = {}
+            if slots_found and found_earliest_date and (not min_seen_date or found_earliest_date < min_seen_date):
+                notif_updates["min_appointment_date"] = found_earliest_date.isoformat()
+
+            if slots_found:
+                send_immediate = False
+                if cycle_date is None:
+                    send_immediate = True
+                elif found_earliest_date and found_earliest_date < cycle_date:
+                    send_immediate = True
+
+                if send_immediate:
+                    if _send_slots_email(job["notification_email"], job["branch"]):
+                        _add_log(job_id, "Slots email sent (immediate)")
+                    notif_updates["alert_cycle_date"] = (
+                        found_earliest_date.isoformat() if found_earliest_date else (cycle_date.isoformat() if cycle_date else None)
+                    )
+                    notif_updates["alert_first_sent_at"] = now_utc.isoformat()
+                    notif_updates["alert_followup_sent"] = 0
+                else:
+                    if first_sent_at and not followup_sent:
+                        elapsed = (now_utc - first_sent_at).total_seconds()
+                        if elapsed >= SLOTS_FOLLOWUP_HOURS * 3600:
+                            if _send_slots_email(job["notification_email"], job["branch"]):
+                                _add_log(job_id, f"Slots email sent (follow-up after {SLOTS_FOLLOWUP_HOURS}h)")
+                            notif_updates["alert_followup_sent"] = 1
+            else:
+                # No slots: reset current alert cycle so a future slots event triggers immediate email again.
+                notif_updates["alert_cycle_date"] = None
+                notif_updates["alert_first_sent_at"] = None
+                notif_updates["alert_followup_sent"] = 0
+
+            if notif_updates:
+                _update_job(job_id, **notif_updates)
 
             # Update job status
             new_total = job["total_checks"] + 1

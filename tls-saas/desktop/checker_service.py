@@ -94,6 +94,29 @@ def _month_label_short(name: str) -> str:
     return n.strip() or name
 
 
+def _extract_earliest_slot_date(month_name: str, slot_lines: list[str]):
+    """Parse earliest YYYY-MM-DD date from month label + per-day slot lines."""
+    month_clean = _month_label_short(month_name)
+    try:
+        month_dt = datetime.strptime(month_clean, "%B %Y")
+    except Exception:
+        return None
+
+    earliest = None
+    for line in slot_lines:
+        m = re.search(r"\b(\d{1,2})\b", line or "")
+        if not m:
+            continue
+        day = int(m.group(1))
+        try:
+            candidate = datetime(month_dt.year, month_dt.month, day).date()
+        except Exception:
+            continue
+        if earliest is None or candidate < earliest:
+            earliest = candidate
+    return earliest
+
+
 _REALISTIC_VIEWPORTS = [
     (1366, 768),
     (1440, 900),
@@ -188,6 +211,7 @@ class TLSCheckerService:
         self._slots_notif_count = 0          # 0=not sent, 1=first sent, 2=reminder sent
         self._slots_first_notif_time = None  # datetime of first notification
         self._last_error_email_time = None   # throttle error emails (max 1/hr)
+        self.last_found_earliest_date = None  # YYYY-MM-DD from latest check
         self._audio_blocked = False            # True after Google blocks audio challenges
         self._warp_enabled = False             # True when WARP is active for this session
         self._tls_disabled_month_tip = False
@@ -2294,10 +2318,12 @@ class TLSCheckerService:
         """
         try:
             self._log("Checking for appointments...")
+            self.last_found_earliest_date = None
             self._tls_disabled_month_tip = False
             self._tls_month_probe_example_url = None
             wait = WebDriverWait(self.driver, 10)
             any_slots_found = False
+            earliest_found_date = None
             all_results = []
 
             # Wait for the page to fully load (visa site can be slow)
@@ -2616,6 +2642,10 @@ class TLSCheckerService:
                     except Exception:
                         continue
 
+                month_earliest = _extract_earliest_slot_date(month_name, slot_details)
+                if month_earliest and (earliest_found_date is None or month_earliest < earliest_found_date):
+                    earliest_found_date = month_earliest
+
                 self._log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 self._log(f"🎉 {month_name}: APPOINTMENTS FOUND!")
                 for detail in slot_details:
@@ -2682,6 +2712,7 @@ class TLSCheckerService:
                 summary_parts.extend(no_slot_lines)
             summary_msg = "\n".join(summary_parts)
             self._log(summary_msg)
+            self.last_found_earliest_date = earliest_found_date.isoformat() if earliest_found_date else None
             return True, "; ".join(all_results)
 
         except Exception as e:

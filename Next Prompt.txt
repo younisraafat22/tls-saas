@@ -1,0 +1,7 @@
+the email sent from the desktop app does not show the open slots as the email for premium server 
+
+also the recent checkes and total checks are not synced between the desktop app and the use dashboard 
+
+simulated expiry is not working .. I need when I change it ..the days remaining count become 0 and the license is revoked automatically 
+
+the email limit still restes with the uninstall and reinstall
