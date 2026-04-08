@@ -179,7 +179,20 @@ def _payment_started_at(payment: Payment) -> datetime | None:
 
 
 def _payment_license_expires_at(payment: Payment) -> datetime | None:
-    return _calc_desktop_expires_at(payment.plan_key, _payment_started_at(payment))
+    pay_exp = _calc_desktop_expires_at(payment.plan_key, _payment_started_at(payment))
+
+    # If a linked subscription exists and is active, its expiry can be newer
+    # than the original payment-derived window (e.g. renewal/extension flows).
+    sub = getattr(payment, "subscription", None)
+    if sub and sub.status == SubscriptionStatus.ACTIVE and sub.expires_at:
+        sub_exp = sub.expires_at
+        if sub_exp.tzinfo is None:
+            sub_exp = sub_exp.replace(tzinfo=timezone.utc)
+        if pay_exp is None:
+            return sub_exp
+        return max(pay_exp, sub_exp)
+
+    return pay_exp
 
 
 def _is_payment_license_active(payment: Payment, now: datetime | None = None) -> bool:
@@ -344,6 +357,7 @@ async def license_verify(
         # so expiry must be derived from the best (latest/farthest) active row.
         approved_result = await db.execute(
             select(Payment)
+            .options(selectinload(Payment.subscription))
             .where(
                 Payment.license_key == parsed["raw_key"],
                 Payment.status == PaymentStatus.APPROVED,
@@ -367,6 +381,7 @@ async def license_verify(
         if not payment:
             result = await db.execute(
                 select(Payment)
+                .options(selectinload(Payment.subscription))
                 .where(Payment.license_key == parsed["raw_key"])
                 .order_by(func.coalesce(Payment.processed_at, Payment.created_at).desc(), Payment.id.desc())
                 .limit(1)
@@ -407,6 +422,7 @@ async def license_verify(
             hw_id = body.hardware_id.strip()
             hw_result = await db.execute(
                 select(Payment)
+                .options(selectinload(Payment.subscription))
                 .where(
                     Payment.hardware_id == hw_id,
                     Payment.license_key.isnot(None),
@@ -459,6 +475,7 @@ async def license_verify(
         hw_id = body.hardware_id.strip()
         result = await db.execute(
             select(Payment)
+            .options(selectinload(Payment.subscription))
             .where(
                 Payment.hardware_id == hw_id,
                 Payment.license_key.isnot(None),
