@@ -368,6 +368,22 @@ async def list_users(
             sub_status = "none"
 
         merged = active_entitlements if active_entitlements else pending_entitlements
+
+        # Display precedence: if all_in_one exists, hide narrower plans from the badges.
+        if any((ent.get("plan_key") or "") == "all_in_one" for ent in merged):
+            merged = [ent for ent in merged if (ent.get("plan_key") or "") == "all_in_one"]
+
+        # Deduplicate entitlements by (plan_key, status) with desktop taking precedence.
+        deduped: list[dict] = []
+        seen_keys: set[tuple[str, str]] = set()
+        for ent in sorted(merged, key=lambda e: 0 if e.get("source") == "desktop" else 1):
+            key = (str(ent.get("plan_key") or ""), str(ent.get("status") or ""))
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            deduped.append(ent)
+        merged = deduped
+
         # Deduplicate display names while preserving order
         seen_names: set[str] = set()
         plan_names: list[str] = []
