@@ -3,7 +3,7 @@ Admin Dashboard API — Full control over users, payments, monitoring, settings.
 """
 
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Header
 from sqlalchemy import select, func, and_, or_, update, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -1238,10 +1238,32 @@ async def list_all_licenses(
 async def debug_license_entitlement(
     hardware_id: str = "",
     license_key: str = "",
-    admin=Depends(get_current_admin),
+    authorization: str = Header(default="", alias="Authorization"),
+    debug_key: str = Header(default="", alias="X-Debug-Key"),
     db: AsyncSession = Depends(get_db),
 ):
     """Temporary debug endpoint: inspect entitlement row selection for app verify flows."""
+    # Temporary access policy:
+    # - Standard admin JWT via Authorization: Bearer <token>
+    # - OR X-Debug-Key matching WORKER_SECRET (for emergency remote debugging)
+    allowed = False
+    if debug_key and settings.WORKER_SECRET and debug_key == settings.WORKER_SECRET:
+        allowed = True
+    elif authorization.startswith("Bearer "):
+        try:
+            payload = decode_token(authorization[7:])
+            user_id = int(payload.get("sub") or 0)
+            if user_id:
+                ures = await db.execute(select(User).where(User.id == user_id))
+                user = ures.scalar_one_or_none()
+                if user and user.is_admin and user.is_active:
+                    allowed = True
+        except Exception:
+            allowed = False
+
+    if not allowed:
+        raise HTTPException(401, "Admin access required")
+
     hw = (hardware_id or "").strip()
     lk = (license_key or "").strip().upper()
     if not hw and not lk:
