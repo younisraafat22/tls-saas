@@ -84,6 +84,31 @@ def _desktop_payment_expires_at(payment: Payment) -> datetime | None:
     return base + timedelta(days=days)
 
 
+def _desktop_effective_expires_at(payment: Payment) -> datetime | None:
+    pay_exp = _desktop_payment_expires_at(payment)
+    sub = getattr(payment, "subscription", None)
+    if sub and sub.status == SubscriptionStatus.ACTIVE and sub.expires_at:
+        sub_exp = sub.expires_at
+        if sub_exp.tzinfo is None:
+            sub_exp = sub_exp.replace(tzinfo=timezone.utc)
+        if pay_exp is None:
+            return sub_exp
+        return max(pay_exp, sub_exp)
+    return pay_exp
+
+
+def _hardware_matches_for_debug(stored_hardware_id: str | None, provided_hardware_id: str | None) -> bool:
+    stored = (stored_hardware_id or "").strip()
+    provided = (provided_hardware_id or "").strip()
+    if not stored:
+        return True
+    if not provided:
+        return False
+    if len(stored) == 8:
+        return provided.upper().startswith(stored.upper())
+    return stored.lower() == provided.lower()
+
+
 def _effective_license_status(payment: Payment, now: datetime) -> str:
     raw_status = (payment.status.value if hasattr(payment.status, "value") else str(payment.status)).lower()
     if raw_status != PaymentStatus.APPROVED.value:
@@ -1206,6 +1231,117 @@ async def list_all_licenses(
         "page": page,
         "per_page": per_page,
         "pages": (total + per_page - 1) // per_page,
+    }
+
+
+@router.get("/licenses/debug-entitlement")
+async def debug_license_entitlement(
+    hardware_id: str = "",
+    license_key: str = "",
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Temporary debug endpoint: inspect entitlement row selection for app verify flows."""
+    hw = (hardware_id or "").strip()
+    lk = (license_key or "").strip().upper()
+    if not hw and not lk:
+        raise HTTPException(400, "Provide hardware_id or license_key")
+
+    now = datetime.now(timezone.utc)
+
+    key_rows = []
+    if lk:
+        key_result = await db.execute(
+            select(Payment)
+            .options(selectinload(Payment.subscription))
+            .where(Payment.license_key == lk)
+            .order_by(func.coalesce(Payment.processed_at, Payment.created_at).desc(), Payment.id.desc())
+        )
+        key_rows = key_result.scalars().all()
+
+    hw_rows = []
+    if hw:
+        hw_result = await db.execute(
+            select(Payment)
+            .options(selectinload(Payment.subscription))
+            .where(Payment.hardware_id == hw)
+            .order_by(func.coalesce(Payment.processed_at, Payment.created_at).desc(), Payment.id.desc())
+        )
+        hw_rows = hw_result.scalars().all()
+
+    merged_rows = {}
+    for r in key_rows + hw_rows:
+        merged_rows[r.id] = r
+    rows = list(merged_rows.values())
+
+    def _row_view(p: Payment) -> dict:
+        raw_status = (p.status.value if hasattr(p.status, "value") else str(p.status)).lower()
+        pay_exp = _desktop_payment_expires_at(p)
+        eff_exp = _desktop_effective_expires_at(p)
+        is_active = raw_status == PaymentStatus.APPROVED.value and eff_exp is not None and eff_exp > now
+        sub = p.subscription
+        return {
+            "id": p.id,
+            "license_key": p.license_key,
+            "hardware_id": p.hardware_id,
+            "plan_key": p.plan_key,
+            "status": raw_status,
+            "processed_at": p.processed_at.isoformat() if p.processed_at else None,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "payment_expires_at": pay_exp.isoformat() if pay_exp else None,
+            "effective_expires_at": eff_exp.isoformat() if eff_exp else None,
+            "is_active_effective": is_active,
+            "subscription": {
+                "id": sub.id if sub else None,
+                "status": (sub.status.value if sub and hasattr(sub.status, "value") else (str(sub.status) if sub else None)),
+                "expires_at": sub.expires_at.isoformat() if sub and sub.expires_at else None,
+            },
+        }
+
+    all_rows = [_row_view(p) for p in rows]
+
+    # Emulate /api/monitoring/license/verify resolution by key
+    chosen_by_key = None
+    if lk:
+        approved_key_rows = [p for p in key_rows if p.status == PaymentStatus.APPROVED]
+        if hw:
+            approved_key_rows = [p for p in approved_key_rows if _hardware_matches_for_debug(p.hardware_id, hw)]
+        active_key_rows = [p for p in approved_key_rows if (_desktop_effective_expires_at(p) and _desktop_effective_expires_at(p) > now)]
+        pool = active_key_rows or approved_key_rows or key_rows
+        if pool:
+            def _rank_key(p: Payment):
+                exp = _desktop_effective_expires_at(p) or datetime.min.replace(tzinfo=timezone.utc)
+                base = (p.processed_at or p.created_at or datetime.min.replace(tzinfo=timezone.utc))
+                if base.tzinfo is None:
+                    base = base.replace(tzinfo=timezone.utc)
+                return (exp, base, p.id)
+            chosen_by_key = _row_view(max(pool, key=_rank_key))
+
+    # Emulate /api/monitoring/license/verify resolution by hardware polling
+    chosen_by_hardware = None
+    if hw:
+        approved_hw_rows = [p for p in hw_rows if p.status == PaymentStatus.APPROVED and (p.license_key or "").strip()]
+        active_hw_rows = [p for p in approved_hw_rows if (_desktop_effective_expires_at(p) and _desktop_effective_expires_at(p) > now)]
+        pool = active_hw_rows or approved_hw_rows or hw_rows
+        if pool:
+            def _rank_hw(p: Payment):
+                exp = _desktop_effective_expires_at(p) or datetime.min.replace(tzinfo=timezone.utc)
+                base = (p.processed_at or p.created_at or datetime.min.replace(tzinfo=timezone.utc))
+                if base.tzinfo is None:
+                    base = base.replace(tzinfo=timezone.utc)
+                return (exp, base, p.id)
+            chosen_by_hardware = _row_view(max(pool, key=_rank_hw))
+
+    return {
+        "now": now.isoformat(),
+        "query": {
+            "hardware_id": hw or None,
+            "license_key": lk or None,
+        },
+        "rows": all_rows,
+        "chosen_by_key_flow": chosen_by_key,
+        "chosen_by_hardware_flow": chosen_by_hardware,
+        "note": "Temporary debug endpoint; remove after entitlement issue is resolved.",
     }
 
 
