@@ -348,7 +348,7 @@ async def license_verify(
                 Payment.license_key == parsed["raw_key"],
                 Payment.status == PaymentStatus.APPROVED,
             )
-            .order_by(Payment.processed_at.desc(), Payment.created_at.desc(), Payment.id.desc())
+            .order_by(func.coalesce(Payment.processed_at, Payment.created_at).desc(), Payment.id.desc())
             .limit(1)
         )
         payment = result.scalar_one_or_none()
@@ -358,7 +358,7 @@ async def license_verify(
             result = await db.execute(
                 select(Payment)
                 .where(Payment.license_key == parsed["raw_key"])
-                .order_by(Payment.processed_at.desc(), Payment.created_at.desc(), Payment.id.desc())
+                .order_by(func.coalesce(Payment.processed_at, Payment.created_at).desc(), Payment.id.desc())
                 .limit(1)
             )
             payment = result.scalar_one_or_none()
@@ -464,7 +464,7 @@ async def license_deactivate(
             Payment.license_key == parsed["raw_key"],
             Payment.status == PaymentStatus.APPROVED,
         )
-        .order_by(Payment.processed_at.desc(), Payment.created_at.desc(), Payment.id.desc())
+        .order_by(func.coalesce(Payment.processed_at, Payment.created_at).desc(), Payment.id.desc())
         .limit(1)
     )
     payment = result.scalar_one_or_none()
