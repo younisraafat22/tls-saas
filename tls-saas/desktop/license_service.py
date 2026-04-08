@@ -568,6 +568,7 @@ def activate_license(key: str) -> tuple[bool, str]:
     # First verify license isn't revoked
     verified = False
     verified_url = ""
+    verified_expires = None
     for try_url in urls_to_try:
         for _attempt in range(2):
             try:
@@ -587,6 +588,7 @@ def activate_license(key: str) -> tuple[bool, str]:
                                 return False, detail
                             return False, "This license has been deactivated or revoked."
                         verified = True
+                        verified_expires = _parse_server_expires_at(vdata.get("expires_at"))
                         verified_url = try_url
                         break
                     else:
@@ -600,6 +602,9 @@ def activate_license(key: str) -> tuple[bool, str]:
     
     if not verified:
         return False, "Could not contact server to verify license. Please check your internet connection."
+
+    if verified_expires:
+        license_data["expires_at"] = verified_expires.isoformat()
 
     # Now fetch branch (prefer the URL that passed verification).
     branch_urls = [verified_url] if verified_url else []
@@ -789,6 +794,19 @@ def write_dev_expiry_override(dt: datetime | None) -> None:
         logger.warning("[LICENSE] dev expiry override write failed: %s", exc)
 
 
+def _parse_server_expires_at(raw_value) -> datetime | None:
+    """Parse backend expires_at safely and normalize to UTC-aware datetime."""
+    if not raw_value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw_value).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
 def get_license_status(force_network: bool = False) -> dict | None:
     """
     Get current license status.
@@ -858,6 +876,7 @@ def get_license_status(force_network: bool = False) -> dict | None:
 
             revoked = False
             check_done = False
+            server_expires = None
             # Keep this path responsive: no retries/sleeps on UI-triggered status checks.
             # If network is flaky, we fail open briefly and retry on next cache window.
             for try_url in urls_to_try:
@@ -877,6 +896,8 @@ def get_license_status(force_network: bool = False) -> dict | None:
                         if result.get("found"):
                             if not result.get("is_active", True):
                                 revoked = True
+                            else:
+                                server_expires = _parse_server_expires_at(result.get("expires_at"))
                         else:
                             # Not found in database -> Revoked
                             revoked = True
@@ -900,6 +921,12 @@ def get_license_status(force_network: bool = False) -> dict | None:
                 if os.path.exists(LICENSE_FILE):
                     os.remove(LICENSE_FILE)
                 return None
+
+            # Keep local expiry aligned with backend expiry to avoid stale days-left UI.
+            if server_expires and server_expires.isoformat() != str(data.get("expires_at", "")):
+                data["expires_at"] = server_expires.isoformat()
+                _write_license_file(data)
+                expires = server_expires
 
     plan = data["plan"]
     plan_info = PLANS.get(plan, PLANS["trial"])
