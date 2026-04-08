@@ -340,18 +340,28 @@ async def license_verify(
         if not parsed:
             return {"found": False, "error": "Invalid license key format"}
 
-        # Look up in payments: prefer the newest APPROVED row for this key
-        # so renewals/extensions using the same key return the latest expiry.
-        result = await db.execute(
+        # Fetch all approved rows for this key. Renewals may keep the same key,
+        # so expiry must be derived from the best (latest/farthest) active row.
+        approved_result = await db.execute(
             select(Payment)
             .where(
                 Payment.license_key == parsed["raw_key"],
                 Payment.status == PaymentStatus.APPROVED,
             )
             .order_by(func.coalesce(Payment.processed_at, Payment.created_at).desc(), Payment.id.desc())
-            .limit(1)
         )
-        payment = result.scalar_one_or_none()
+        approved_rows = approved_result.scalars().all()
+
+        payment = None
+        matched_rows = []
+        if approved_rows:
+            if (body.hardware_id or "").strip():
+                matched_rows = [p for p in approved_rows if _hardware_matches(p.hardware_id, body.hardware_id)]
+                if matched_rows:
+                    payment = matched_rows[0]
+            else:
+                matched_rows = approved_rows
+                payment = approved_rows[0]
 
         # Fallback to newest row of any status (e.g. explicitly revoked key).
         if not payment:
@@ -384,8 +394,11 @@ async def license_verify(
         # hardware_id during periodic status/revocation checks. Keep them functional
         # while newer clients enforce full hardware-bound verification.
         now = datetime.now(timezone.utc)
-        is_active = _is_payment_license_active(payment, now)
-        expires_at = _payment_license_expires_at(payment)
+        eval_rows = matched_rows if matched_rows else [payment]
+        is_active = any(_is_payment_license_active(p, now) for p in eval_rows)
+        exp_candidates = [_payment_license_expires_at(p) for p in eval_rows]
+        exp_candidates = [e for e in exp_candidates if e is not None]
+        expires_at = max(exp_candidates) if exp_candidates else None
 
         if payment.hardware_id and not (body.hardware_id or "").strip():
             return {
@@ -425,12 +438,24 @@ async def license_verify(
                 Payment.license_key != "",
                 Payment.status == PaymentStatus.APPROVED,
             )
-            .order_by(Payment.processed_at.desc())
-            .limit(1)
+            .order_by(func.coalesce(Payment.processed_at, Payment.created_at).desc(), Payment.id.desc())
         )
-        payment = result.scalar_one_or_none()
-        if payment:
-            is_active = _is_payment_license_active(payment)
+        rows = result.scalars().all()
+        if rows:
+            now = datetime.now(timezone.utc)
+            active_rows = [p for p in rows if _is_payment_license_active(p, now)]
+            if active_rows:
+                # Prefer the active row with the farthest expiry; tie-break by newest row.
+                def _row_rank(p: Payment):
+                    exp = _payment_license_expires_at(p) or datetime.min.replace(tzinfo=timezone.utc)
+                    base = _payment_started_at(p) or datetime.min.replace(tzinfo=timezone.utc)
+                    return (exp, base, p.id)
+
+                payment = max(active_rows, key=_row_rank)
+            else:
+                payment = rows[0]
+
+            is_active = _is_payment_license_active(payment, now)
             expires_at = _payment_license_expires_at(payment)
             return {
                 "found": True,
