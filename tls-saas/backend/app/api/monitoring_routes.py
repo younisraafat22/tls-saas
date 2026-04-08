@@ -187,7 +187,8 @@ def _is_payment_license_active(payment: Payment, now: datetime | None = None) ->
         return False
     exp = _payment_license_expires_at(payment)
     if exp is None:
-        return True
+        # Unknown plan keys must not be treated as active by default.
+        return False
     cur = now or datetime.now(timezone.utc)
     return exp > cur
 

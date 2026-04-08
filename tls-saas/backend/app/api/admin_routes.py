@@ -89,7 +89,10 @@ def _effective_license_status(payment: Payment, now: datetime) -> str:
     if raw_status != PaymentStatus.APPROVED.value:
         return raw_status
     exp = _desktop_payment_expires_at(payment)
-    if exp and exp <= now:
+    if exp is None:
+        # Unknown plan keys must not be treated as active by default.
+        return PaymentStatus.REJECTED.value
+    if exp <= now:
         # Keep DB row immutable for audit; expose effective status for admin UI.
         return PaymentStatus.REJECTED.value
     return PaymentStatus.APPROVED.value

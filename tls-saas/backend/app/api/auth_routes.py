@@ -68,7 +68,8 @@ def _is_desktop_payment_active(pay, now: datetime) -> bool:
         return False
     exp = _desktop_payment_expires_at(pay)
     if exp is None:
-        return True
+        # Unknown plan keys must not be treated as active by default.
+        return False
     return exp > now
 
 _email_executor = ThreadPoolExecutor(max_workers=2)
