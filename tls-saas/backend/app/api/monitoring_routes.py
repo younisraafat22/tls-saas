@@ -340,11 +340,28 @@ async def license_verify(
         if not parsed:
             return {"found": False, "error": "Invalid license key format"}
 
-        # Look up in the payments table
+        # Look up in payments: prefer the newest APPROVED row for this key
+        # so renewals/extensions using the same key return the latest expiry.
         result = await db.execute(
-            select(Payment).where(Payment.license_key == parsed["raw_key"]).limit(1)
+            select(Payment)
+            .where(
+                Payment.license_key == parsed["raw_key"],
+                Payment.status == PaymentStatus.APPROVED,
+            )
+            .order_by(Payment.processed_at.desc(), Payment.created_at.desc(), Payment.id.desc())
+            .limit(1)
         )
         payment = result.scalar_one_or_none()
+
+        # Fallback to newest row of any status (e.g. explicitly revoked key).
+        if not payment:
+            result = await db.execute(
+                select(Payment)
+                .where(Payment.license_key == parsed["raw_key"])
+                .order_by(Payment.processed_at.desc(), Payment.created_at.desc(), Payment.id.desc())
+                .limit(1)
+            )
+            payment = result.scalar_one_or_none()
 
         if not payment:
             # Check the revoked-keys blacklist (populated when payments are deleted)
@@ -442,7 +459,13 @@ async def license_deactivate(
         return {"success": False, "error": "Invalid license key"}
 
     result = await db.execute(
-        select(Payment).where(Payment.license_key == parsed["raw_key"]).limit(1)
+        select(Payment)
+        .where(
+            Payment.license_key == parsed["raw_key"],
+            Payment.status == PaymentStatus.APPROVED,
+        )
+        .order_by(Payment.processed_at.desc(), Payment.created_at.desc(), Payment.id.desc())
+        .limit(1)
     )
     payment = result.scalar_one_or_none()
 
