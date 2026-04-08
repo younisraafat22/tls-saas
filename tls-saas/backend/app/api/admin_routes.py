@@ -402,6 +402,148 @@ async def list_users(
     }
 
 
+@router.get("/users/{user_id}/subscriptions")
+async def get_user_subscriptions(
+    user_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: full subscription history and current active subscriptions for one user."""
+    ures = await db.execute(select(User).where(User.id == user_id))
+    user = ures.scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    sres = await db.execute(
+        select(Subscription)
+        .options(selectinload(Subscription.plan))
+        .where(Subscription.user_id == user_id)
+        .order_by(Subscription.created_at.desc(), Subscription.id.desc())
+    )
+    subs = sres.scalars().all()
+
+    sub_ids = [s.id for s in subs]
+    pay_by_sub: dict[int, list[Payment]] = {}
+    if sub_ids:
+        pres = await db.execute(
+            select(Payment)
+            .where(Payment.user_id == user_id, Payment.subscription_id.in_(sub_ids))
+            .order_by(Payment.created_at.desc(), Payment.id.desc())
+        )
+        for p in pres.scalars().all():
+            if p.subscription_id:
+                pay_by_sub.setdefault(p.subscription_id, []).append(p)
+
+    now = datetime.now(timezone.utc)
+
+    def _sub_payload(s: Subscription) -> dict:
+        exp = s.expires_at
+        if exp and exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        is_active_now = s.status == SubscriptionStatus.ACTIVE and (exp is None or exp > now)
+        linked = pay_by_sub.get(s.id, [])
+        return {
+            "id": s.id,
+            "status": s.status.value if hasattr(s.status, "value") else str(s.status),
+            "plan_id": s.plan_id,
+            "plan_key": s.plan.plan_type.value if s.plan and hasattr(s.plan.plan_type, "value") else None,
+            "plan_name": s.plan.display_name if s.plan else None,
+            "starts_at": s.starts_at.isoformat() if s.starts_at else None,
+            "expires_at": s.expires_at.isoformat() if s.expires_at else None,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "auto_renew": bool(s.auto_renew),
+            "is_active_now": bool(is_active_now),
+            "linked_payments_count": len(linked),
+            "linked_payments": [
+                {
+                    "id": p.id,
+                    "status": p.status.value if hasattr(p.status, "value") else str(p.status),
+                    "amount": p.amount,
+                    "currency": p.currency,
+                    "plan_key": p.plan_key,
+                    "license_key": p.license_key,
+                    "created_at": p.created_at.isoformat() if p.created_at else None,
+                    "processed_at": p.processed_at.isoformat() if p.processed_at else None,
+                }
+                for p in linked
+            ],
+        }
+
+    all_items = [_sub_payload(s) for s in subs]
+    active_items = [it for it in all_items if it["is_active_now"]]
+
+    return {
+        "user_id": user_id,
+        "active_subscriptions": active_items,
+        "history": all_items,
+    }
+
+
+@router.post("/users/{user_id}/subscriptions/{subscription_id}/revoke", response_model=MessageResponse)
+async def revoke_user_subscription(
+    user_id: int,
+    subscription_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: revoke/cancel a subscription record from user history."""
+    sres = await db.execute(
+        select(Subscription).where(Subscription.id == subscription_id, Subscription.user_id == user_id)
+    )
+    sub = sres.scalar_one_or_none()
+    if not sub:
+        raise HTTPException(404, "Subscription not found")
+
+    now = datetime.now(timezone.utc)
+    sub.status = SubscriptionStatus.CANCELLED
+    if sub.expires_at:
+        exp = sub.expires_at
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp > now:
+            sub.expires_at = now
+
+    db.add(ActivityLog(
+        actor_id=admin.id,
+        action="subscription_revoked_admin",
+        details={"user_id": user_id, "subscription_id": subscription_id},
+    ))
+    await db.commit()
+    return MessageResponse(message=f"Subscription #{subscription_id} revoked")
+
+
+@router.delete("/users/{user_id}/subscriptions/{subscription_id}", response_model=MessageResponse)
+async def delete_user_subscription(
+    user_id: int,
+    subscription_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: remove one subscription row from history (hard delete)."""
+    sres = await db.execute(
+        select(Subscription).where(Subscription.id == subscription_id, Subscription.user_id == user_id)
+    )
+    sub = sres.scalar_one_or_none()
+    if not sub:
+        raise HTTPException(404, "Subscription not found")
+
+    # Keep payment rows for audit; just unlink them from deleted subscription row.
+    await db.execute(
+        update(Payment)
+        .where(Payment.user_id == user_id, Payment.subscription_id == subscription_id)
+        .values(subscription_id=None)
+    )
+
+    await db.delete(sub)
+    db.add(ActivityLog(
+        actor_id=admin.id,
+        action="subscription_deleted_admin",
+        details={"user_id": user_id, "subscription_id": subscription_id},
+    ))
+    await db.commit()
+    return MessageResponse(message=f"Subscription #{subscription_id} removed from history")
+
+
 @router.patch("/users/{user_id}", response_model=MessageResponse)
 async def update_user(
     user_id: int,

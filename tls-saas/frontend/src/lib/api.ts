@@ -339,6 +339,12 @@ export const adminApi = {
     api.post(`/api/admin/payments/${paymentId}/resend-email`),
   getUserPayments: (userId: number) =>
     api.get(`/api/admin/users/${userId}/payments`),
+  getUserSubscriptions: (userId: number) =>
+    api.get(`/api/admin/users/${userId}/subscriptions`),
+  revokeUserSubscription: (userId: number, subscriptionId: number) =>
+    api.post(`/api/admin/users/${userId}/subscriptions/${subscriptionId}/revoke`),
+  deleteUserSubscription: (userId: number, subscriptionId: number) =>
+    api.delete(`/api/admin/users/${userId}/subscriptions/${subscriptionId}`),
   sendPasswordReset: (userId: number) =>
     api.post(`/api/admin/users/${userId}/send-password-reset`),
   getNotificationCounts: () =>

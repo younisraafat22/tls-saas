@@ -13,12 +13,37 @@ import {
 function UserDetailModal({
   user,
   onClose,
+  onUserChanged,
 }: {
   user: any;
   onClose: () => void;
+  onUserChanged: () => void;
 }) {
   const [payments, setPayments] = useState<any[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(true);
+  const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  const [activeSubscriptions, setActiveSubscriptions] = useState<any[]>([]);
+  const [loadingSubscriptions, setLoadingSubscriptions] = useState(true);
+  const [processingSubId, setProcessingSubId] = useState<number | null>(null);
+  const [actionConfirm, setActionConfirm] = useState<null | {
+    type: "revoke" | "remove";
+    subscription: any;
+  }>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const loadSubscriptions = useCallback(async () => {
+    setLoadingSubscriptions(true);
+    try {
+      const data = await adminApi.getUserSubscriptions(user.id);
+      setSubscriptions(data.history || []);
+      setActiveSubscriptions(data.active_subscriptions || []);
+    } catch {
+      setSubscriptions([]);
+      setActiveSubscriptions([]);
+    } finally {
+      setLoadingSubscriptions(false);
+    }
+  }, [user.id]);
 
   useEffect(() => {
     adminApi.getUserPayments(user.id)
@@ -26,6 +51,40 @@ function UserDetailModal({
       .catch(() => setPayments([]))
       .finally(() => setLoadingPayments(false));
   }, [user.id]);
+
+  useEffect(() => {
+    loadSubscriptions();
+  }, [loadSubscriptions]);
+
+  const revokeSubscription = async (subscriptionId: number) => {
+    setActionError(null);
+    setProcessingSubId(subscriptionId);
+    try {
+      await adminApi.revokeUserSubscription(user.id, subscriptionId);
+      await loadSubscriptions();
+      onUserChanged();
+      setActionConfirm(null);
+    } catch (err: any) {
+      setActionError(err?.message || "Failed to revoke subscription");
+    } finally {
+      setProcessingSubId(null);
+    }
+  };
+
+  const deleteSubscription = async (subscriptionId: number) => {
+    setActionError(null);
+    setProcessingSubId(subscriptionId);
+    try {
+      await adminApi.deleteUserSubscription(user.id, subscriptionId);
+      await loadSubscriptions();
+      onUserChanged();
+      setActionConfirm(null);
+    } catch (err: any) {
+      setActionError(err?.message || "Failed to delete subscription");
+    } finally {
+      setProcessingSubId(null);
+    }
+  };
 
   return (
     <motion.div
@@ -99,6 +158,104 @@ function UserDetailModal({
           </div>
         )}
 
+        {/* Active subscriptions */}
+        <div>
+          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-gray-400" /> Active Subscriptions
+          </h3>
+          {loadingSubscriptions ? (
+            <div className="flex justify-center py-6"><div className="spinner w-6 h-6" /></div>
+          ) : activeSubscriptions.length === 0 ? (
+            <div className="text-center py-4 text-gray-500 text-sm">No active subscriptions</div>
+          ) : (
+            <div className="space-y-2">
+              {activeSubscriptions.map((s: any) => (
+                <div key={`active-sub-${s.id}`} className="p-3 rounded-lg bg-accent-green/5 border border-accent-green/20 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="font-medium">{s.plan_name || s.plan_key || "Subscription"}</div>
+                      <div className="text-xs text-gray-400">
+                        Expires {s.expires_at ? new Date(s.expires_at).toLocaleString() : "never"}
+                      </div>
+                    </div>
+                    <span className="text-xs px-2 py-1 rounded-full bg-accent-green/15 text-accent-green">active</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Subscription history */}
+        <div>
+          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+            <RefreshCw className="w-4 h-4 text-gray-400" /> Subscription History
+          </h3>
+          {loadingSubscriptions ? (
+            <div className="flex justify-center py-6"><div className="spinner w-6 h-6" /></div>
+          ) : subscriptions.length === 0 ? (
+            <div className="text-center py-6 text-gray-500 text-sm">No subscription history found</div>
+          ) : (
+            <div className="space-y-2">
+              {subscriptions.map((s: any) => {
+                const status = String(s.status || "unknown");
+                const statusClass =
+                  status === "active"
+                    ? "text-accent-green bg-accent-green/10"
+                    : status === "cancelled"
+                      ? "text-red-400 bg-red-500/10"
+                      : "text-amber-400 bg-amber-500/10";
+                const canRevoke = status === "active";
+                const busy = processingSubId === s.id;
+
+                return (
+                  <div key={`hist-sub-${s.id}`} className="p-3 rounded-lg bg-white/5 border border-white/10 text-sm space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium">{s.plan_name || s.plan_key || "Subscription"}</div>
+                        <div className="text-xs text-gray-400">
+                          #{s.id} · {s.created_at ? new Date(s.created_at).toLocaleString() : "unknown"}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {s.starts_at ? `Start: ${new Date(s.starts_at).toLocaleDateString()} · ` : ""}
+                          {s.expires_at ? `Expire: ${new Date(s.expires_at).toLocaleDateString()}` : "No expiry"}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          Linked payments: {s.linked_payments_count ?? 0}
+                        </div>
+                      </div>
+                      <span className={`text-xs px-2 py-1 rounded-full capitalize ${statusClass}`}>{status}</span>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => {
+                          setActionError(null);
+                          setActionConfirm({ type: "revoke", subscription: s });
+                        }}
+                        disabled={!canRevoke || busy}
+                        className="px-2.5 py-1.5 rounded-lg text-xs bg-amber-500/10 text-amber-300 border border-amber-500/30 disabled:opacity-40"
+                      >
+                        {busy && canRevoke ? "Revoking..." : "Revoke"}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActionError(null);
+                          setActionConfirm({ type: "remove", subscription: s });
+                        }}
+                        disabled={busy}
+                        className="px-2.5 py-1.5 rounded-lg text-xs bg-red-500/10 text-red-300 border border-red-500/30 disabled:opacity-40"
+                      >
+                        {busy ? "Removing..." : "Remove"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Payment history */}
         <div>
           <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
@@ -129,6 +286,78 @@ function UserDetailModal({
             </div>
           )}
         </div>
+
+        <AnimatePresence>
+          {actionConfirm && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+              onClick={(e) => e.target === e.currentTarget && setActionConfirm(null)}
+            >
+              <motion.div
+                initial={{ y: 24, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 24, opacity: 0 }}
+                className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0f1116] p-5 space-y-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="space-y-1">
+                  <h4 className="text-base font-semibold">
+                    {actionConfirm.type === "revoke" ? "Revoke subscription" : "Remove subscription history"}
+                  </h4>
+                  <p className="text-sm text-gray-400">
+                    #{actionConfirm.subscription.id} · {actionConfirm.subscription.plan_name || actionConfirm.subscription.plan_key || "Subscription"}
+                  </p>
+                </div>
+
+                {actionConfirm.type === "revoke" ? (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+                    Revoking cancels access immediately. The record stays in history for audit and can still be reviewed later.
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+                    Removing permanently deletes this subscription row from history. This action cannot be undone.
+                  </div>
+                )}
+
+                {actionError && (
+                  <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-2.5 text-sm text-red-200">
+                    {actionError}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => setActionConfirm(null)}
+                    disabled={processingSubId === actionConfirm.subscription.id}
+                    className="px-3 py-2 rounded-lg text-sm border border-white/15 text-gray-300 hover:bg-white/5 disabled:opacity-40"
+                  >
+                    Cancel
+                  </button>
+                  {actionConfirm.type === "revoke" ? (
+                    <button
+                      onClick={() => revokeSubscription(actionConfirm.subscription.id)}
+                      disabled={processingSubId === actionConfirm.subscription.id}
+                      className="px-3 py-2 rounded-lg text-sm bg-amber-500/15 text-amber-200 border border-amber-500/35 disabled:opacity-40"
+                    >
+                      {processingSubId === actionConfirm.subscription.id ? "Revoking..." : "Confirm Revoke"}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => deleteSubscription(actionConfirm.subscription.id)}
+                      disabled={processingSubId === actionConfirm.subscription.id}
+                      className="px-3 py-2 rounded-lg text-sm bg-red-500/15 text-red-200 border border-red-500/35 disabled:opacity-40"
+                    >
+                      {processingSubId === actionConfirm.subscription.id ? "Removing..." : "Confirm Remove"}
+                    </button>
+                  )}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </motion.div>
   );
@@ -260,6 +489,7 @@ export default function AdminUsersPage() {
           <UserDetailModal
             user={selectedUser}
             onClose={() => setSelectedUser(null)}
+            onUserChanged={loadUsers}
           />
         )}
       </AnimatePresence>
