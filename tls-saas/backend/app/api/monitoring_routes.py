@@ -400,29 +400,56 @@ async def license_verify(
         exp_candidates = [e for e in exp_candidates if e is not None]
         expires_at = max(exp_candidates) if exp_candidates else None
 
-        if payment.hardware_id and not (body.hardware_id or "").strip():
+        # Renewal safety: if this hardware has a newer active approved license row,
+        # prefer that entitlement so stale local keys do not keep older expiries.
+        resolved_payment = payment
+        if (body.hardware_id or "").strip():
+            hw_id = body.hardware_id.strip()
+            hw_result = await db.execute(
+                select(Payment)
+                .where(
+                    Payment.hardware_id == hw_id,
+                    Payment.license_key.isnot(None),
+                    Payment.license_key != "",
+                    Payment.status == PaymentStatus.APPROVED,
+                )
+                .order_by(func.coalesce(Payment.processed_at, Payment.created_at).desc(), Payment.id.desc())
+            )
+            hw_rows = hw_result.scalars().all()
+            hw_active_rows = [p for p in hw_rows if _is_payment_license_active(p, now)]
+            if hw_active_rows:
+                hw_exp_pairs = [(p, _payment_license_expires_at(p)) for p in hw_active_rows]
+                hw_exp_pairs = [(p, e) for p, e in hw_exp_pairs if e is not None]
+                if hw_exp_pairs:
+                    best_payment, best_exp = max(hw_exp_pairs, key=lambda pe: pe[1])
+                    if (expires_at is None) or (best_exp > expires_at):
+                        resolved_payment = best_payment
+                        is_active = True
+                        expires_at = best_exp
+
+        if resolved_payment.hardware_id and not (body.hardware_id or "").strip():
             return {
                 "found": True,
                 "is_active": is_active,
-                "plan": payment.plan_key or parsed["plan"],
-                "license_key": payment.license_key,
+                "plan": resolved_payment.plan_key or parsed["plan"],
+                "license_key": resolved_payment.license_key,
                 "legacy_client": True,
                 "expires_at": expires_at.isoformat() if expires_at else None,
             }
 
-        if not _hardware_matches(payment.hardware_id, body.hardware_id):
+        if not _hardware_matches(resolved_payment.hardware_id, body.hardware_id):
             return {
                 "found": True,
                 "is_active": False,
-                "plan": payment.plan_key or parsed["plan"],
+                "plan": resolved_payment.plan_key or parsed["plan"],
                 "error": "Hardware ID mismatch",
             }
 
         return {
             "found": True,
             "is_active": is_active,
-            "plan": payment.plan_key or parsed["plan"],
-            "license_key": payment.license_key,
+            "plan": resolved_payment.plan_key or parsed["plan"],
+            "license_key": resolved_payment.license_key,
             "expires_at": expires_at.isoformat() if expires_at else None,
             "error": "License expired" if not is_active else None,
         }

@@ -898,6 +898,17 @@ def get_license_status(force_network: bool = False) -> dict | None:
                                 revoked = True
                             else:
                                 server_expires = _parse_server_expires_at(result.get("expires_at"))
+                                sync_changed = False
+                                server_key = (result.get("license_key") or "").strip().upper()
+                                server_plan = (result.get("plan") or "").strip().lower()
+                                if server_key and server_key != str(data.get("key", "")).upper():
+                                    data["key"] = server_key
+                                    sync_changed = True
+                                if server_plan and server_plan in PLANS and server_plan != str(data.get("plan", "")).lower():
+                                    data["plan"] = server_plan
+                                    sync_changed = True
+                                if sync_changed:
+                                    _write_license_file(data)
                         else:
                             # Not found in database -> Revoked
                             revoked = True
@@ -923,10 +934,13 @@ def get_license_status(force_network: bool = False) -> dict | None:
                 return None
 
             # Keep local expiry aligned with backend expiry to avoid stale days-left UI.
+            changed = False
             if server_expires and server_expires.isoformat() != str(data.get("expires_at", "")):
                 data["expires_at"] = server_expires.isoformat()
-                _write_license_file(data)
                 expires = server_expires
+                changed = True
+            if changed:
+                _write_license_file(data)
 
     plan = data["plan"]
     plan_info = PLANS.get(plan, PLANS["trial"])
