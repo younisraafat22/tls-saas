@@ -89,30 +89,31 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-hero-gradient relative overflow-hidden">
-      <div className="absolute inset-0 bg-grid opacity-30" />
-      <div className="bg-radial-glow absolute inset-0" />
+    <div className="auth-shell auth-shell-register bg-hero-gradient">
+      <aside className="auth-brand-panel" aria-label="WATCH membership benefits">
+        <Link href="/" className="auth-wordmark">WATCH<span>®</span></Link>
+        <div className="auth-manifesto"><p className="auth-kicker">CREATE MONITORING PROFILE</p><h2>SET THE WATCH.<br/>KEEP YOUR TIME.</h2><p>Configure your alerting workspace once. WATCH keeps checking while you focus elsewhere.</p></div>
+        <div className="auth-benefit-list">{tr.benefits.map((benefit, index) => <p key={benefit}><b>0{index + 1}</b><span>{benefit}</span></p>)}</div>
+      </aside>
 
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-md relative z-10"
+        className="auth-form-panel auth-form-register"
       >
-        <Link href="/" className="flex items-center justify-center gap-2 mb-8">
-          <img src="/icons/icon-192-white.png" alt="TLS Appointment Checker" className="w-10 h-10 rounded-xl" />
-          <span className="font-display font-bold text-xl">TLS Appointment Checker</span>
-        </Link>
+        <div className="auth-sequence"><span>02</span><i/><b>CREATE PROFILE</b></div>
 
-        <div className="glass-card p-8">
-          <h1 className="text-2xl font-display font-bold mb-2 text-center">{tr.title}</h1>
-          <p className="text-gray-400 text-sm text-center mb-8">{tr.sub}</p>
+        <div className="glass-card auth-card p-8">
+          <h1 className="text-2xl font-display font-bold mb-2">{tr.title}</h1>
+          <p className="text-gray-400 text-sm mb-8">{tr.sub}</p>
 
           {error && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center"
+              className="auth-error mb-4 p-3 text-red-400 text-sm"
+              role="alert"
             >
               {error}
             </motion.div>
@@ -120,8 +121,9 @@ export default function RegisterPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">{tr.fullNameLabel}</label>
+              <label htmlFor="register-name" className="text-sm text-gray-400 mb-1 block">{tr.fullNameLabel}</label>
               <input
+                id="register-name"
                 type="text"
                 value={form.fullName}
                 onChange={update("fullName")}
@@ -129,36 +131,42 @@ export default function RegisterPage() {
                 placeholder={tr.fullNamePlaceholder}
                 required
                 autoFocus
+                autoComplete="name"
               />
             </div>
 
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">{tr.emailLabel}</label>
+              <label htmlFor="register-email" className="text-sm text-gray-400 mb-1 block">{tr.emailLabel}</label>
               <input
+                id="register-email"
                 type="email"
                 value={form.email}
                 onChange={update("email")}
                 className="input-field"
                 placeholder={tr.emailPlaceholder}
                 required
+                autoComplete="email"
               />
             </div>
 
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">{tr.phoneLabel} <span className="text-gray-600">{tr.phoneOptional}</span></label>
+              <label htmlFor="register-phone" className="text-sm text-gray-400 mb-1 block">{tr.phoneLabel} <span className="text-gray-600">{tr.phoneOptional}</span></label>
               <input
+                id="register-phone"
                 type="tel"
                 value={form.phone}
                 onChange={update("phone")}
                 className="input-field"
                 placeholder={tr.phonePlaceholder}
+                autoComplete="tel"
               />
             </div>
 
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">{tr.passwordLabel}</label>
+              <label htmlFor="register-password" className="text-sm text-gray-400 mb-1 block">{tr.passwordLabel}</label>
               <div className="relative">
                 <input
+                  id="register-password"
                   type={showPassword ? "text" : "password"}
                   value={form.password}
                   onChange={update("password")}
@@ -166,11 +174,13 @@ export default function RegisterPage() {
                   placeholder={tr.passwordPlaceholder}
                   required
                   minLength={8}
+                  autoComplete="new-password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -178,14 +188,16 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">{tr.confirmPasswordLabel}</label>
+              <label htmlFor="register-confirm-password" className="text-sm text-gray-400 mb-1 block">{tr.confirmPasswordLabel}</label>
               <input
+                id="register-confirm-password"
                 type="password"
                 value={form.confirmPassword}
                 onChange={update("confirmPassword")}
                 className="input-field"
                 placeholder="••••••••"
                 required
+                autoComplete="new-password"
               />
             </div>
 
@@ -214,12 +226,11 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        {/* Benefits sidebar */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
-          className="mt-6 space-y-3"
+          className="auth-mobile-benefits mt-6 space-y-3"
         >
           {tr.benefits.map((b) => (
             <div key={b} className="flex items-center gap-2 text-sm text-gray-400">

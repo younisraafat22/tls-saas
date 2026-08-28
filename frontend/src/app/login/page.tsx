@@ -46,32 +46,35 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-hero-gradient relative overflow-hidden">
-      {/* Background effects */}
-      <div className="absolute inset-0 bg-grid opacity-30" />
-      <div className="bg-radial-glow absolute inset-0" />
+    <div className="auth-shell bg-hero-gradient">
+      <aside className="auth-brand-panel" aria-label="WATCH platform status">
+        <Link href="/" className="auth-wordmark">WATCH<span>®</span></Link>
+        <div className="auth-manifesto">
+          <p className="auth-kicker">APPOINTMENT INTELLIGENCE / 24×7</p>
+          <h2>YOUR WATCH<br/>STARTS HERE.</h2>
+          <p>One operational console for monitoring TLS appointment availability and acting when the signal changes.</p>
+        </div>
+        <div className="auth-status"><span /> SYSTEM ONLINE <b>EU-CENTRAL</b></div>
+      </aside>
 
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-md relative z-10"
+        className="auth-form-panel"
       >
-        {/* Logo */}
-        <Link href="/" className="flex items-center justify-center gap-2 mb-8">
-          <img src="/icons/icon-192-white.png" alt="TLS Appointment Checker" className="w-10 h-10 rounded-xl" />
-          <span className="font-display font-bold text-xl">TLS Appointment Checker</span>
-        </Link>
+        <div className="auth-sequence"><span>01</span><i/><b>ACCESS TERMINAL</b></div>
 
-        <div className="glass-card p-8">
-          <h1 className="text-2xl font-display font-bold mb-2 text-center">{tl.title}</h1>
-          <p className="text-gray-400 text-sm text-center mb-8">{tl.sub}</p>
+        <div className="glass-card auth-card p-8">
+          <h1 className="text-2xl font-display font-bold mb-2">{tl.title}</h1>
+          <p className="text-gray-400 text-sm mb-8">{tl.sub}</p>
 
           {error && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center"
+              className="auth-error mb-4 p-3 text-red-400 text-sm"
+              role="alert"
             >
               {error}
             </motion.div>
@@ -79,8 +82,9 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">{tl.emailLabel}</label>
+              <label htmlFor="login-email" className="text-sm text-gray-400 mb-1 block">{tl.emailLabel}</label>
               <input
+                id="login-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -88,24 +92,28 @@ export default function LoginPage() {
                 placeholder="you@example.com"
                 required
                 autoFocus
+                autoComplete="email"
               />
             </div>
 
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">{tl.passwordLabel}</label>
+              <label htmlFor="login-password" className="text-sm text-gray-400 mb-1 block">{tl.passwordLabel}</label>
               <div className="relative">
                 <input
+                  id="login-password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="input-field pr-12"
                   placeholder="••••••••"
                   required
+                  autoComplete="current-password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -125,7 +133,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="flex items-center justify-between mt-4">
+          <div className="auth-secondary flex items-center justify-between mt-4">
             <Link href="/forgot-password" className="text-primary-400 hover:text-primary-300 text-sm">
               Forgot password?
             </Link>

@@ -269,7 +269,7 @@ export default function PaymentsPage() {
             animate={{ opacity: 1, y: 0 }}
             className="glass-card border-amber-500/30 bg-amber-500/5 p-4 flex gap-3 items-start"
           >
-            <span className="text-amber-400 text-xl shrink-0 mt-0.5">⚠️</span>
+            <span className="text-amber-400 text-xl font-bold shrink-0 mt-0.5" aria-hidden="true">!</span>
             <div>
               <div className="font-semibold text-amber-400 text-sm mb-1">{t.payment.earlyAccessTitle}</div>
               <p className="text-gray-400 text-xs leading-relaxed">{t.payment.earlyAccessBody}</p>

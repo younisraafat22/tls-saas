@@ -86,12 +86,12 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-dark-900 flex overflow-x-hidden">
+    <div className="watch-console watch-admin min-h-screen bg-dark-900 flex overflow-x-hidden">
       {/* Sidebar */}
-      <aside className="w-64 bg-dark-800 border-r border-white/5 flex flex-col fixed h-full z-20 max-lg:hidden">
+      <aside className="watch-console-sidebar w-64 bg-dark-800 border-r border-white/5 flex flex-col fixed h-full z-20 max-lg:hidden">
         <div className="p-5 border-b border-white/5">
           <div className="flex items-center gap-2 text-primary-400 font-display font-bold text-lg">
-            <img src="/icons/icon-192-white.png" alt="" className="w-6 h-6 rounded" /> Admin Panel
+            <span className="watch-console-mark" aria-hidden="true">W</span> ADMIN CONTROL
           </div>
         </div>
         <nav className="flex-1 p-3 space-y-1">
@@ -183,14 +183,14 @@ export default function AdminLayout({
       </div>
 
       {/* Main content */}
-      <main className="flex-1 lg:ml-64 max-lg:pt-14 max-lg:pb-20 overflow-x-hidden w-full">
+      <main className="watch-console-main flex-1 lg:ml-64 max-lg:pt-14 max-lg:pb-20 overflow-x-hidden w-full">
         <div className="bg-amber-500/10 border-b border-amber-500/20 text-amber-200/90 py-2 sm:py-3 px-4 text-xs sm:text-sm text-center">
           <p
             dangerouslySetInnerHTML={{
               __html:
                 (t.features as any)?.notice ||
                 (t.hero as any)?.notice ||
-                "<strong>⚠️ IMPORTANT NOTICE:</strong> TLS Appointment Checker is <strong>monitoring only</strong>. No auto-booking, and it does not guarantee appointments. It is a tool to help you find open slots by checking the TLS website automatically.",
+                "<strong>IMPORTANT NOTICE:</strong> TLS Appointment Checker is <strong>monitoring only</strong>. No auto-booking, and it does not guarantee appointments. It is a tool to help you find open slots by checking the TLS website automatically.",
             }}
           />
         </div>

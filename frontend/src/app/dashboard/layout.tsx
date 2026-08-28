@@ -59,13 +59,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   ];
 
   return (
-    <div className="min-h-screen bg-dark-800 flex overflow-x-hidden">
+    <div className="watch-console min-h-screen bg-dark-800 flex overflow-x-hidden">
       {/* Sidebar */}
-      <aside className="w-64 border-r border-white/5 bg-dark-700/50 hidden lg:flex flex-col">
+      <aside className="watch-console-sidebar w-64 border-r border-white/5 bg-dark-700/50 hidden lg:flex flex-col">
         <div className="p-6">
           <Link href="/" className="flex items-center gap-2">
-            <img src="/icons/icon-192-white.png" alt="TLS Appointment Checker" className="w-8 h-8 rounded-lg" />
-            <span className="font-display font-bold">TLS Appointment Checker</span>
+            <span className="watch-console-mark" aria-hidden="true">W</span>
+            <span className="font-display font-bold">WATCH<small>CONTROL DESK</small></span>
           </Link>
         </div>
 
@@ -107,14 +107,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* Mobile top nav */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-dark-800/95 backdrop-blur-xl border-b border-white/5 ">
+      <div className="watch-mobile-header lg:hidden fixed top-0 left-0 right-0 z-50 bg-dark-800/95 border-b border-white/5 ">
         <div className="grid grid-cols-3 items-center px-4 h-14">
           <div className="justify-self-start">
             <LangSwitcher />
           </div>
           <Link href="/" className="justify-self-center flex items-center gap-2 min-w-0">
-            <img src="/icons/icon-192-white.png" alt="TLS Appointment Checker" className="w-7 h-7 rounded-lg object-cover" />
-            <span className="font-display font-bold text-sm truncate">TLS Appointment Checker</span>
+            <span className="watch-console-mark" aria-hidden="true">W</span>
+            <span className="font-display font-bold text-sm truncate">WATCH</span>
           </Link>
           <div className="justify-self-end flex items-center gap-3 min-w-[28px] justify-end">
             <Link href="/contact?from=dashboard" className="text-gray-400 hover:text-primary-400 transition-colors" title={sb.contact}>
@@ -150,14 +150,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
       {/* Main content */}
-      <main className="flex-1 min-h-screen lg:pt-0 pt-14 pb-20 lg:pb-0 overflow-x-hidden w-full">
+      <main className="watch-console-main flex-1 min-h-screen lg:pt-0 pt-14 pb-20 lg:pb-0 overflow-x-hidden w-full">
         <div className="bg-amber-500/10 border-b border-amber-500/20 text-amber-200/90 py-2 sm:py-3 px-4 text-xs sm:text-sm text-center">
           <p
             dangerouslySetInnerHTML={{
               __html:
                 (t.features as any)?.notice ||
                 (t.hero as any)?.notice ||
-                "<strong>⚠️ IMPORTANT NOTICE:</strong> TLS Appointment Checker is <strong>monitoring only</strong>. No auto-booking, and it does not guarantee appointments. It is a tool to help you find open slots by checking the TLS website automatically.",
+                "<strong>IMPORTANT NOTICE:</strong> TLS Appointment Checker is <strong>monitoring only</strong>. No auto-booking, and it does not guarantee appointments. It is a tool to help you find open slots by checking the TLS website automatically.",
             }}
           />
         </div>
