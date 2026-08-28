@@ -1,0 +1,187 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Montserrat:wght@400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #00d9ff;
+  --primary-dark: #0066ff;
+  --bg-dark: #0a0e27;
+  --bg-card: #141832;
+  --bg-card-hover: #1a1f40;
+  --text-primary: #ffffff;
+  --text-secondary: #8892b0;
+  --accent-green: #00ff88;
+  --accent-orange: #ffaa00;
+  --accent-red: #ff4444;
+  --gradient-primary: linear-gradient(135deg, #00d9ff 0%, #0066ff 100%);
+  --gradient-green: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1e2448 #0a0e27;
+}
+*::-webkit-scrollbar { width: 6px; }
+*::-webkit-scrollbar-track { background: #0a0e27; }
+*::-webkit-scrollbar-thumb { background: #1e2448; border-radius: 3px; }
+*::-webkit-scrollbar-thumb:hover { background: #2a3058; }
+
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--bg-dark);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* ── Glass Card ──────────────────────────────────── */
+.glass-card {
+  @apply rounded-2xl border border-white/5 backdrop-blur-md;
+  background: rgba(20, 24, 50, 0.8);
+  transition: all 0.3s ease;
+}
+.glass-card:hover {
+  border-color: rgba(0, 217, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 217, 255, 0.1);
+}
+
+/* ── Gradient Button ─────────────────────────────── */
+.btn-gradient {
+  @apply px-6 py-3 rounded-xl font-semibold text-white transition-all duration-300;
+  background: var(--gradient-primary);
+  box-shadow: 0 4px 15px rgba(0, 217, 255, 0.3);
+}
+.btn-gradient:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 217, 255, 0.5);
+}
+.btn-gradient:active {
+  transform: translateY(0);
+}
+
+.btn-outline {
+  @apply px-6 py-3 rounded-xl font-semibold text-white transition-all duration-300 border border-white/20;
+  background: transparent;
+}
+.btn-outline:hover {
+  border-color: var(--primary);
+  background: rgba(0, 217, 255, 0.1);
+}
+
+/* ── Glow Effects ────────────────────────────────── */
+.glow-text {
+  text-shadow: 0 0 20px rgba(0, 217, 255, 0.5);
+}
+
+.glow-border {
+  box-shadow: 0 0 20px rgba(0, 217, 255, 0.15),
+              inset 0 0 20px rgba(0, 217, 255, 0.05);
+}
+
+/* ── Animated Background ─────────────────────────── */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+.bg-radial-glow {
+  background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 217, 255, 0.15), transparent);
+}
+
+/* ── Status Dots ─────────────────────────────────── */
+.status-dot {
+  @apply w-2.5 h-2.5 rounded-full;
+}
+.status-dot.active {
+  @apply bg-accent-green;
+  box-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
+  animation: pulse 2s ease-in-out infinite;
+}
+.status-dot.inactive {
+  @apply bg-gray-500;
+}
+.status-dot.pending {
+  @apply bg-accent-orange;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ── Particle background for hero ────────────────── */
+.particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: rgba(0, 217, 255, 0.3);
+  border-radius: 50%;
+  animation: particleFloat linear infinite;
+}
+@keyframes particleFloat {
+  0% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(-100px) rotate(720deg); opacity: 0; }
+}
+
+/* ── Loading Spinner ─────────────────────────────── */
+.spinner {
+  @apply w-6 h-6 border-2 border-white/20 border-t-primary-500 rounded-full;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Toast / Notification Animation ──────────────── */
+.toast-enter {
+  animation: toastIn 0.4s ease-out;
+}
+@keyframes toastIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* ── Dashboard sidebar ───────────────────────────── */
+.sidebar-link {
+  @apply flex items-center gap-3 px-4 py-3 rounded-xl text-gray-400 transition-all duration-200;
+}
+.sidebar-link:hover {
+  @apply text-white bg-white/5;
+}
+.sidebar-link.active {
+  @apply text-white bg-gradient-to-r from-primary-500/20 to-transparent;
+  border-left: 3px solid var(--primary);
+}
+
+/* ── Input field styling ─────────────────────────── */
+.input-field {
+  @apply w-full px-4 py-3 rounded-xl border border-white/10 bg-dark-800 text-white
+         placeholder:text-gray-500 transition-all duration-200
+         focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50;
+}
+
+/* ── Stat card ───────────────────────────────────── */
+.stat-card {
+  @apply glass-card p-6;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.stat-card:hover {
+  transform: translateY(-4px);
+}

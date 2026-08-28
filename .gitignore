@@ -1,0 +1,56 @@
+# Environment files
+.env
+.env.local
+.env.*.local
+backend/.env.worker
+backend/.env.worker.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+backend/venv/
+backend/data/
+data/
+backend/downloaded_files/
+*.egg-info/
+.pytest_cache/
+
+# Node
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+*.tsbuildinfo
+
+# Build artifacts
+dist/
+build/
+*.spec
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+*.db
+desktop/.license
+desktop/.device_id
+desktop/tls_app.db
+desktop/checker_debug.log
+
+*.tunnel
+.env.tunnel
+.vercel
+.env*.local
+
+# Large installer files
+*.msi
+*.exe
+desktop/installer_output/
+desktop/build/
+desktop/dist/
+desktop/__pycache__/
+desktop/chrome_profile/
